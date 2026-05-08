@@ -109,6 +109,30 @@
   margin: 1.5em 0;
 }
 
+/* Anchor highlights (Phase 4). Defaults are quiet; hover and focus
+   states are reached via JS class toggling driven by the editor + sidebar.
+   Resolved is dimmed (kept inline as a breadcrumb per the design). */
+.fm-rendered-view [data-anchor-id] {
+  background: var(--fm-anchor-bg);
+  border-radius: 1px;
+  padding: 0 1px;
+  cursor: default;
+  transition: background-color 120ms ease-out;
+}
+
+.fm-rendered-view [data-anchor-id].is-hovered {
+  background: var(--fm-anchor-bg-hover);
+}
+
+.fm-rendered-view [data-anchor-id].is-focused {
+  background: var(--fm-anchor-bg-focus);
+  border-bottom: 0.5px solid var(--fm-anchor-underline);
+}
+
+.fm-rendered-view [data-anchor-id].is-resolved {
+  background: var(--fm-anchor-bg-resolved);
+}
+
 /* Tables */
 .fm-rendered-view .fm-prose table {
   border-collapse: collapse;

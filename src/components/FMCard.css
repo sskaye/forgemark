@@ -1,0 +1,122 @@
+.fm-card {
+  position: relative;
+  background: var(--fm-card-bg);
+  border: 0.5px solid var(--fm-card-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-family: var(--fm-ui);
+  box-shadow: var(--fm-card-shadow);
+  cursor: default;
+  outline: none;
+  transition:
+    box-shadow 120ms ease-out,
+    border-color 120ms ease-out;
+}
+
+.fm-card:hover,
+.fm-card.is-hovered {
+  box-shadow: var(--fm-card-shadow-focused);
+}
+
+.fm-card.is-focused {
+  border-color: var(--fm-card-border-focused);
+  box-shadow: var(--fm-card-shadow-focused);
+}
+
+.fm-card.is-focused::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  border: 1px solid var(--fm-accent);
+  pointer-events: none;
+}
+
+.fm-card.is-resolved {
+  opacity: 0.6;
+}
+
+.fm-card:focus-visible {
+  outline: 0.5px solid var(--fm-accent);
+  outline-offset: 2px;
+}
+
+.fm-card-author-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.fm-card-author {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--fm-prose-ink);
+}
+
+.fm-card-timestamp {
+  font-size: 11.5px;
+  color: var(--fm-prose-faint);
+}
+
+.fm-card-edited {
+  font-size: 11px;
+  color: var(--fm-prose-faint);
+  font-style: italic;
+}
+
+.fm-card-body {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--fm-prose-ink);
+  white-space: pre-wrap;
+}
+
+.fm-card-suggestion {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--fm-suggest-bg);
+  font-size: 12.5px;
+  color: var(--fm-suggest-text);
+  font-family: var(--fm-mono);
+}
+
+.fm-card-suggestion-from {
+  text-decoration: line-through;
+  color: var(--fm-prose-muted);
+}
+
+.fm-card-suggestion-arrow {
+  color: var(--fm-prose-muted);
+}
+
+.fm-card-suggestion-to {
+  font-weight: 600;
+}
+
+.fm-card-replies {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fm-card-reply {
+  margin-left: 8px;
+  padding-left: 8px;
+  border-left: 2px solid var(--fm-divider);
+}
+
+.fm-card-reply-body {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--fm-prose-ink);
+  white-space: pre-wrap;
+}

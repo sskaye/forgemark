@@ -33,6 +33,7 @@ function StateProbe() {
       <span data-testid="probe-dirty">{state.dirty ? "dirty" : "clean"}</span>
       <span data-testid="probe-readonly">{state.readOnly ? "ro" : "rw"}</span>
       <span data-testid="probe-body">{state.body}</span>
+      <span data-testid="probe-comment-count">{state.comments.length}</span>
     </div>
   );
 }
@@ -150,6 +151,32 @@ describe("file open edge cases", () => {
     pressKey("s");
     await waitFor(() => {
       expect(mockWriteTextFile).toHaveBeenCalledWith("/tmp/example.md", "alpha\n");
+    });
+  });
+
+  it("loads a forgemark file and exposes its comments", async () => {
+    const text = [
+      "Anchored: <!-- fmc:1 -->the bit<!-- /fmc:1 -->",
+      "",
+      "<!-- forgemark-comments",
+      "- id: 1",
+      '  anchor_text: "the bit"',
+      "  author: Steven",
+      "  timestamp: 2026-05-07T14:32:00Z",
+      "  resolved: false",
+      "  body: |",
+      "    Worth surfacing.",
+      "-->",
+      "",
+    ].join("\n");
+    mockOpen.mockResolvedValue("/tmp/forge.md");
+    mockStat.mockResolvedValue({ isDirectory: false, readonly: false });
+    mockReadTextFile.mockResolvedValue(text);
+
+    renderHarness();
+    pressKey("o");
+    await waitFor(() => {
+      expect(screen.getByTestId("probe-comment-count").textContent).toBe("1");
     });
   });
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useDocument } from "./DocumentProvider";
 import { openMarkdownFile, saveMarkdownFile } from "../services/fileIO";
+import { parseForgemarkFile, serializeForgemarkFile, ForgemarkParseError } from "../format";
 
 type Logger = (msg: string, err: unknown) => void;
 
@@ -43,11 +44,28 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
         try {
           const opened = await openMarkdownFile();
           if (!opened) return;
+          let parsed;
+          try {
+            parsed = parseForgemarkFile(opened.text);
+          } catch (err) {
+            // Helpful "couldn't parse the comment block" surfacing — the
+            // caller still gets the body, just without comments. We treat
+            // a malformed comment block as a soft failure: surface an
+            // error banner and load the file as plain markdown.
+            const msg =
+              err instanceof ForgemarkParseError
+                ? `Comments block couldn't be parsed (${err.kind}); loaded as plain markdown.`
+                : `Couldn't parse comment block: ${(err as Error).message}`;
+            dispatch({ type: "error", message: msg });
+            parsed = { body: opened.text, comments: [] };
+          }
           dispatch({
             type: "load",
             filePath: opened.path,
             fileName: opened.fileName,
             text: opened.text,
+            body: parsed.body,
+            comments: parsed.comments,
             readOnly: opened.readOnly,
           });
         } catch (err) {
@@ -57,19 +75,25 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
       } else if (key === "s") {
         e.preventDefault();
         if (s.readOnly) return;
-        const text = s.dirty ? s.body : s.originalText;
+        // Compose the bytes to write. If clean, write the bytes as loaded
+        // (byte-identical). If dirty, serialize the current body + comments
+        // through the format serializer (round-trip parity guaranteed).
+        const text = s.dirty
+          ? serializeForgemarkFile({ body: s.body, comments: s.comments })
+          : s.originalText;
         try {
           const path = await saveMarkdownFile(s.filePath, text);
           if (!path) return; // user cancelled save dialog
-          dispatch({ type: "saved", text });
+          dispatch({ type: "saved", text, body: s.body });
           if (path !== s.filePath) {
             // Save-as for an Untitled buffer; reload to update path/name.
-            // For now we just record the path; Phase 11 polishes this.
             dispatch({
               type: "load",
               filePath: path,
               fileName: filenameFromPath(path),
               text,
+              body: s.body,
+              comments: s.comments,
               readOnly: false,
             });
           }
@@ -92,16 +116,17 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
     if (!state.filePath) return;
     if (state.readOnly) return;
     const handle = setTimeout(async () => {
+      const text = serializeForgemarkFile({ body: state.body, comments: state.comments });
       try {
-        await saveMarkdownFile(state.filePath, state.body);
-        dispatch({ type: "saved", text: state.body });
+        await saveMarkdownFile(state.filePath, text);
+        dispatch({ type: "saved", text, body: state.body });
       } catch (err) {
         logger("auto-save failed", err);
         dispatch({ type: "error", message: errorMessage("Auto-save failed", err) });
       }
     }, 500);
     return () => clearTimeout(handle);
-  }, [state.dirty, state.body, state.filePath, state.readOnly, dispatch, logger]);
+  }, [state.dirty, state.body, state.comments, state.filePath, state.readOnly, dispatch, logger]);
 
   return null;
 }

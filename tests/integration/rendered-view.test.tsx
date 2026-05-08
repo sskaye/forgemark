@@ -6,8 +6,17 @@ import { RenderedView } from "../../src/components/RenderedView";
 
 const fixture = readFileSync(resolve(__dirname, "..", "fixtures", "gfm-sample.md"), "utf-8");
 
-function renderFixture(markdown: string = fixture) {
-  return render(<RenderedView initialMarkdown={markdown} onEdit={vi.fn()} />);
+function renderFixture(body: string = fixture) {
+  return render(
+    <RenderedView
+      body={body}
+      onEdit={vi.fn()}
+      focusedCommentId={null}
+      hoveredCommentId={null}
+      onAnchorClick={vi.fn()}
+      onAnchorHover={vi.fn()}
+    />,
+  );
 }
 
 describe("RenderedView GFM rendering", () => {
@@ -55,7 +64,16 @@ describe("RenderedView GFM rendering", () => {
 
   it("calls onEdit when typing inserts content", async () => {
     const onEdit = vi.fn();
-    const { container } = render(<RenderedView initialMarkdown={"hello"} onEdit={onEdit} />);
+    const { container } = render(
+      <RenderedView
+        body={"hello"}
+        onEdit={onEdit}
+        focusedCommentId={null}
+        hoveredCommentId={null}
+        onAnchorClick={vi.fn()}
+        onAnchorHover={vi.fn()}
+      />,
+    );
     await waitFor(() => {
       expect(container.querySelector(".ProseMirror")).toBeTruthy();
     });
@@ -68,12 +86,110 @@ describe("RenderedView GFM rendering", () => {
 
   it("respects readOnly", async () => {
     const { container } = render(
-      <RenderedView initialMarkdown={"hello"} onEdit={vi.fn()} readOnly />,
+      <RenderedView
+        body={"hello"}
+        onEdit={vi.fn()}
+        readOnly
+        focusedCommentId={null}
+        hoveredCommentId={null}
+        onAnchorClick={vi.fn()}
+        onAnchorHover={vi.fn()}
+      />,
     );
     await waitFor(() => {
       expect(container.querySelector(".ProseMirror")).toBeTruthy();
     });
     const editor = container.querySelector(".ProseMirror");
     expect(editor?.getAttribute("contenteditable")).toBe("false");
+  });
+
+  it("renders inline marker pairs as anchor spans", async () => {
+    const body = "Plain prose with <!-- fmc:1 -->an anchored bit<!-- /fmc:1 --> in the middle.\n";
+    const { container } = render(
+      <RenderedView
+        body={body}
+        onEdit={vi.fn()}
+        focusedCommentId={null}
+        hoveredCommentId={null}
+        onAnchorClick={vi.fn()}
+        onAnchorHover={vi.fn()}
+      />,
+    );
+    await waitFor(() => {
+      expect(container.querySelector("[data-anchor-id]")).toBeTruthy();
+    });
+    const anchor = container.querySelector("[data-anchor-id='1']");
+    expect(anchor).toBeTruthy();
+    expect(anchor?.textContent).toBe("an anchored bit");
+  });
+
+  it("applies the focused class to the focused anchor only", async () => {
+    const body = "<!-- fmc:1 -->one<!-- /fmc:1 --> and <!-- fmc:2 -->two<!-- /fmc:2 -->\n";
+    const { container, rerender } = render(
+      <RenderedView
+        body={body}
+        onEdit={vi.fn()}
+        focusedCommentId={null}
+        hoveredCommentId={null}
+        onAnchorClick={vi.fn()}
+        onAnchorHover={vi.fn()}
+      />,
+    );
+    await waitFor(() => {
+      expect(container.querySelectorAll("[data-anchor-id]").length).toBe(2);
+    });
+    rerender(
+      <RenderedView
+        body={body}
+        onEdit={vi.fn()}
+        focusedCommentId={2}
+        hoveredCommentId={null}
+        onAnchorClick={vi.fn()}
+        onAnchorHover={vi.fn()}
+      />,
+    );
+    await waitFor(() => {
+      const focused = container.querySelector("[data-anchor-id='2']");
+      expect(focused?.classList.contains("is-focused")).toBe(true);
+    });
+    const unfocused = container.querySelector("[data-anchor-id='1']");
+    expect(unfocused?.classList.contains("is-focused")).toBe(false);
+  });
+
+  it("preserves inline formatting alongside an anchor", async () => {
+    // ProseMirror represents stacked inline marks as parallel sets on
+    // text runs, not as a strict tree. The DOM rendering may put the
+    // anchor span next to / around / inside the mark elements depending
+    // on the order Tiptap renders them. We assert that all the expected
+    // formatting elements are reachable via the doc and that every
+    // `data-anchor-id="1"` text run contains the expected words.
+    const body =
+      "Anchored prose: <!-- fmc:1 -->**bold** and _italic_ and `code` and [a link](https://example.com)<!-- /fmc:1 -->.\n";
+    const { container } = render(
+      <RenderedView
+        body={body}
+        onEdit={vi.fn()}
+        focusedCommentId={null}
+        hoveredCommentId={null}
+        onAnchorClick={vi.fn()}
+        onAnchorHover={vi.fn()}
+      />,
+    );
+    await waitFor(() => {
+      expect(container.querySelector("[data-anchor-id]")).toBeTruthy();
+    });
+    expect(container.querySelector("strong")).toBeTruthy();
+    expect(container.querySelector("em")).toBeTruthy();
+    expect(container.querySelector("code")).toBeTruthy();
+    expect(container.querySelector("a")).toBeTruthy();
+    // Most inline text runs retain the anchor mark. (Inline code is a
+    // ProseMirror node that doesn't combine with arbitrary marks, so the
+    // word inside backticks is rendered as a sibling — that is acceptable;
+    // the highlight still spans the surrounding prose visually.)
+    const anchored = Array.from(container.querySelectorAll("[data-anchor-id='1']"));
+    expect(anchored.length).toBeGreaterThan(0);
+    const allText = anchored.map((el) => el.textContent).join(" ");
+    expect(allText).toMatch(/bold/);
+    expect(allText).toMatch(/italic/);
   });
 });

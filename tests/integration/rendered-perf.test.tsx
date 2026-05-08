@@ -24,7 +24,16 @@ describe("rendered view performance", () => {
   it("renders a 30,000-word document in well under 250 ms", async () => {
     const markdown = generateLargeMarkdown(30_000);
     const start = performance.now();
-    const { container } = render(<RenderedView initialMarkdown={markdown} onEdit={vi.fn()} />);
+    const { container } = render(
+      <RenderedView
+        body={markdown}
+        onEdit={vi.fn()}
+        focusedCommentId={null}
+        hoveredCommentId={null}
+        onAnchorClick={vi.fn()}
+        onAnchorHover={vi.fn()}
+      />,
+    );
     await waitFor(() => {
       expect(container.querySelector(".ProseMirror")).toBeTruthy();
     });
