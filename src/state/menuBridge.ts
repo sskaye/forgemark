@@ -31,7 +31,17 @@ const SYNTHESIZE_AS_KEYDOWN: Record<string, KeyboardEventInit> = {
 // App-level ids dispatched as `forgemark:menu` DOM CustomEvents so
 // the AppShell can react. Tight set — only commands that aren't
 // already a keyboard shortcut.
-const APP_LEVEL_IDS = new Set(["settings", "clean-export"]);
+const APP_LEVEL_IDS = new Set([
+  "settings",
+  "clean-export",
+  "close-file",
+  "window-fill",
+  "window-center",
+  "window-left-half",
+  "window-right-half",
+  "window-top-half",
+  "window-bottom-half",
+]);
 
 export async function startMenuBridge(): Promise<UnlistenFn | null> {
   // listen() will throw or hang if the Tauri runtime isn't present

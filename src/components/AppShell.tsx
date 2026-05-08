@@ -21,6 +21,7 @@ import {
 import { contextSnippet, parseForgemarkFile } from "../format";
 import { useFontSize, useFirstRun } from "../state/preferences";
 import { saveMarkdownFile } from "../services/fileIO";
+import { applyWindowAction, isWindowAction } from "../services/windowActions";
 import "./AppShell.css";
 // Bundled sample file — Vite's `?raw` import pulls in the markdown text
 // at build time so the first-run "Open sample" path doesn't need a
@@ -63,20 +64,47 @@ export function AppShell() {
     return () => window.removeEventListener("keydown", onKey);
   }, [state.filePath]);
 
-  // Window event for native title-bar Settings command emit (Phase 11
-  // menu bar). For now we listen for a custom DOM event so the test
-  // harness can drive it without a Tauri runtime.
+  // Native menu bridge — `forgemark:menu` DOM CustomEvents arrive
+  // from src/state/menuBridge.ts after the Rust side fires a menu
+  // command. Each id routes to the matching JS-side action.
   useEffect(() => {
     const onCustom = (e: Event) => {
       const detail = (e as CustomEvent<string>).detail;
-      if (detail === "settings") setSettingsOpen(true);
-      else if (detail === "clean-export" && state.filePath) {
-        setCleanExportOpen(true);
+      if (detail === "settings") {
+        setSettingsOpen(true);
+        return;
+      }
+      if (detail === "clean-export") {
+        if (state.filePath) setCleanExportOpen(true);
+        return;
+      }
+      if (detail === "close-file") {
+        // File > Close — clear the document, keep the window open
+        // (TextEdit / Pages convention). Prompt before discarding
+        // unsaved work.
+        if (
+          state.dirty &&
+          !window.confirm("You have unsaved changes. Close without saving?")
+        ) {
+          return;
+        }
+        dispatch({ type: "newUntitled" });
+        return;
+      }
+      if (isWindowAction(detail)) {
+        void applyWindowAction(detail).catch((err) => {
+          dispatch({
+            type: "error",
+            message:
+              "Window resize failed: " + (err instanceof Error ? err.message : String(err)),
+          });
+        });
+        return;
       }
     };
     window.addEventListener("forgemark:menu", onCustom);
     return () => window.removeEventListener("forgemark:menu", onCustom);
-  }, [state.filePath]);
+  }, [state.filePath, state.dirty, dispatch]);
 
   // Anchor classification (Phase 9). Recomputed when body or comments
   // change. classifyAnchors does one marker scan + per-orphan candidate

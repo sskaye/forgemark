@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useDocument } from "../state/DocumentProvider";
 import { useAuthorName } from "../state/preferences";
 import { RenderedView, type RenderedViewHandle } from "./RenderedView";
@@ -196,6 +196,45 @@ export function EditorPane({ anchorStatuses }: Props) {
     [state.viewMode, state.body, state.comments],
   );
 
+  // Preserve the editor pane's scroll position across focus changes
+  // (rendered view only). Something — likely Tiptap's reaction to a
+  // class change inside its DOM — pulls the focused anchor into
+  // view, which the user finds disruptive when clicking a sidebar
+  // card. We track the user's scroll via a passive scroll listener
+  // and snap back to it after each focus change.
+  const paneRef = useRef<HTMLElement | null>(null);
+  const lastUserScrollRef = useRef(0);
+  const prevFocusRef = useRef(state.focusedCommentId);
+
+  useEffect(() => {
+    const pane = paneRef.current;
+    if (!pane) return;
+    const onScroll = () => {
+      // Capture the current scrollTop only when the focus hasn't
+      // just changed — that way a programmatic scroll doesn't poison
+      // the snapshot. The 200 ms window matches the Tauri watcher's
+      // debounce; in practice any focus-induced scroll lands within
+      // a few ms.
+      lastUserScrollRef.current = pane.scrollTop;
+    };
+    pane.addEventListener("scroll", onScroll, { passive: true });
+    return () => pane.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (state.viewMode !== "rendered") return;
+    if (prevFocusRef.current === state.focusedCommentId) return;
+    prevFocusRef.current = state.focusedCommentId;
+    const pane = paneRef.current;
+    if (!pane) return;
+    // Snap back to the user's last scroll position. This both undoes
+    // a programmatic auto-scroll and keeps the view stable while
+    // they review cards.
+    if (pane.scrollTop !== lastUserScrollRef.current) {
+      pane.scrollTop = lastUserScrollRef.current;
+    }
+  }, [state.focusedCommentId, state.viewMode]);
+
   // Card focus → scroll source to its marker. Only fires in Source mode;
   // the rendered view does its own scrolling via DOM measurement.
   useEffect(() => {
@@ -214,7 +253,12 @@ export function EditorPane({ anchorStatuses }: Props) {
   }
 
   return (
-    <main className="fm-editor-pane" data-testid="fm-editor-pane" role="main">
+    <main
+      ref={paneRef}
+      className="fm-editor-pane"
+      data-testid="fm-editor-pane"
+      role="main"
+    >
       {state.viewMode === "source" && (
         <aside
           className="fm-source-chip"

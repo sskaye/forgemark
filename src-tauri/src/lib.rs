@@ -65,10 +65,15 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .accelerator("CmdOrCtrl+Shift+E")
         .build(app)?;
 
-    // File > Close uses Cocoa's native close_window() so ⌘W actually
-    // closes the window. A custom-id close item would emit a
-    // forgemark:menu event with no JS listener and silently do
-    // nothing.
+    // File > Close clears the open document but keeps the window
+    // open (TextEdit / Pages convention). Quitting the app is ⌘Q via
+    // the Forgemark menu; the red traffic light still closes the
+    // window outright.
+    let close_file = MenuItemBuilder::new("Close")
+        .id("close-file")
+        .accelerator("CmdOrCtrl+W")
+        .build(app)?;
+
     let file_submenu = SubmenuBuilder::new(app, "File")
         .item(&new)
         .item(&open)
@@ -77,7 +82,7 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .item(&save_as)
         .item(&clean_export)
         .separator()
-        .close_window()
+        .item(&close_file)
         .build()?;
 
     // Edit menu — Undo / Redo / Cut / Copy / Paste. Select All is
@@ -109,12 +114,51 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .item(&suggest_edit)
         .build()?;
 
-    // Window menu — macOS standard.
+    // Window menu — macOS standard plus a Move & Resize submenu so
+    // the keyboard window-resize shortcuts (Ctrl+Cmd+arrows /
+    // Ctrl+Cmd+F) work the way users expect from Rectangle, Magnet,
+    // and the macOS Sequoia native commands. Items emit
+    // window-* ids that the JS bridge handles via the Tauri window
+    // API (set_size + set_position).
+    let mr_fill = MenuItemBuilder::new("Fill")
+        .id("window-fill")
+        .accelerator("Ctrl+Cmd+F")
+        .build(app)?;
+    let mr_center = MenuItemBuilder::new("Center")
+        .id("window-center")
+        .accelerator("Ctrl+Cmd+C")
+        .build(app)?;
+    let mr_left = MenuItemBuilder::new("Left Half")
+        .id("window-left-half")
+        .accelerator("Ctrl+Cmd+Left")
+        .build(app)?;
+    let mr_right = MenuItemBuilder::new("Right Half")
+        .id("window-right-half")
+        .accelerator("Ctrl+Cmd+Right")
+        .build(app)?;
+    let mr_top = MenuItemBuilder::new("Top Half")
+        .id("window-top-half")
+        .accelerator("Ctrl+Cmd+Up")
+        .build(app)?;
+    let mr_bottom = MenuItemBuilder::new("Bottom Half")
+        .id("window-bottom-half")
+        .accelerator("Ctrl+Cmd+Down")
+        .build(app)?;
+    let move_resize_submenu = SubmenuBuilder::new(app, "Move & Resize")
+        .item(&mr_fill)
+        .item(&mr_center)
+        .separator()
+        .item(&mr_left)
+        .item(&mr_right)
+        .item(&mr_top)
+        .item(&mr_bottom)
+        .build()?;
+
     let window_submenu = SubmenuBuilder::new(app, "Window")
         .minimize()
         .maximize()
         .separator()
-        .close_window()
+        .item(&move_resize_submenu)
         .build()?;
 
     MenuBuilder::new(app)

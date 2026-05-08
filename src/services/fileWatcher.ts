@@ -3,9 +3,13 @@
 // Phase 9 builds the watcher abstraction; Phase 10 wires the surfaces
 // (banner, edit-during-open modal, save-conflict modal) on top.
 //
-// The wrapper hides the Tauri-specific event shape so tests can plug
-// in a synthetic source. A watcher instance owns one path; switching
-// files calls dispose() on the old watcher and opens a new one.
+// We watch the file's parent directory rather than the file itself.
+// Most macOS editors save atomically — write to a temp file, rename
+// over the original — which destroys the inode the file watcher was
+// bound to. Watching the parent directory and filtering by filename
+// catches those events reliably (the rename is just another event in
+// the dir). This pattern is also what notify-rs's own examples
+// recommend for "watch a single file" use cases.
 
 import { readTextFile, stat, watch } from "@tauri-apps/plugin-fs";
 import { fingerprint, compareFingerprints, type FileFingerprint } from "./conflict";
@@ -40,7 +44,7 @@ export async function watchMarkdownFile(
   onChange: (e: WatcherEvent) => void,
   opts: WatcherOptions = {},
 ): Promise<FileWatcher> {
-  const debounceMs = opts.debounceMs ?? 100;
+  const debounceMs = opts.debounceMs ?? 200;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let disposed = false;
 
@@ -60,21 +64,36 @@ export async function watchMarkdownFile(
       const fp = await fingerprint(text, mtimeMs);
       if (compareFingerprints(getBaseline(), fp) === "unchanged") return;
       onChange({ text, fingerprint: fp });
-    } catch {
+    } catch (err) {
       // Read failures during a save are common (the file is briefly
-      // truncated). Swallow and let the next event try again.
+      // truncated or replaced). Log to the console so debugging is
+      // possible, but don't surface — the next event will retry.
+      console.warn("[forgemark] watcher read failed; will retry", err);
     }
   };
 
+  // Watch the parent directory so atomic-saves (rename-over-original)
+  // don't destroy our subscription. Filter events by filename.
+  const parentDir = parentDirOf(path);
+  const fileName = baseNameOf(path);
+
+  // Tauri's watch callback receives events in `notify` format. We
+  // don't strictly need the payload — we re-read the file on every
+  // settled event — but we do filter so that unrelated changes in
+  // the parent dir don't trigger an extra read.
   const stopFn = await watch(
-    path,
-    () => {
+    parentDir,
+    (event) => {
       if (disposed) return;
+      if (!eventTouchesFile(event, fileName)) return;
       if (timer) clearTimeout(timer);
       timer = setTimeout(fire, debounceMs);
     },
     { recursive: false },
   );
+  // Confirm the subscription succeeded — if you don't see this in
+  // the console after opening a file, the watcher never started.
+  console.info(`[forgemark] watching ${parentDir} for changes to ${fileName}`);
 
   return {
     async dispose() {
@@ -87,4 +106,28 @@ export async function watchMarkdownFile(
       }
     },
   };
+}
+
+function parentDirOf(p: string): string {
+  const idx = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+  if (idx < 0) return ".";
+  if (idx === 0) return "/"; // root
+  return p.slice(0, idx);
+}
+
+function baseNameOf(p: string): string {
+  const idx = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+  return idx >= 0 ? p.slice(idx + 1) : p;
+}
+
+// notify's event payload varies by platform but always includes a
+// `paths` array. We accept anything with a paths field and filter on
+// suffix match (the file we care about lives somewhere in the dir).
+function eventTouchesFile(event: unknown, fileName: string): boolean {
+  if (!event || typeof event !== "object") return true; // be permissive
+  const paths = (event as { paths?: unknown }).paths;
+  if (!Array.isArray(paths)) return true;
+  return paths.some(
+    (p) => typeof p === "string" && (p === fileName || p.endsWith("/" + fileName) || p.endsWith("\\" + fileName)),
+  );
 }
