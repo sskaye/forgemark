@@ -6,3 +6,7 @@ src-tauri/gen
 package-lock.json
 docs/design_handoff_v1_1/
 *.tsbuildinfo
+# Fixtures are byte-locked to the serializer (Phase 3 round-trip parity).
+# Re-running Prettier on them risks breaking the gate. To regenerate,
+# run `npx tsx scripts/generate-fixtures.ts`.
+tests/ai/fixtures/
