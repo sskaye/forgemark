@@ -33,3 +33,4 @@ export {
   type AnchorStatus,
   type ReattachCandidate,
 } from "./reattach";
+export { cleanExport } from "./cleanExport";

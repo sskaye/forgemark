@@ -154,7 +154,9 @@ export const INITIAL_STATE: DocumentState = {
 export type DocumentAction =
   | {
       type: "load";
-      filePath: string;
+      // null when loading an in-memory document (e.g. the bundled
+      // sample file at first run) — the user picks a path on first ⌘S.
+      filePath: string | null;
       fileName: string;
       text: string;
       body: string;

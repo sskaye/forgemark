@@ -7,6 +7,9 @@ type Props = {
   onViewModeChange: (m: "rendered" | "source") => void;
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
+  // Phase 11: opens the Settings modal. Until the native macOS menu
+  // bar lands, this gear button is the discoverable mouse path.
+  onOpenSettings?: () => void;
 };
 
 // 44px combined chrome — standard macOS titlebar-with-toolbar shape.
@@ -20,6 +23,7 @@ export function TitleBar({
   onViewModeChange,
   sidebarOpen,
   onToggleSidebar,
+  onOpenSettings,
 }: Props) {
   return (
     <header className="fm-titlebar" data-tauri-drag-region data-testid="fm-titlebar" role="banner">
@@ -33,8 +37,32 @@ export function TitleBar({
       <div className="fm-titlebar-actions">
         <ViewModeToggle value={viewMode} onChange={onViewModeChange} />
         <SidebarToggle open={sidebarOpen} onClick={onToggleSidebar} />
+        {onOpenSettings && <SettingsButton onClick={onOpenSettings} />}
       </div>
     </header>
+  );
+}
+
+function SettingsButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="fm-iconbtn"
+      title="Settings (⌘,)"
+      aria-label="Open settings"
+      onClick={onClick}
+      data-testid="fm-titlebar-settings"
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.1" />
+        <path
+          d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4M12.6 12.6l-1.4-1.4M4.8 4.8L3.4 3.4"
+          stroke="currentColor"
+          strokeWidth="1.1"
+          strokeLinecap="round"
+        />
+      </svg>
+    </button>
   );
 }
 

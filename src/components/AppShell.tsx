@@ -7,11 +7,25 @@ import { ReattachModal } from "./ReattachModal";
 import { FileConflictBanner } from "./FileConflictBanner";
 import { EditDuringOpenModal } from "./EditDuringOpenModal";
 import { SaveConflictModal } from "./SaveConflictModal";
+import { SettingsModal } from "./SettingsModal";
+import { CleanExportModal } from "./CleanExportModal";
+import { FirstRunWelcome } from "./FirstRunWelcome";
 import { useDocument } from "../state/DocumentProvider";
 import { DocumentBindings } from "../state/DocumentBindings";
-import { classifyAnchors, insertMarkersIntoBody, removeMarkersFromBody } from "../format";
-import { contextSnippet } from "../format";
+import {
+  classifyAnchors,
+  insertMarkersIntoBody,
+  removeMarkersFromBody,
+  cleanExport,
+} from "../format";
+import { contextSnippet, parseForgemarkFile } from "../format";
+import { useFontSize, useFirstRun } from "../state/preferences";
+import { saveMarkdownFile } from "../services/fileIO";
 import "./AppShell.css";
+// Bundled sample file — Vite's `?raw` import pulls in the markdown text
+// at build time so the first-run "Open sample" path doesn't need a
+// fetch or filesystem call.
+import SAMPLE_TEXT from "../../assets/sample-onboarding.md?raw";
 
 // Phase 2 shell: the top-level layout, plus the document keyboard bindings
 // and auto-save effect. Real content (editor, sidebar comments) lives in
@@ -19,6 +33,50 @@ import "./AppShell.css";
 export function AppShell() {
   const { state, dispatch, setViewMode } = useDocument();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [cleanExportOpen, setCleanExportOpen] = useState(false);
+  const [fontSize] = useFontSize();
+  const { firstRunDone, markDone } = useFirstRun();
+
+  // Apply font-size preference as a CSS custom property on the
+  // document root so all prose surfaces inherit it.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.documentElement.style.setProperty("--fm-font-size", fontSize + "px");
+  }, [fontSize]);
+
+  // Phase 11 keyboard shortcuts that aren't tied to the document
+  // model: Settings (⌘,) and Clean Export (⌘⇧E).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      if (e.key === ",") {
+        e.preventDefault();
+        setSettingsOpen(true);
+      } else if (e.shiftKey && e.key.toLowerCase() === "e") {
+        e.preventDefault();
+        if (state.filePath) setCleanExportOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [state.filePath]);
+
+  // Window event for native title-bar Settings command emit (Phase 11
+  // menu bar). For now we listen for a custom DOM event so the test
+  // harness can drive it without a Tauri runtime.
+  useEffect(() => {
+    const onCustom = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail;
+      if (detail === "settings") setSettingsOpen(true);
+      else if (detail === "clean-export" && state.filePath) {
+        setCleanExportOpen(true);
+      }
+    };
+    window.addEventListener("forgemark:menu", onCustom);
+    return () => window.removeEventListener("forgemark:menu", onCustom);
+  }, [state.filePath]);
 
   // Anchor classification (Phase 9). Recomputed when body or comments
   // change. classifyAnchors does one marker scan + per-orphan candidate
@@ -49,6 +107,7 @@ export function AppShell() {
         onViewModeChange={setViewMode}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen((s) => !s)}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
       <ErrorBanner />
       {/* Phase 10 — file-conflict surfaces. The banner shows when the
@@ -103,6 +162,58 @@ export function AppShell() {
         <EditorPane anchorStatuses={anchorStatuses} />
         {sidebarOpen && <Sidebar anchorStatuses={anchorStatuses} />}
       </div>
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+      {cleanExportOpen && state.filePath && (
+        <CleanExportModal
+          commentCount={state.comments.length}
+          onCancel={() => setCleanExportOpen(false)}
+          onConfirm={async () => {
+            const text = cleanExport(state.body, state.comments);
+            // Default name: "<basename>-clean.md"
+            const baseName = state.fileName.replace(/\.(md|markdown)$/i, "");
+            const defaultPath = baseName + "-clean.md";
+            try {
+              await saveMarkdownFile(null, text);
+              setCleanExportOpen(false);
+              // Hint the OS save dialog name via the fileIO layer's
+              // save() — its current signature takes no default name,
+              // so we just write through. Phase 13 may polish.
+              void defaultPath;
+            } catch (err) {
+              setCleanExportOpen(false);
+              dispatch({
+                type: "error",
+                message: "Clean Export failed: " + (err as Error).message,
+              });
+            }
+          }}
+        />
+      )}
+      {!firstRunDone && (
+        <FirstRunWelcome
+          onSkip={markDone}
+          onOpenSample={() => {
+            try {
+              const parsed = parseForgemarkFile(SAMPLE_TEXT, { tolerant: true });
+              dispatch({
+                type: "load",
+                filePath: null,
+                fileName: "sample-onboarding.md",
+                text: SAMPLE_TEXT,
+                body: parsed.body,
+                comments: parsed.comments,
+                readOnly: false,
+              });
+            } catch (err) {
+              dispatch({
+                type: "error",
+                message: "Couldn't load sample: " + (err as Error).message,
+              });
+            }
+            markDone();
+          }}
+        />
+      )}
       {reattachTargetComment && reattachTargetStatus?.kind === "orphaned" && (
         <ReattachModal
           comment={reattachTargetComment}

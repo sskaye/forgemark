@@ -7,7 +7,7 @@
 
 .fm-rendered-view .fm-prose {
   font-family: var(--fm-prose);
-  font-size: 17px;
+  font-size: var(--fm-font-size, 17px);
   line-height: var(--fm-prose-leading);
   letter-spacing: var(--fm-prose-letterspacing);
   color: var(--fm-prose-ink);

@@ -8,8 +8,9 @@ import {
   themeToCssVars,
   pairingToCssVars,
 } from "./tokens";
+import { useThemePreference, type ThemePreference } from "../state/preferences";
 
-export type ThemePreference = "light" | "dark" | "system";
+export type { ThemePreference };
 
 type ThemeContextValue = {
   theme: Theme;
@@ -26,12 +27,22 @@ function detectSystemTheme(): "light" | "dark" {
 
 export function ThemeProvider({
   children,
-  initialPreference = "system",
+  initialPreference,
 }: {
   children: ReactNode;
+  // Phase 11 reads from persisted preferences. Tests that want to pin
+  // a specific theme can still pass `initialPreference` to override
+  // the persisted value for the lifetime of the provider.
   initialPreference?: ThemePreference;
 }) {
-  const [preference, setPreference] = useState<ThemePreference>(initialPreference);
+  const [persisted, setPersisted] = useThemePreference();
+  const [preference, setPreferenceLocal] = useState<ThemePreference>(
+    initialPreference ?? persisted,
+  );
+  const setPreference = (p: ThemePreference) => {
+    setPreferenceLocal(p);
+    setPersisted(p);
+  };
   const [systemTheme, setSystemTheme] = useState<"light" | "dark">(detectSystemTheme);
 
   useEffect(() => {
@@ -60,8 +71,11 @@ export function ThemeProvider({
     root.dataset.theme = resolved.name;
   }, [resolved]);
 
+  // setPreference is a stable closure (it captures setPreferenceLocal +
+  // setPersisted, both stable), so omitting it from deps is safe.
   const value = useMemo(
     () => ({ theme: resolved, preference, setPreference }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [resolved, preference],
   );
 
