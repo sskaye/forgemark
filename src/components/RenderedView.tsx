@@ -117,25 +117,52 @@ export function RenderedView({
       },
     },
     onUpdate: ({ editor }) => {
+      // Skip until the parent has settled — initial mount and any
+      // subsequent external load reset the doc via setContent, and
+      // some of those transitions fire onUpdate even with
+      // `emitUpdate: false`. Without this gate, the editor would
+      // dispatch an "edit" with stale content and clobber state.body.
+      if (!editorReadyRef.current) return;
       const storage = editor.storage as unknown as {
         markdown?: { getMarkdown?: () => string };
       };
       const md = storage.markdown?.getMarkdown?.() ?? "";
-      // Convert any anchor `<span data-anchor-id>` wrappers back to the
-      // canonical marker comments so the document state's `body` always
-      // holds the format-layer source of truth (Phase 5). This is the
-      // single editor → state boundary; the inverse `bodyWithAnchorSpans`
-      // is applied on the way back in.
-      onEdit(bodyFromAnchorSpans(md));
+      // Convert any anchor `<span data-anchor-id>` wrappers back to
+      // the canonical marker comments so the document state's body
+      // always holds the format-layer source of truth. This is the
+      // single editor → state boundary; the inverse
+      // `bodyWithAnchorSpans` is applied on the way back in.
+      const newBody = bodyFromAnchorSpans(md);
+      // Pre-emptively update the ref so the upcoming setContent
+      // useEffect (triggered when the new state.body propagates back
+      // as initialMarkdown) sees a match and skips the rewrite —
+      // otherwise every keystroke would re-render the editor and
+      // reset the cursor.
+      lastInitialRef.current = bodyWithAnchorSpans(newBody);
+      onEdit(newBody);
     },
   });
 
-  // When the body changes (file open / external reload), replace the doc.
+  // editorReadyRef gates onUpdate so initial mount + external loads
+  // don't dispatch spurious edits. Reset on every initialMarkdown
+  // change (including external reloads), set after the post-
+  // setContent paint via a microtask.
+  const editorReadyRef = useRef(false);
+
+  // When the body changes (file open / external reload / programmatic
+  // edits like accept-suggestion), replace the doc. User keystrokes
+  // skip this path because onUpdate updates lastInitialRef first.
   useEffect(() => {
     if (!editor) return;
     if (lastInitialRef.current === initialMarkdown) return;
     lastInitialRef.current = initialMarkdown;
+    editorReadyRef.current = false;
     editor.commands.setContent(initialMarkdown, { emitUpdate: false });
+    // Defer the ready flip past the current task so any synchronous
+    // setContent-induced onUpdate firings still see ready=false.
+    queueMicrotask(() => {
+      editorReadyRef.current = true;
+    });
   }, [editor, initialMarkdown]);
 
   // Read-only flag may change separately (file became read-only externally,

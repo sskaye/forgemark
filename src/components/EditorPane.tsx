@@ -258,7 +258,7 @@ export function EditorPane({ anchorStatuses }: Props) {
         {state.viewMode === "rendered" ? (
           <RenderedView
             body={state.body}
-            onEdit={() => {}}
+            onEdit={(body) => dispatch({ type: "edit", body })}
             readOnly={editorReadOnly}
             focusedCommentId={state.focusedCommentId}
             hoveredCommentId={state.hoveredCommentId}

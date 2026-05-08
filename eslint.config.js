@@ -54,6 +54,7 @@ export default [
         CustomEvent: "readonly",
         BeforeUnloadEvent: "readonly",
         KeyboardEventInit: "readonly",
+        queueMicrotask: "readonly",
         React: "readonly",
       },
     },
