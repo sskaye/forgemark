@@ -39,6 +39,7 @@ The design audience is the human reviewer. AI participation should feel native, 
 Asterisked items are highest priority.
 
 **Core: annotated document view**
+
 - ⭐ Two-pane layout: rendered markdown editor on the left, sidebar of comment cards on the right.
 - ⭐ Inline highlight states for an anchored passage: default, hovered, focused (when its card is selected), resolved (dimmed), orphaned ("questioned" treatment when the inline markers have drifted from `anchor_text` — see proposal §185).
 - ⭐ Comment card states: unread, read, has-unread-replies, focused, resolved (collapsed), suggested-edit variant.
@@ -46,6 +47,7 @@ Asterisked items are highest priority.
 - Empty state when a file has no comments.
 
 **Comment composer**
+
 - ⭐ Inline composer that appears when the user selects text and initiates a comment.
 - Submit button (Cmd+Enter / Ctrl+Enter is the accelerator; the button is the canonical path — every interaction other than typing must have a GUI control, see proposal §42).
 - "Suggest edit" toggle that switches the composer into a from-/to-style replacement editor.
@@ -53,25 +55,30 @@ Asterisked items are highest priority.
 - Edit composer (when an author edits their own previous comment — sets `edited_at` on save).
 
 **Suggested edits**
+
 - ⭐ Visual treatment of a suggested-edit card with strikethrough on the original and an inserted alternative.
 - Accept and Reject buttons. These are terminal — match the visual gravity Google Docs gives to them.
 
 **Source view**
+
 - Toggle between rendered view and raw markdown source. The raw view should display the inline anchor markers (`<!-- fmc:N -->` / `<!-- /fmc:N -->`) and the trailing comments block clearly. The reviewer should be able to point at a card in the sidebar and find the corresponding YAML object and inline markers in the source.
 
 **Application chrome**
+
 - Menu bar with every command (each shortcut shown next to its menu item).
 - Title bar, file-modified state indicator, save-on-close prompt.
 - Open / Save / "Clean Export" flows. Clean Export needs a confirmation modal — it removes all annotations from a copy of the file.
 - First-run onboarding: set author name, see a sample annotated file.
 
 **Settings / Preferences**
+
 - Author name (free-text).
 - Theme (light / dark / system).
 - Font size.
 - Skill package: a link to download the `.skill` archive AI agents use to learn the format. This is a small but important affordance — it is how AI participation gets onboarded.
 
 **Brand**
+
 - Application icon (macOS `.icns`, Windows `.ico`).
 - Wordmark / type lockup if needed.
 - Light and dark themes — both should feel intentional, not one retrofitted to the other.

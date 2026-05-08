@@ -25,6 +25,7 @@ Each item below is **resolved** — the next design iteration should update the 
 **Decided:** v1 commits to two diff signals only — `+ N comments added/removed` (we own that schema) and `+ N body bytes changed` (cheap to compute). The "+ 1 paragraph rewrite" line in the current mock implies markdown-aware semantic diffing that v1 will not deliver; remove it.
 
 **Next iteration:**
+
 - Update the save-conflict modal to use only the two committed signals.
 - Add a second mock variant where one or both columns show **"Unknown changes"** — this will be the common case when the file's been touched but Forgemark can't categorize the delta cleanly.
 
@@ -35,6 +36,7 @@ Each item below is **resolved** — the next design iteration should update the 
 **Rationale:** the original design has the button present "so users have a way out," but a button without a destination is worse than no button. Plain Cancel is honest.
 
 **Next iteration:**
+
 - Rename the primary outlined button in the save-conflict modal to **Cancel**.
 - Drop the "out of scope for v1" diff-drawer note from §11c.
 - Keep **Overwrite disk version** as the destructive path; that's still correct.
@@ -49,7 +51,7 @@ Each item below is **resolved** — the next design iteration should update the 
 
 **Decided:** when the focused floating note was authored by the current user (`comment.author === preferences.authorName`), the action row gets an **Edit** button alongside Reply / Resolve / Reattach… / Discard. Same edit affordance as a regular `<FMCard>`.
 
-**Rationale:** a floating note may need clarification *because* it's lost its anchor — the body should explain what the note was originally about. Editing is meaningful.
+**Rationale:** a floating note may need clarification _because_ it's lost its anchor — the body should explain what the note was originally about. Editing is meaningful.
 
 **Next iteration:** update `FloatingNoteCard` action row to include Edit conditionally on `isOwnComment`.
 
@@ -65,7 +67,7 @@ Each item below is **resolved** — the next design iteration should update the 
 
 **Decided:** detect external changes by **content hash**, with **mtime as a fast-path skip optimization**. If mtime is unchanged since open, skip the hash check entirely (cheap). If mtime has changed, hash both the on-disk file and the in-memory version; fire the conflict only if hashes disagree. Avoids spurious banners from touch-saves and file-system sync events.
 
-**Next iteration:** update §11 / §State Management copy to reflect this rather than "mtime *or* content hash."
+**Next iteration:** update §11 / §State Management copy to reflect this rather than "mtime _or_ content hash."
 
 ## One question back from design
 
@@ -78,7 +80,7 @@ I'll write this and put it at `docs/sample-onboarding-file.md`, then we can iter
 The product proposal at `docs/markdown-commenter-proposal.md` defines the YAML schema (§102–115) and the Format Spec for AI Authors (§121–137). The new `floating: true` field isn't yet in either. To keep the proposal authoritative and the AI skill package complete, I'll add:
 
 - A new line in the schema reference (§102–115): `floating` (boolean, optional) — when true, the comment has no inline marker pair and `anchor_text` may be absent.
-- A note in the Format Spec for AI Authors (§121–137) explaining that an AI agent encountering `floating: true` should *not* attempt to insert inline markers, and that an AI agent can elect to set this flag if it has authored a comment that has no good anchor (rare but possible).
+- A note in the Format Spec for AI Authors (§121–137) explaining that an AI agent encountering `floating: true` should _not_ attempt to insert inline markers, and that an AI agent can elect to set this flag if it has authored a comment that has no good anchor (rare but possible).
 - A small mention in §52 ("file is the source of truth" pillar copy) that floating notes are a steady-state, not a recovery state.
 
 This is a one-pass edit on my end. Flagging that the design has technically extended the schema, and the proposal — which the AI skill depends on — needs to follow.

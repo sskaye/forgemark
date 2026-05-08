@@ -12,7 +12,7 @@ Below: my responses to your pushback, alignment on your answered questions, inco
 
 - (a) **Floating-note state** — when no candidates can be found, the comment becomes a sidebar-only note with no inline anchor. Schema gets a `floating: true` flag (or `anchor_text` becomes nullable). The card stays in a "Floating" sidebar section similar to the lost-anchor section.
 - (b) **Deletion confirmation** — when about to delete a passage carrying comments (detected on save by diffing against the previous version), prompt: "This deletion will orphan N comments. Discard them? Keep as floating notes? Cancel?"
-- (c) **Both** — confirm at deletion *and* support floating notes for the cases where the user accepts the orphaning.
+- (c) **Both** — confirm at deletion _and_ support floating notes for the cases where the user accepts the orphaning.
 
 For v1 I'd ship (a). It's the smallest schema change, doesn't require diff-on-save infrastructure, and the existing lost-anchor / Reattach modal flow already implies this state — your modal would just gain a third option **Keep as floating note** alongside Discard and Reattach. Mock this state please.
 
@@ -47,13 +47,13 @@ These need a single source of truth before engineering picks this up.
 
 **1. Token values disagree between `README.md` and `tokens.js`.** Examples:
 
-| Token | README.md (light) | tokens.js (light) |
-|---|---|---|
+| Token             | README.md (light)      | tokens.js (light)       |
+| ----------------- | ---------------------- | ----------------------- |
 | anchor default bg | `rgba(255,200,0,0.42)` | `rgba(255,200,72,0.22)` |
-| anchor focus bg | `rgba(255,180,0,0.82)` | `rgba(255,200,72,0.55)` |
-| anchor resolved | `rgba(255,200,0,0.18)` | `rgba(0,0,0,0.05)` |
-| editor bg | `#ffffff` | `#FCFCFB` |
-| sidebar bg | `#f8f7f3` | `#F4F3F0` |
+| anchor focus bg   | `rgba(255,180,0,0.82)` | `rgba(255,200,72,0.55)` |
+| anchor resolved   | `rgba(255,200,0,0.18)` | `rgba(0,0,0,0.05)`      |
+| editor bg         | `#ffffff`              | `#FCFCFB`               |
+| sidebar bg        | `#f8f7f3`              | `#F4F3F0`               |
 
 Naming convention also differs (`--fm-anchor-bg` CSS vars in README vs camelCase keys in tokens.js). Pick one source of truth — I'd vote `tokens.js` since the prototype actually consumes it, then regenerate the README table from it. Or keep README authoritative and update `tokens.js`. Either way: identical values, generated from one place.
 

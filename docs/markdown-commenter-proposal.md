@@ -57,6 +57,8 @@ Suggested edits are a distinct comment type. The reviewer can highlight text and
 
 Comments are stored inside the markdown file itself, in a format that is both human-readable when viewed as plain text and parseable by AI agents and other tools without a custom library. The block always lives at the end of the file; this is a fixed design decision, not a user-configurable option.
 
+Comments come in two structural shapes. **Anchored comments** wrap a passage in the document body with paired inline markers and link back to that passage from a YAML record. **Floating notes** have no inline markers — they live only in the YAML block, with a `floating: true` flag. Floating notes are a steady-state, not a transient recovery state: a comment can begin life floating (e.g., an AI agent leaves a general note that doesn't pin to a passage) or become floating later (the user converts an orphaned anchor to a note rather than reattaching).
+
 Two complementary mechanisms are used:
 
 **Inline anchors** mark the commented passages in the document body using paired open/close markers. The format is `<!-- fmc:1 -->highlighted text<!-- /fmc:1 -->` where `1` is the comment's ID. Each marker is itself an HTML comment, so it is invisible in any rendered markdown view — the file renders identically to the original prose to readers using non-Forgemark viewers. Comment IDs are sequential positive integers (1, 2, 3, …), assigned at creation time, never reused within a file, and chosen to be short and human-readable. New comments take the next ID one greater than the current maximum in the file. Markers should generally wrap whole words or phrases rather than splitting words mid-character; the application's selection UI already enforces this in practice.
@@ -104,8 +106,8 @@ The duplication of `anchor_text` and the `context_before` / `context_after` fiel
 **Schema reference** for each comment object:
 
 - `id` (integer, required) — sequential within the file, starting at 1.
-- `anchor_text` (string, required) — the text wrapped between the inline markers.
-- `context_before` / `context_after` (string, recommended) — roughly one sentence on either side of the anchor, used for orphan recovery.
+- `anchor_text` (string) — the text wrapped between the inline markers. Required for anchored comments; omitted (or empty) for floating notes (`floating: true`).
+- `context_before` / `context_after` (string, recommended) — roughly one sentence on either side of the anchor, used for orphan recovery. Omitted for floating notes.
 - `author` (string, required) — free-form name. Humans set this in preferences; AI agents pick their own (e.g., "Claude", "ChatGPT"). Human and AI authors are not distinguished in the schema.
 - `timestamp` (string, required) — ISO 8601 in UTC (e.g. `2026-05-07T14:32:00Z`).
 - `edited_at` (string, optional) — set when the original author edits the body. Same format as `timestamp`.
@@ -113,6 +115,7 @@ The duplication of `anchor_text` and the `context_before` / `context_after` fiel
 - `body` (string) — the comment text, typically as a YAML literal block (`|`). Required for plain comments; optional for suggestions, where the suggestion itself can stand alone.
 - `replies` (list, optional) — entries have `author`, `timestamp`, `body`, optional `edited_at`. Replies are stored in chronological order.
 - `suggested_edit` (object, optional) — if present, the comment is rendered as a suggestion. Keys: `from` (the text to replace) and `to` (the proposed replacement).
+- `floating` (boolean, optional, default `false`) — when true, the comment has no inline marker pair in the body and `anchor_text` may be omitted. The card lives in the sidebar's Floating Notes section. Used both as a steady-state for comments that don't pin to a passage and as a non-destructive landing for orphaned anchors the user chooses to keep.
 
 **Suggested-edit acceptance** matches the Google Docs / Word convention. Accepting a suggestion replaces the anchored text with `to`, removes the inline markers, and removes the comment object (and any replies) from the YAML block entirely. Rejecting a suggestion leaves the original text in place and likewise removes the markers and the comment. Both actions are terminal — there is no "resolved suggestion" state.
 
@@ -131,10 +134,11 @@ The minimum normative requirements an AI agent must satisfy to write a valid com
 1. Locate or create the comments block at the end of the file. The block opens with `<!-- forgemark-comments` on its own line and closes with `-->` on its own line. There is at most one such block per file.
 2. Between those delimiters, maintain a YAML list of comment objects. Required fields are listed in the Storage Format schema reference above.
 3. Assign each new comment an integer `id` one greater than the current maximum in the file (1 if there are no existing comments).
-4. Wrap the anchored passage in the document body with paired HTML-comment markers: `<!-- fmc:N -->…<!-- /fmc:N -->`, where `N` is the comment ID.
+4. Wrap the anchored passage in the document body with paired HTML-comment markers: `<!-- fmc:N -->…<!-- /fmc:N -->`, where `N` is the comment ID. **Skip this step for floating notes** — see rule 8.
 5. Use ISO 8601 in UTC for all timestamps.
 6. In user-provided string fields, escape `-->` as `--\>` and `<!--` as `<!\--`.
 7. Pick any name for `author`. Self-identification is by convention only.
+8. **Floating notes.** If you encounter a comment with `floating: true`, do not insert inline markers for it; the comment lives only in the YAML block and `anchor_text` may be absent. You may also author a floating note yourself by setting `floating: true` and omitting the markers — useful when you want to leave a general comment that doesn't pin to a single passage.
 
 ### File Handling
 
@@ -186,7 +190,7 @@ Because AI agents are co-primary users and are expected to edit the document, an
 
 ## Differentiation from Existing Tools
 
-This tool is not a better Google Docs and not a better GitHub. It occupies a specific niche: **collaborative review of markdown documents by humans and AI agents working as peers**. The core insight is that the storage format must be both human-pleasant in the editor UI and AI-pleasant in the raw file, with zero friction between the two — and that AI agents must be able to read *and write* comments using the same format, not just consume them.
+This tool is not a better Google Docs and not a better GitHub. It occupies a specific niche: **collaborative review of markdown documents by humans and AI agents working as peers**. The core insight is that the storage format must be both human-pleasant in the editor UI and AI-pleasant in the raw file, with zero friction between the two — and that AI agents must be able to read _and write_ comments using the same format, not just consume them.
 
 No existing tool makes this tradeoff correctly. HackMD and Notion optimize for the human side and abandon the AI side. CriticMarkup and HTML comments optimize for the AI side and abandon the human side. The proposed tool refuses to choose.
 
@@ -196,4 +200,4 @@ Multi-author comment merging — two people (or a person and an AI) commenting o
 
 ## Suggested Next Steps
 
-A short prototype phase would validate the core hypothesis that the YAML-in-HTML-comment storage format is both pleasant to edit through a UI and pleasant for AI agents to read *and write*. The prototype need only support opening a file, adding a single comment via highlight-and-type, saving, and re-opening. The critical empirical test is to feed the resulting file to a current LLM (Claude or similar) and confirm that the agent can (a) reliably address comments when asked to revise the document, and (b) write new comments and replies into the block in valid format without bespoke tooling. If both round-trips work smoothly, the remaining work is mostly conventional desktop development, with the anchor-reattachment logic and the editor decoration layer as the two non-trivial components on top.
+A short prototype phase would validate the core hypothesis that the YAML-in-HTML-comment storage format is both pleasant to edit through a UI and pleasant for AI agents to read _and write_. The prototype need only support opening a file, adding a single comment via highlight-and-type, saving, and re-opening. The critical empirical test is to feed the resulting file to a current LLM (Claude or similar) and confirm that the agent can (a) reliably address comments when asked to revise the document, and (b) write new comments and replies into the block in valid format without bespoke tooling. If both round-trips work smoothly, the remaining work is mostly conventional desktop development, with the anchor-reattachment logic and the editor decoration layer as the two non-trivial components on top.

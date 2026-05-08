@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# AI-agent tests are NEVER run in CI. See docs/implementation-plan.md §2 CI policy.
+# This workflow runs lint + unit + E2E + round-trip parity only.
+
+jobs:
+  lint-and-unit:
+    name: Lint and unit (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  e2e:
+    name: E2E (macOS)
+    runs-on: macos-latest
+    needs: lint-and-unit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # Tauri E2E will replace this Vite-only smoke once tauri-driver lands.
+      - name: Start Vite and run Playwright
+        run: |
+          npm run vite:dev &
+          VITE_PID=$!
+          npx wait-on http://localhost:1420 -t 30000
+          npm run test:e2e
+          kill $VITE_PID || true

@@ -33,15 +33,15 @@ Edits go through the structured form. ProseMirror handles selections, decoration
 
 ### Test pyramid
 
-| Layer | Tool | Coverage |
-|---|---|---|
-| Unit (TS) | Vitest | Format parser, serializer, anchor walker, fuzzy match, settings, schema validation |
-| Unit (Rust) | `cargo test` | File I/O, file watcher, path normalization, hash computation |
-| Integration | Vitest + jsdom | React components in isolation; document-model state transitions; ProseMirror plugin behavior |
-| E2E | Playwright | Full app flows: open file, add comment, save, reload |
-| Visual | Playwright snapshots | Theme rendering, card states, modals — separate snapshots for macOS WebKit and Windows WebView2 |
-| Round-trip | Vitest | Open `.md` fixture → parse → serialize → assert byte-equivalent |
-| **AI-agent** | Claude Code `Agent` (primary, interactive) + optional Vitest + Anthropic SDK harness | Format read/write verification; details in §2 |
+| Layer        | Tool                                                                                 | Coverage                                                                                        |
+| ------------ | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| Unit (TS)    | Vitest                                                                               | Format parser, serializer, anchor walker, fuzzy match, settings, schema validation              |
+| Unit (Rust)  | `cargo test`                                                                         | File I/O, file watcher, path normalization, hash computation                                    |
+| Integration  | Vitest + jsdom                                                                       | React components in isolation; document-model state transitions; ProseMirror plugin behavior    |
+| E2E          | Playwright                                                                           | Full app flows: open file, add comment, save, reload                                            |
+| Visual       | Playwright snapshots                                                                 | Theme rendering, card states, modals — separate snapshots for macOS WebKit and Windows WebView2 |
+| Round-trip   | Vitest                                                                               | Open `.md` fixture → parse → serialize → assert byte-equivalent                                 |
+| **AI-agent** | Claude Code `Agent` (primary, interactive) + optional Vitest + Anthropic SDK harness | Format read/write verification; details in §2                                                   |
 
 ### Phasing principles
 
@@ -56,9 +56,9 @@ Before Phase 0 begins, two prerequisites must land. Both gate the rest of the pl
 
 **A. Proposal `floating` schema update.** Update `docs/markdown-commenter-proposal.md`:
 
-- *Storage Format / Schema reference:* add `floating` (boolean, optional) — when true, the comment has no inline marker pair and `anchor_text` may be omitted.
-- *Format Spec for AI Authors:* add a note that an AI agent encountering `floating: true` should not insert inline markers, and may set the flag itself when authoring a comment that has no good anchor.
-- *Storage Format* intro paragraph: mention floating notes are a steady-state, not a recovery state.
+- _Storage Format / Schema reference:_ add `floating` (boolean, optional) — when true, the comment has no inline marker pair and `anchor_text` may be omitted.
+- _Format Spec for AI Authors:_ add a note that an AI agent encountering `floating: true` should not insert inline markers, and may set the flag itself when authoring a comment that has no good anchor.
+- _Storage Format_ intro paragraph: mention floating notes are a steady-state, not a recovery state.
 
 **B. Draft `assets/forgemark-skill/SKILL.md`.** This file is needed by Phase 5 onward (the first AI-WRITE tests assume the agent has loaded the skill). The Phase 0 draft is hand-derived from the proposal's Storage Format and Format Spec for AI Authors sections, with the YAML frontmatter (`name: forgemark`, `description: …`). It can refine later as the spec stabilizes; Phase 12 packages and distributes the final version, but the content lives in the repo from day one.
 
@@ -106,15 +106,15 @@ The harness reads the skill content directly from `assets/forgemark-skill/SKILL.
 
 ### Harness
 
-```typescript
+````typescript
 // tests/ai/harness.ts
-import Anthropic from '@anthropic-ai/sdk';
-import { parseForgemarkFile, ParsedFile } from '../../src/format';
-import { readFileSync } from 'node:fs';
+import Anthropic from "@anthropic-ai/sdk";
+import { parseForgemarkFile, ParsedFile } from "../../src/format";
+import { readFileSync } from "node:fs";
 
 const client = new Anthropic();
-const SKILL = readFileSync('assets/forgemark-skill/SKILL.md', 'utf-8');
-const MODEL = process.env.AI_TEST_MODEL ?? 'claude-opus-4-7';
+const SKILL = readFileSync("assets/forgemark-skill/SKILL.md", "utf-8");
+const MODEL = process.env.AI_TEST_MODEL ?? "claude-opus-4-7";
 
 export interface AIAgentTestCase {
   name: string;
@@ -124,27 +124,32 @@ export interface AIAgentTestCase {
 }
 
 export async function runAIAgentTest(tc: AIAgentTestCase) {
-  const beforeRaw = readFileSync(tc.fixturePath, 'utf-8');
+  const beforeRaw = readFileSync(tc.fixturePath, "utf-8");
   const before = parseForgemarkFile(beforeRaw);
 
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: 8192,
     system: SKILL,
-    messages: [{
-      role: 'user',
-      content:
-        'Here is the file:\n\n```markdown\n' + beforeRaw + '\n```\n\n' +
-        tc.prompt + '\n\n' +
-        'Return the FULL modified file inside a single fenced code block. ' +
-        'Do not include any other text outside the fence.'
-    }],
+    messages: [
+      {
+        role: "user",
+        content:
+          "Here is the file:\n\n```markdown\n" +
+          beforeRaw +
+          "\n```\n\n" +
+          tc.prompt +
+          "\n\n" +
+          "Return the FULL modified file inside a single fenced code block. " +
+          "Do not include any other text outside the fence.",
+      },
+    ],
   });
 
   const text = response.content
-    .filter(b => b.type === 'text')
-    .map(b => (b as { text: string }).text)
-    .join('');
+    .filter((b) => b.type === "text")
+    .map((b) => (b as { text: string }).text)
+    .join("");
 
   const afterRaw = extractFenced(text);
   const after = parseForgemarkFile(afterRaw);
@@ -155,31 +160,30 @@ export async function runAIAgentTest(tc: AIAgentTestCase) {
 function extractFenced(text: string): string {
   // The skill instructs the model to emit one fenced block. Be generous on the fence type.
   const m = text.match(/```(?:markdown|md)?\n([\s\S]+?)\n```/);
-  if (!m) throw new Error('AI response did not contain a fenced code block');
+  if (!m) throw new Error("AI response did not contain a fenced code block");
   return m[1];
 }
-```
+````
 
 ### Anatomy of a test case
 
 ```typescript
 // tests/ai/cases/write-comment.test.ts
-import { runAIAgentTest } from '../harness';
+import { runAIAgentTest } from "../harness";
 
-test('AI adds a comment with the next sequential id', async () => {
+test("AI adds a comment with the next sequential id", async () => {
   await runAIAgentTest({
-    name: 'add-comment-on-paragraph',
-    fixturePath: 'tests/ai/fixtures/01-simple.md',
-    prompt: 'Add a comment on the third paragraph saying "this needs more detail." Author yourself as "Claude".',
+    name: "add-comment-on-paragraph",
+    fixturePath: "tests/ai/fixtures/01-simple.md",
+    prompt:
+      'Add a comment on the third paragraph saying "this needs more detail." Author yourself as "Claude".',
     expect: (after, before) => {
       // Structural assertions only — never compare body text directly.
-      const newComments = after.comments.filter(
-        c => !before.comments.some(b => b.id === c.id)
-      );
+      const newComments = after.comments.filter((c) => !before.comments.some((b) => b.id === c.id));
       expect(newComments.length).toBe(1);
       const fresh = newComments[0];
-      expect(fresh.id).toBe(Math.max(...before.comments.map(c => c.id)) + 1);
-      expect(fresh.author).toBe('Claude');
+      expect(fresh.id).toBe(Math.max(...before.comments.map((c) => c.id)) + 1);
+      expect(fresh.author).toBe("Claude");
       expect(fresh.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
       expect(fresh.body).toMatch(/.+/); // Some body text exists.
       expect(fresh.resolved).toBe(false);
@@ -232,15 +236,15 @@ A flaky retry can mask a real regression. Policy:
 
 Fixtures live in `tests/ai/fixtures/`. They double as inputs to Phase 3 round-trip tests AND as inputs to AI tests AND as examples shipped in the skill package. **All seven fixtures are created together in Phase 3** — the parser handles every schema variant from day one, so the round-trip parity gate covers the full schema before any UI work begins. Later phases USE these fixtures rather than CREATING them.
 
-| File | Coverage |
-|---|---|
-| `01-simple.md` | 2 plain comments, no replies, no suggestions |
-| `02-with-thread.md` | Threaded comment with 2 replies (chronological) |
-| `03-suggestion.md` | A suggested-edit comment (from/to) |
-| `04-orphan-and-floating.md` | One drifted anchor + one floating note |
-| `05-resolved-and-edited.md` | Resolved + edited (with `edited_at`) |
-| `06-escapes.md` | Body content containing `-->` and `<!--` (escaped) |
-| `07-empty-body-suggestion.md` | Suggestion with no body (body-optional rule) |
+| File                          | Coverage                                           |
+| ----------------------------- | -------------------------------------------------- |
+| `01-simple.md`                | 2 plain comments, no replies, no suggestions       |
+| `02-with-thread.md`           | Threaded comment with 2 replies (chronological)    |
+| `03-suggestion.md`            | A suggested-edit comment (from/to)                 |
+| `04-orphan-and-floating.md`   | One drifted anchor + one floating note             |
+| `05-resolved-and-edited.md`   | Resolved + edited (with `edited_at`)               |
+| `06-escapes.md`               | Body content containing `-->` and `<!--` (escaped) |
+| `07-empty-body-suggestion.md` | Suggestion with no body (body-optional rule)       |
 
 ### How to add a new test case
 
@@ -262,15 +266,15 @@ To verify with Codex CLI, ChatGPT, or any other agent:
 
 ### Test categories (defined incrementally per phase)
 
-| Category | Purpose |
-|---|---|
-| AI-READ | Comment comprehension, schema literacy, threading |
-| AI-WRITE-comment | Adding new comments with correct ID + markers + schema |
-| AI-WRITE-reply | Adding replies; chronological ordering; attribution |
-| AI-WRITE-suggestion | Suggested edits, accept/reject lifecycle, body-optional rule |
-| AI-WRITE-statechange | Resolve, unresolve, delete, edit own comments |
-| AI-RECOVERY | Orphan-to-floating conversion, lost-anchor scenarios |
-| AI-ESCAPES | Body content with `-->` and `<!--` |
+| Category             | Purpose                                                      |
+| -------------------- | ------------------------------------------------------------ |
+| AI-READ              | Comment comprehension, schema literacy, threading            |
+| AI-WRITE-comment     | Adding new comments with correct ID + markers + schema       |
+| AI-WRITE-reply       | Adding replies; chronological ordering; attribution          |
+| AI-WRITE-suggestion  | Suggested edits, accept/reject lifecycle, body-optional rule |
+| AI-WRITE-statechange | Resolve, unresolve, delete, edit own comments                |
+| AI-RECOVERY          | Orphan-to-floating conversion, lost-anchor scenarios         |
+| AI-ESCAPES           | Body content with `-->` and `<!--`                           |
 
 Counts are not pre-committed. Each category gets enough cases to cover its concerns; the suite grows naturally as phases land.
 
@@ -283,6 +287,7 @@ Counts are not pre-committed. Each category gets enough cases to cover its conce
 **Goal:** a Tauri shell that builds and launches with React + TS + the test toolchain wired. Proposal `floating` schema update committed. Initial draft of `SKILL.md` committed.
 
 **Deliverables**
+
 - Pre-flight A: proposal updated to add `floating` field (see §1 Pre-flight).
 - Pre-flight B: initial `assets/forgemark-skill/SKILL.md` drafted from the proposal's Storage Format and Format Spec for AI Authors sections.
 - `tauri-cli` initialized; `src-tauri/` with a minimal Rust main; `src/` with a React + TS entry point.
@@ -295,13 +300,15 @@ Counts are not pre-committed. Each category gets enough cases to cover its conce
 - Single repo README at the project root, updated with build / test instructions. The same file evolves through phases; Phase 13 adds the public-facing release content (install, screenshots, license).
 
 **Tests**
-- *Smoke (E2E):* `npm run dev` opens a Tauri window without console errors. Title bar reads "Forgemark — Untitled".
-- *Smoke (unit):* a trivial Vitest assertion runs in < 200 ms.
-- *CI:* both jobs green on a feature branch.
-- *Proposal update:* the modified proposal renders correctly and the schema reference includes `floating`.
-- *Skill content sanity:* `assets/forgemark-skill/SKILL.md` exists, has valid YAML frontmatter, and is < 4000 tokens (rough count by word-token estimate; tightened in Phase 12).
+
+- _Smoke (E2E):_ `npm run dev` opens a Tauri window without console errors. Title bar reads "Forgemark — Untitled".
+- _Smoke (unit):_ a trivial Vitest assertion runs in < 200 ms.
+- _CI:_ both jobs green on a feature branch.
+- _Proposal update:_ the modified proposal renders correctly and the schema reference includes `floating`.
+- _Skill content sanity:_ `assets/forgemark-skill/SKILL.md` exists, has valid YAML frontmatter, and is < 4000 tokens (rough count by word-token estimate; tightened in Phase 12).
 
 **Acceptance**
+
 - `npm run dev` opens a Tauri window on macOS.
 - Vitest, Playwright, and the AI test scaffold are wired (the AI test scaffold can be empty at this point — just a passing placeholder).
 - The proposal includes `floating`; `assets/forgemark-skill/SKILL.md` exists and is consistent with the proposal.
@@ -313,6 +320,7 @@ Counts are not pre-committed. Each category gets enough cases to cover its conce
 **Goal:** the app shell from the design — title bar, sidebar, editor pane scaffold — themed with locked tokens.
 
 **Deliverables**
+
 - Translate `design_handoff_v1_1/tokens.js` to TS + CSS custom properties at `src/theme/tokens.ts`.
 - Light + dark theme switcher (`prefers-color-scheme` + manual override via Tauri appearance API).
 - App shell layout: 44px combined chrome (Tauri-native traffic lights, centered file name, segmented control + sidebar toggle on the right) + body (editor pane left, 320px sidebar right).
@@ -320,13 +328,15 @@ Counts are not pre-committed. Each category gets enough cases to cover its conce
 - Empty sidebar with header (count placeholder + filter + sort dropdowns; populate later).
 
 **Tests**
-- *Unit:* `tokens.ts` exports light + dark token sets that match `tokens.js` byte-for-byte (a contract test).
-- *Unit (WCAG AA contrast):* programmatically check that every text-on-background token pair meets WCAG AA contrast (4.5:1 for body text, 3:1 for large text and UI components) in both themes. Fail CI on regression.
-- *Integration:* render `<AppShell />` with light theme, assert the editor pane and sidebar widths.
-- *Visual snapshot (macOS WebKit + Windows WebView2):* light + dark shells side-by-side. Re-baseline on intentional changes.
-- *Manual:* eyeball the shell against `Forgemark.html` prototype on both themes.
+
+- _Unit:_ `tokens.ts` exports light + dark token sets that match `tokens.js` byte-for-byte (a contract test).
+- _Unit (WCAG AA contrast):_ programmatically check that every text-on-background token pair meets WCAG AA contrast (4.5:1 for body text, 3:1 for large text and UI components) in both themes. Fail CI on regression.
+- _Integration:_ render `<AppShell />` with light theme, assert the editor pane and sidebar widths.
+- _Visual snapshot (macOS WebKit + Windows WebView2):_ light + dark shells side-by-side. Re-baseline on intentional changes.
+- _Manual:_ eyeball the shell against `Forgemark.html` prototype on both themes.
 
 **Acceptance**
+
 - App opens with the design's chrome on macOS in both themes.
 - Resizing the window keeps the sidebar pinned at 320px and the editor centered with 720px max content width.
 - All token pairs pass WCAG AA contrast in both themes.
@@ -339,6 +349,7 @@ Counts are not pre-committed. Each category gets enough cases to cover its conce
 **Goal:** open an arbitrary `.md` file, render it as GFM in the editor pane via ProseMirror.
 
 **Deliverables**
+
 - ProseMirror (via Tiptap) integrated as the editor for the rendered view. GFM extensions (headings, lists, tables, code blocks, links, images, footnotes).
 - File-open via Tauri `dialog.open` and `fs.readTextFile`.
 - Mode toggle (Rendered / Source) in the title bar; Source view shows raw markdown text in `var(--fm-mono)` 13/1.65 (no syntax highlighting yet — defer to Phase 8).
@@ -346,13 +357,15 @@ Counts are not pre-committed. Each category gets enough cases to cover its conce
 - Save: ⌘S writes the current file. Auto-save fires on any document edit after a 500ms quiet period.
 
 **Tests**
-- *Unit:* render a fixture markdown file (headings, lists, tables, code blocks, links) into the ProseMirror doc and assert the doc tree contains expected nodes.
-- *Integration:* open a file via the menu, assert the editor pane fills with rendered prose.
-- *Integration (file I/O edge cases):* opening a read-only file shows the editor in read-only mode (toolbar disabled). Opening a file that no longer exists on disk shows a polite error and returns to the prior state. Opening a path that's a directory or non-markdown file is rejected at the dialog filter.
-- *E2E:* click File → Open, pick a fixture, see it render. Toggle Source view, see raw text.
-- *Performance:* render a 30,000-word markdown file in < 250 ms (rough; tighten later).
+
+- _Unit:_ render a fixture markdown file (headings, lists, tables, code blocks, links) into the ProseMirror doc and assert the doc tree contains expected nodes.
+- _Integration:_ open a file via the menu, assert the editor pane fills with rendered prose.
+- _Integration (file I/O edge cases):_ opening a read-only file shows the editor in read-only mode (toolbar disabled). Opening a file that no longer exists on disk shows a polite error and returns to the prior state. Opening a path that's a directory or non-markdown file is rejected at the dialog filter.
+- _E2E:_ click File → Open, pick a fixture, see it render. Toggle Source view, see raw text.
+- _Performance:_ render a 30,000-word markdown file in < 250 ms (rough; tighten later).
 
 **Acceptance**
+
 - A markdown fixture renders with all GFM features. Source view shows the same file's raw text.
 - Mode toggle is per-document. ⌘S writes the file unchanged for a no-edits session.
 - Read-only and missing-file edge cases handled gracefully.
@@ -364,6 +377,7 @@ Counts are not pre-committed. Each category gets enough cases to cover its conce
 **Goal:** parse and serialize the Forgemark file format losslessly. Round-trip parity is the hard gate before Phase 4.
 
 **Deliverables**
+
 - `parseForgemarkFile(input: string): { body: string; comments: Comment[] }` — extracts the trailing `<!-- forgemark-comments` block, parses the YAML, walks the body for paired markers, validates the schema.
 - `serializeForgemarkFile({ body, comments }): string` — emits the body unchanged + a single trailing HTML comment containing the YAML block. **No empty block on save when `comments.length === 0`.**
 - Escape rules in user-content fields: `-->` ↔ `--\>`, `<!--` ↔ `<!\--`. Symmetric on parse.
@@ -374,24 +388,27 @@ Counts are not pre-committed. Each category gets enough cases to cover its conce
 - **All seven fixtures created** in `tests/ai/fixtures/` (see §2 fixture inventory). Each fixture is hand-written by an engineer to match its coverage description; together they exercise the full schema surface.
 
 **Tests (unit, integration, round-trip)**
-- *Unit (parser):* exhaustive case coverage — empty file, no comment block, single comment, threaded replies, suggested edits, floating notes, unknown fields, malformed YAML, unmatched markers (one of pair missing), markers inside code blocks (must be ignored), escape sequences in body, file with content but no trailing newline.
-- *Unit (schema validation):* explicit assertion that `anchor_text` is required when `floating` is unset/false, and optional when `floating: true`. Both directions tested.
-- *Unit (marker / YAML consistency):* three explicit invariants —
+
+- _Unit (parser):_ exhaustive case coverage — empty file, no comment block, single comment, threaded replies, suggested edits, floating notes, unknown fields, malformed YAML, unmatched markers (one of pair missing), markers inside code blocks (must be ignored), escape sequences in body, file with content but no trailing newline.
+- _Unit (schema validation):_ explicit assertion that `anchor_text` is required when `floating` is unset/false, and optional when `floating: true`. Both directions tested.
+- _Unit (marker / YAML consistency):_ three explicit invariants —
   - Comment IDs are unique within a file. Two YAML records with `id: 1` fail validation.
   - Every YAML record with `floating !== true` has a matching `<!-- fmc:N --> ... <!-- /fmc:N -->` pair in the body. A YAML record with no marker pair (and not floating) fails validation.
   - Every marker pair in the body has a matching YAML record. A marker `<!-- fmc:7 -->` with no `id: 7` in YAML fails validation.
-- *Unit (serializer):* round-trip every parser fixture (parse → serialize → parse again, assert deep equality on the comment array).
-- ⭐ ***Round-trip parity (CRITICAL):*** for **every fixture present in `tests/ai/fixtures/` at this point** (all seven, since they're created in this phase), parse → serialize → assert **byte-equivalent output**. Phase 4 cannot start until this is green.
-- *Property-based:* fast-check generator producing random valid Comment objects → serialize → parse → assert deep equality.
-- *Marker-placement edge cases:* selections that span paragraphs, span list items, include inline formatting (bold/italic/code), are entirely within a code block (rejected), are inside inline code (rejected).
+- _Unit (serializer):_ round-trip every parser fixture (parse → serialize → parse again, assert deep equality on the comment array).
+- ⭐ **_Round-trip parity (CRITICAL):_** for **every fixture present in `tests/ai/fixtures/` at this point** (all seven, since they're created in this phase), parse → serialize → assert **byte-equivalent output**. Phase 4 cannot start until this is green.
+- _Property-based:_ fast-check generator producing random valid Comment objects → serialize → parse → assert deep equality.
+- _Marker-placement edge cases:_ selections that span paragraphs, span list items, include inline formatting (bold/italic/code), are entirely within a code block (rejected), are inside inline code (rejected).
 
 **Tests (AI-agent)**
-- *AI-READ-01:* Give a no-skill model `01-simple.md` and ask "How many comments are open vs resolved? Who authored each?" Expect correct counts and authors.
-- *AI-READ-02:* Give a no-skill model `02-with-thread.md` and ask "Summarize the discussion in the thread on paragraph 1." Expect mention of both replies in chronological order.
+
+- _AI-READ-01:_ Give a no-skill model `01-simple.md` and ask "How many comments are open vs resolved? Who authored each?" Expect correct counts and authors.
+- _AI-READ-02:_ Give a no-skill model `02-with-thread.md` and ask "Summarize the discussion in the thread on paragraph 1." Expect mention of both replies in chronological order.
 
 These two AI tests verify the format is **legible to AI agents without skill aid** — a baseline check that the format itself isn't pathological.
 
 **Acceptance**
+
 - Every fixture file round-trips byte-equivalent.
 - Property-based test passes 1000 iterations.
 - Unknown fields survive a round trip.
@@ -405,6 +422,7 @@ These two AI tests verify the format is **legible to AI agents without skill aid
 **Goal:** render comments visually next to their anchored passages.
 
 **Deliverables**
+
 - `<Anchor>` ProseMirror inline node — renders a span around the anchored prose with the highlight-state CSS class.
 - A ProseMirror plugin that converts paired marker pairs in the source into `<Anchor id={N}>` inline nodes on parse and back to markers on serialize.
 - `<FMCard>` component with default + read state. Author row, body, replies (rendered if any), deterministic-color avatar (hash of author name).
@@ -413,15 +431,17 @@ These two AI tests verify the format is **legible to AI agents without skill aid
 - Hover symmetry: hovering an anchor in the prose hovers the corresponding card; vice versa.
 
 **Tests (integration, visual, accessibility)**
-- *Integration:* render a fixture file, assert the right number of cards in the sidebar and the right number of `<Anchor>` nodes in the prose. Assert order matches document position.
-- *Integration (focus):* click a card, assert anchor highlight changes to focused state. Click the anchor, assert card highlights.
-- *Integration (anchor wrapping inline formatting):* an anchor whose span contains bold + italic + inline code + a link renders correctly — the highlight wraps the full span without breaking children, and the children remain styled correctly. Test each combination.
-- *Visual snapshot:* card states (default, focused, has-unread-replies) on macOS + Windows.
-- *Accessibility (keyboard reachability):* every card-level action (focus, expand thread, scroll-to-anchor) is reachable via keyboard alone — no mouse-only paths.
-- *Accessibility (focus rings):* focused card and focused button render the design-spec'd focus ring (0.5px accent ring, 2px offset). Visible in both light and dark themes.
-- *Accessibility (screen reader):* keyboard navigation moves focus through cards in document order; focused card is announced with author + first ~30 chars of body.
+
+- _Integration:_ render a fixture file, assert the right number of cards in the sidebar and the right number of `<Anchor>` nodes in the prose. Assert order matches document position.
+- _Integration (focus):_ click a card, assert anchor highlight changes to focused state. Click the anchor, assert card highlights.
+- _Integration (anchor wrapping inline formatting):_ an anchor whose span contains bold + italic + inline code + a link renders correctly — the highlight wraps the full span without breaking children, and the children remain styled correctly. Test each combination.
+- _Visual snapshot:_ card states (default, focused, has-unread-replies) on macOS + Windows.
+- _Accessibility (keyboard reachability):_ every card-level action (focus, expand thread, scroll-to-anchor) is reachable via keyboard alone — no mouse-only paths.
+- _Accessibility (focus rings):_ focused card and focused button render the design-spec'd focus ring (0.5px accent ring, 2px offset). Visible in both light and dark themes.
+- _Accessibility (screen reader):_ keyboard navigation moves focus through cards in document order; focused card is announced with author + first ~30 chars of body.
 
 **Acceptance**
+
 - Opening a fixture file renders all comments correctly bound to their passages.
 - Click-to-focus and hover-symmetry both work.
 - Tab cycles through cards in document order.
@@ -433,6 +453,7 @@ These two AI tests verify the format is **legible to AI agents without skill aid
 **Goal:** select text in the rendered view → composer → submit → markers + YAML inserted → file marked dirty → save persists.
 
 **Deliverables**
+
 - Composer floats beside the selection, anchored to selection bounds (max 360px wide).
 - Submit (⌘↵ / button), Cancel (Esc).
 - On submit: generate next sequential integer ID; insert paired markers around the selection in the ProseMirror doc; append a Comment YAML object with `anchor_text`, `context_before`, `context_after`, `author` (from prefs), `timestamp` (ISO 8601 UTC); mark dirty.
@@ -441,21 +462,24 @@ These two AI tests verify the format is **legible to AI agents without skill aid
 - 500ms debounce active: a typed comment auto-saves to disk after the user stops typing for 500ms.
 
 **Tests (integration, E2E, round-trip)**
-- *Integration:* select text via test API, trigger composer, type body, submit, assert document body has new markers and comments array has the new entry with correct fields.
-- *Integration (ID assignment):* file with comments [1, 2, 5] gets a new comment with id=6, not 3.
-- *Integration (escape rules):* selecting text containing `-->` produces correctly escaped `anchor_text` on serialize.
-- *Integration (auto-save):* typing into a composer triggers a save 500ms after the last keystroke; ⌘S triggers immediately.
-- *Integration (empty-body validation):* opening a composer and pressing ⌘↵ before typing does nothing; Submit button is disabled. Typing a non-whitespace character enables Submit.
-- *Integration (code-block selection rejection):* selecting text inside a fenced code block or inline code span and triggering ⌘⌥M / right-click → New Comment is a no-op. The composer does not appear and the keyboard shortcut produces no audible feedback. Mirrors the parser-level rejection from Phase 3.
-- *E2E:* full flow in Playwright — open fixture, select word, ⌘⌥M, type, ⌘↵, save, reopen, assert comment persists.
-- *Round-trip:* every test that adds a comment ends with a parse → serialize → parse cycle that asserts identity.
+
+- _Integration:_ select text via test API, trigger composer, type body, submit, assert document body has new markers and comments array has the new entry with correct fields.
+- _Integration (ID assignment):_ file with comments [1, 2, 5] gets a new comment with id=6, not 3.
+- _Integration (escape rules):_ selecting text containing `-->` produces correctly escaped `anchor_text` on serialize.
+- _Integration (auto-save):_ typing into a composer triggers a save 500ms after the last keystroke; ⌘S triggers immediately.
+- _Integration (empty-body validation):_ opening a composer and pressing ⌘↵ before typing does nothing; Submit button is disabled. Typing a non-whitespace character enables Submit.
+- _Integration (code-block selection rejection):_ selecting text inside a fenced code block or inline code span and triggering ⌘⌥M / right-click → New Comment is a no-op. The composer does not appear and the keyboard shortcut produces no audible feedback. Mirrors the parser-level rejection from Phase 3.
+- _E2E:_ full flow in Playwright — open fixture, select word, ⌘⌥M, type, ⌘↵, save, reopen, assert comment persists.
+- _Round-trip:_ every test that adds a comment ends with a parse → serialize → parse cycle that asserts identity.
 
 **Tests (AI-agent)**
-- *AI-WRITE-comment-01:* Give the agent (with skill) `01-simple.md` and ask to add a comment on a specific paragraph. Verify resulting file has one new comment with id = max+1, correct markers, ISO 8601 timestamp.
-- *AI-WRITE-comment-02:* Same fixture, ask the agent to add three comments at once. Verify IDs are sequential without collision and the file round-trips.
-- *AI-WRITE-comment-03:* Ask the agent to add a comment whose body contains the literal string `-->`. Verify the escape was applied and the file remains parseable.
+
+- _AI-WRITE-comment-01:_ Give the agent (with skill) `01-simple.md` and ask to add a comment on a specific paragraph. Verify resulting file has one new comment with id = max+1, correct markers, ISO 8601 timestamp.
+- _AI-WRITE-comment-02:_ Same fixture, ask the agent to add three comments at once. Verify IDs are sequential without collision and the file round-trips.
+- _AI-WRITE-comment-03:_ Ask the agent to add a comment whose body contains the literal string `-->`. Verify the escape was applied and the file remains parseable.
 
 **Acceptance**
+
 - Adding a comment to a fixture file produces a file that round-trips cleanly.
 - All three AI-WRITE-comment tests green.
 
@@ -466,6 +490,7 @@ These two AI tests verify the format is **legible to AI agents without skill aid
 **Goal:** complete the comment-card interaction surface.
 
 **Deliverables**
+
 - `unread` / `read` / `has-unread-replies` state tracking (UI-only, not serialized).
 - Reply composer (nested under focused card; same submit semantics).
 - Edit composer (own comments only — match by `author` name).
@@ -476,23 +501,26 @@ These two AI tests verify the format is **legible to AI agents without skill aid
 - Keyboard: ⌘R reply, ⌘⏎ resolve when card focused, ⌘⇧E edit own, Delete key on focused card.
 
 **Tests (integration, E2E, performance)**
-- *Integration:* state transitions for each interaction; assert YAML schema after each.
-- *Integration (permissions):* edit affordance hidden when `comment.author !== preferences.authorName`. Delete affordance always visible.
-- *Integration (cascade delete):* deleting a comment that has replies removes the parent YAML object AND its inline marker pair AND every reply atomically. The file remains valid; round-trip succeeds.
-- *Integration (filter):* author "Claude" appears as filter option only when there are comments by Claude.
-- *Integration (sort):* setting sort to Newest reorders top-level cards by `timestamp` desc; replies inside each thread stay chronological.
-- *Performance (sidebar virtualization):* render a fixture with 200 comments; assert only ~30 cards mount at any time (virtualization kicks in above 50 per design).
-- *Performance (typing latency):* with 200 comments loaded, typing in a composer keeps p99 keystroke latency < 16 ms.
-- *E2E:* reply, edit, resolve, unresolve, delete — assert each persists across save+reopen.
-- *Round-trip:* after each interaction.
+
+- _Integration:_ state transitions for each interaction; assert YAML schema after each.
+- _Integration (permissions):_ edit affordance hidden when `comment.author !== preferences.authorName`. Delete affordance always visible.
+- _Integration (cascade delete):_ deleting a comment that has replies removes the parent YAML object AND its inline marker pair AND every reply atomically. The file remains valid; round-trip succeeds.
+- _Integration (filter):_ author "Claude" appears as filter option only when there are comments by Claude.
+- _Integration (sort):_ setting sort to Newest reorders top-level cards by `timestamp` desc; replies inside each thread stay chronological.
+- _Performance (sidebar virtualization):_ render a fixture with 200 comments; assert only ~30 cards mount at any time (virtualization kicks in above 50 per design).
+- _Performance (typing latency):_ with 200 comments loaded, typing in a composer keeps p99 keystroke latency < 16 ms.
+- _E2E:_ reply, edit, resolve, unresolve, delete — assert each persists across save+reopen.
+- _Round-trip:_ after each interaction.
 
 **Tests (AI-agent)**
-- *AI-WRITE-reply-01:* Ask the agent to reply to a specific comment. Verify the reply lands in the right thread, has correct attribution, sits in chronological position.
-- *AI-WRITE-statechange-01:* Ask the agent to resolve all comments by a given author. Verify only those comments have `resolved: true`; others untouched.
-- *AI-WRITE-statechange-02:* Ask the agent to delete a specific comment by its content (e.g. "delete the comment about citations"). Verify the YAML object and inline markers both gone.
-- *AI-WRITE-statechange-03:* Ask the agent to edit its own previous comment. Verify `edited_at` is set; original `timestamp` unchanged.
+
+- _AI-WRITE-reply-01:_ Ask the agent to reply to a specific comment. Verify the reply lands in the right thread, has correct attribution, sits in chronological position.
+- _AI-WRITE-statechange-01:_ Ask the agent to resolve all comments by a given author. Verify only those comments have `resolved: true`; others untouched.
+- _AI-WRITE-statechange-02:_ Ask the agent to delete a specific comment by its content (e.g. "delete the comment about citations"). Verify the YAML object and inline markers both gone.
+- _AI-WRITE-statechange-03:_ Ask the agent to edit its own previous comment. Verify `edited_at` is set; original `timestamp` unchanged.
 
 **Acceptance**
+
 - All card-state matrix entries from `design_handoff_v1_1/README.md` §3 are reachable and look correct.
 - Edit is gated to author; delete is not.
 - Sidebar virtualization kicks in above 50 cards with no perceptible latency.
@@ -504,6 +532,7 @@ These two AI tests verify the format is **legible to AI agents without skill aid
 **Goal:** suggest-edit composer + accept/reject lifecycle (both terminal per the proposal's Storage Format / Suggested-edit acceptance section).
 
 **Deliverables**
+
 - "Suggest edit" toggle in the composer swaps the textarea for stacked Original (read-only) + Replacement (editable) fields.
 - Suggested-edit cards render strikethrough/insertion preview.
 - **Accept:** replace `from` with `to` in the body, remove the inline marker pair, remove the YAML object. Card fades out.
@@ -513,21 +542,24 @@ These two AI tests verify the format is **legible to AI agents without skill aid
 - **`from` mismatch handling.** When a user clicks Accept on a suggestion whose `from` text no longer matches the currently anchored text (drift between creation and accept), the suggestion is **routed to the lost-anchor flow** (Phase 9) — the comment is flagged orphaned, the user is prompted to reattach. This reuses the orphan-recovery path rather than introducing a separate mismatch surface.
 
 **Tests (integration, E2E, round-trip)**
-- *Integration:* accept replaces text and strips the comment; assert body and comments after.
-- *Integration:* reject leaves text alone and strips the comment; assert body unchanged but comment removed.
-- *Integration:* suggestion with no body parses and serializes correctly.
-- *Integration (no Reply on suggestion):* a suggested-edit card does not surface the Reply button; ⌘R when a suggestion is focused is a no-op.
-- *Integration (reply field round-trips on suggestions):* a suggestion fixture that already has `replies: [...]` parses and serializes cleanly without dropping the field, even though the UI doesn't expose it.
-- *Integration (`from` mismatch routes to lost-anchor):* a fixture where the suggestion's anchored text has been edited (so `from` no longer matches the anchored span) — clicking Accept routes the comment to the lost-anchor section instead of accepting; user is prompted to reattach.
-- *E2E:* full suggest → accept; full suggest → reject.
-- *Round-trip:* before and after each action.
+
+- _Integration:_ accept replaces text and strips the comment; assert body and comments after.
+- _Integration:_ reject leaves text alone and strips the comment; assert body unchanged but comment removed.
+- _Integration:_ suggestion with no body parses and serializes correctly.
+- _Integration (no Reply on suggestion):_ a suggested-edit card does not surface the Reply button; ⌘R when a suggestion is focused is a no-op.
+- _Integration (reply field round-trips on suggestions):_ a suggestion fixture that already has `replies: [...]` parses and serializes cleanly without dropping the field, even though the UI doesn't expose it.
+- _Integration (`from` mismatch routes to lost-anchor):_ a fixture where the suggestion's anchored text has been edited (so `from` no longer matches the anchored span) — clicking Accept routes the comment to the lost-anchor section instead of accepting; user is prompted to reattach.
+- _E2E:_ full suggest → accept; full suggest → reject.
+- _Round-trip:_ before and after each action.
 
 **Tests (AI-agent)**
-- *AI-WRITE-suggestion-01:* Ask the agent to suggest a wording change on a specific passage. Verify `suggested_edit.from` matches the anchored text and `to` is non-empty.
-- *AI-WRITE-suggestion-02:* Ask the agent to accept the suggested edit in a fixture. Verify body has been updated, marker pair gone, YAML object gone.
-- *AI-WRITE-suggestion-03:* Ask the agent to reject. Verify body unchanged, marker pair gone, YAML object gone (terminal).
+
+- _AI-WRITE-suggestion-01:_ Ask the agent to suggest a wording change on a specific passage. Verify `suggested_edit.from` matches the anchored text and `to` is non-empty.
+- _AI-WRITE-suggestion-02:_ Ask the agent to accept the suggested edit in a fixture. Verify body has been updated, marker pair gone, YAML object gone.
+- _AI-WRITE-suggestion-03:_ Ask the agent to reject. Verify body unchanged, marker pair gone, YAML object gone (terminal).
 
 **Acceptance**
+
 - Both Accept and Reject are terminal — the comment is gone from the file.
 - A suggestion with no body is valid.
 
@@ -538,7 +570,8 @@ These two AI tests verify the format is **legible to AI agents without skill aid
 **Goal:** raw markdown source rendering with dimmed markers and the "read-only review" chip.
 
 **Deliverables**
-- CodeMirror 6 instance for source view, with markdown syntax highlighting (the *outer* markdown layer only — embedded fenced code blocks (e.g., a ```python block) render as plain mono text. Per-language highlighting inside fenced code is **out of scope for v1**; revisit if reviewers ask for it).
+
+- CodeMirror 6 instance for source view, with markdown syntax highlighting (the _outer_ markdown layer only — embedded fenced code blocks (e.g., a ```python block) render as plain mono text. Per-language highlighting inside fenced code is **out of scope for v1**; revisit if reviewers ask for it).
 - Dim `<!-- fmc:N -->` and `<!-- /fmc:N -->` markers.
 - Subtle background tint on the trailing `<!-- forgemark-comments` block.
 - Sidebar interactions still work in source view: click card → scroll source to matching marker.
@@ -546,12 +579,14 @@ These two AI tests verify the format is **legible to AI agents without skill aid
 - Per-document mode (memory only); default `Rendered` per Settings.
 
 **Tests (integration, E2E)**
-- *Integration:* toggle source view, assert raw text renders with dimmed markers.
-- *Integration:* attempting to add a comment from source view is a no-op (keyboard shortcut and menu item disabled).
-- *Integration:* clicking a card scrolls source to the corresponding marker.
-- *E2E:* toggle persists per-document but resets on file open.
+
+- _Integration:_ toggle source view, assert raw text renders with dimmed markers.
+- _Integration:_ attempting to add a comment from source view is a no-op (keyboard shortcut and menu item disabled).
+- _Integration:_ clicking a card scrolls source to the corresponding marker.
+- _E2E:_ toggle persists per-document but resets on file open.
 
 **Acceptance**
+
 - Source view is fully readable, markers are visible-but-quiet, no accidental comment-adds.
 
 ---
@@ -561,6 +596,7 @@ These two AI tests verify the format is **legible to AI agents without skill aid
 **Goal:** when the file's been edited externally (or by an AI agent), recover anchors that have drifted; offer floating-note as a third path. Build the file-watcher infrastructure here; Phase 10 reuses it.
 
 **Deliverables**
+
 - Tauri `tauri-plugin-fs-watch` integrated. Shared **conflict-detection pipeline**: content-hash with mtime fast-path. Mtime unchanged → skip. Mtime changed → hash both versions; only fire if hashes disagree.
 - Reattachment strategy (per the proposal's Comment Storage and Diffing section):
   1. Both `<!-- fmc:N -->` markers present → use them.
@@ -575,23 +611,26 @@ These two AI tests verify the format is **legible to AI agents without skill aid
   3. **Discard comment** — remove YAML object entirely.
 - Floating-note card variant + `FLOATING NOTES · N` sidebar section.
 - **Floating-note action row includes Edit when own comment** (per v1.1 feedback §4).
-- **Banner / chip stacking:** if both the lost-anchor banner (this phase) and the source-view "read-only review" chip (Phase 8) would be visible, the banner sits above the prose at the top of the editor pane and the chip sits *below* the banner in the same top region. The banner is wider (720px max) and the chip is compact, so they don't overlap horizontally; vertical stacking is sufficient.
+- **Banner / chip stacking:** if both the lost-anchor banner (this phase) and the source-view "read-only review" chip (Phase 8) would be visible, the banner sits above the prose at the top of the editor pane and the chip sits _below_ the banner in the same top region. The banner is wider (720px max) and the chip is compact, so they don't overlap horizontally; vertical stacking is sufficient.
 
 **Tests (unit, integration, round-trip, performance)**
-- *Unit (reattachment):* test each step of the strategy independently. Edge cases: `anchor_text` matches but no markers; markers present but `anchor_text` mismatched (drift); no candidates at all (orphan); multiple candidates above threshold (modal lists all).
-- *Unit (conflict detection):* mtime unchanged → skip. Mtime + hash both differ → fire. Mtime changed but hash unchanged → skip.
-- *Integration (orphan flow):* simulate external edit that breaks anchors, assert orphan section appears, click Recover, choose Keep as floating note, assert YAML has `floating: true` and no markers in body.
-- *Integration (reattach):* simulate drift, choose Reattach here on best candidate, assert markers re-inserted around new passage and `anchor_text` updated.
-- *Integration (discard):* choose Discard, assert YAML object gone, file dirty.
-- *Performance (fuzzy-match at scale):* a 50,000-word body with 50 orphaned anchors completes the full reattachment pass (markers absent, `anchor_text` exact match attempted, fuzzy fallback) in < 2 seconds on a base M1. Naive token-level Levenshtein won't meet this; the implementation likely needs a candidate-narrowing prepass (e.g. n-gram filter) before the edit-distance step.
-- *Round-trip:* before and after each path.
+
+- _Unit (reattachment):_ test each step of the strategy independently. Edge cases: `anchor_text` matches but no markers; markers present but `anchor_text` mismatched (drift); no candidates at all (orphan); multiple candidates above threshold (modal lists all).
+- _Unit (conflict detection):_ mtime unchanged → skip. Mtime + hash both differ → fire. Mtime changed but hash unchanged → skip.
+- _Integration (orphan flow):_ simulate external edit that breaks anchors, assert orphan section appears, click Recover, choose Keep as floating note, assert YAML has `floating: true` and no markers in body.
+- _Integration (reattach):_ simulate drift, choose Reattach here on best candidate, assert markers re-inserted around new passage and `anchor_text` updated.
+- _Integration (discard):_ choose Discard, assert YAML object gone, file dirty.
+- _Performance (fuzzy-match at scale):_ a 50,000-word body with 50 orphaned anchors completes the full reattachment pass (markers absent, `anchor_text` exact match attempted, fuzzy fallback) in < 2 seconds on a base M1. Naive token-level Levenshtein won't meet this; the implementation likely needs a candidate-narrowing prepass (e.g. n-gram filter) before the edit-distance step.
+- _Round-trip:_ before and after each path.
 
 **Tests (AI-agent)**
-- *AI-RECOVERY-01:* Spawn a sub-agent and ask it to "extensively rewrite the second paragraph" of a fixture file. Reload the result in the app's parser and verify the affected comment is flagged as orphaned (the strategy correctly detects drift).
-- *AI-RECOVERY-02:* Ask the agent to convert an orphaned comment to a floating note (set `floating: true`, remove `anchor_text` and inline markers). Verify the resulting file is valid and the comment is correctly classified.
-- *AI-RECOVERY-03:* Ask the agent to delete a paragraph entirely that has comments anchored to it. Verify the resulting file leaves the comment block intact (the AI didn't aggressively prune); reload in the app and verify the lost-anchor flow surfaces correctly.
+
+- _AI-RECOVERY-01:_ Spawn a sub-agent and ask it to "extensively rewrite the second paragraph" of a fixture file. Reload the result in the app's parser and verify the affected comment is flagged as orphaned (the strategy correctly detects drift).
+- _AI-RECOVERY-02:_ Ask the agent to convert an orphaned comment to a floating note (set `floating: true`, remove `anchor_text` and inline markers). Verify the resulting file is valid and the comment is correctly classified.
+- _AI-RECOVERY-03:_ Ask the agent to delete a paragraph entirely that has comments anchored to it. Verify the resulting file leaves the comment block intact (the AI didn't aggressively prune); reload in the app and verify the lost-anchor flow surfaces correctly.
 
 **Acceptance**
+
 - Editing the file externally with an editor that breaks anchors triggers the banner and orphan section.
 - All three Reattach modal paths work and produce valid files.
 - Floating notes round-trip through save/reopen.
@@ -604,24 +643,28 @@ These two AI tests verify the format is **legible to AI agents without skill aid
 **Goal:** handle concurrent external edits (file watcher fires) and save races (⌘S after external edit). **Reuses the file-watcher and conflict-detection pipeline from Phase 9.**
 
 **Deliverables**
+
 - **File-conflict banner** (per design v1.1 §11a) — clean reload, no unsaved work. Two buttons: Keep your version, Reload from disk. **No `×` dismiss** (per v1.1 feedback §5).
 - **Edit-during-open modal** (§11b) — when the user has unsaved work. Summary line ("1 open composer, 2 edited cards, 1 unsent reply"). **No "Show details" disclosure** (per v1.1 feedback §3). Buttons: Reload from disk, Keep your version, Cancel.
 - **Save-conflict modal** (§11c) — on ⌘S when the file has changed on disk. Comparison strip with **two diff signals only**: comments added/removed and body bytes changed. "Unknown changes" fallback when neither is computable. **Cancel** + **Overwrite disk version** (per v1.1 feedback §1, §2). No diff drawer.
-- All three surfaces use the same Phase 9 detection pipeline; they differ only in *which* surface appears based on `(hasUnsavedWork, userInitiatedSave)`.
+- All three surfaces use the same Phase 9 detection pipeline; they differ only in _which_ surface appears based on `(hasUnsavedWork, userInitiatedSave)`.
 
 **Tests (unit, integration, E2E)**
-- *Integration (banner):* simulate external write while no unsaved work; banner appears with two buttons.
-- *Integration (modal):* simulate external write while composer is open; edit-during-open modal appears; verify summary line counts unsaved items correctly.
-- *Integration (save-conflict):* simulate external write, then attempt ⌘S; modal appears with two-signal diff; Cancel returns to editor with banner; Overwrite writes our version.
-- *Integration (save-conflict Cancel state):* after clicking Cancel on the save-conflict modal, the file remains dirty, the file-conflict banner is visible, the user can keep editing. A subsequent ⌘S re-opens the modal (the user's choice was "not now," not "permanently overwrite").
-- *Integration (Reload from disk fully replaces state):* with comments resolved locally and a different set of comments unresolved on disk, choosing Reload from disk produces a state that exactly matches the on-disk file (comments, resolved flags, sidebar order, sidebar filter unchanged). Round-trip the reloaded state to confirm no leftover memory.
-- *Integration (false-positive avoidance):* a touch-save (mtime change, content unchanged) does NOT trigger any surface.
-- *E2E:* full round-trip through each surface.
+
+- _Integration (banner):_ simulate external write while no unsaved work; banner appears with two buttons.
+- _Integration (modal):_ simulate external write while composer is open; edit-during-open modal appears; verify summary line counts unsaved items correctly.
+- _Integration (save-conflict):_ simulate external write, then attempt ⌘S; modal appears with two-signal diff; Cancel returns to editor with banner; Overwrite writes our version.
+- _Integration (save-conflict Cancel state):_ after clicking Cancel on the save-conflict modal, the file remains dirty, the file-conflict banner is visible, the user can keep editing. A subsequent ⌘S re-opens the modal (the user's choice was "not now," not "permanently overwrite").
+- _Integration (Reload from disk fully replaces state):_ with comments resolved locally and a different set of comments unresolved on disk, choosing Reload from disk produces a state that exactly matches the on-disk file (comments, resolved flags, sidebar order, sidebar filter unchanged). Round-trip the reloaded state to confirm no leftover memory.
+- _Integration (false-positive avoidance):_ a touch-save (mtime change, content unchanged) does NOT trigger any surface.
+- _E2E:_ full round-trip through each surface.
 
 **Tests (AI-agent)**
-- *AI-CONFLICT-01:* Open a fixture in the app, then have a sub-agent modify the on-disk version externally (add comments, edit prose). Verify the file-conflict banner appears and choosing Reload picks up the agent's changes correctly.
+
+- _AI-CONFLICT-01:_ Open a fixture in the app, then have a sub-agent modify the on-disk version externally (add comments, edit prose). Verify the file-conflict banner appears and choosing Reload picks up the agent's changes correctly.
 
 **Acceptance**
+
 - All three conflict surfaces fire under the right conditions and not otherwise.
 - Spurious mtime changes don't surface a banner.
 
@@ -632,6 +675,7 @@ These two AI tests verify the format is **legible to AI agents without skill aid
 **Goal:** complete the surface — native menus, save-on-close, Settings, first-run, Clean Export. **Production sample file written and shipped.**
 
 **Deliverables**
+
 - Native macOS menu bar via Tauri. Every command from `design_handoff_v1_1/README.md §8`.
 - Save-on-close prompt (Tauri dialog) when modified.
 - Settings window: Author name, Theme, Font size, Default view. The AI Participation section ships in Phase 12; in Phase 11 it is laid out as an empty section header ("AI Participation") with a single muted placeholder line ("Skill download arrives with a future build.") so the navigation chrome is correct and Phase 12 only needs to drop in the two download buttons.
@@ -641,18 +685,21 @@ These two AI tests verify the format is **legible to AI agents without skill aid
 - Open Recent (10 entries) persisted via Tauri store.
 
 **Tests (integration, E2E)**
-- *Integration:* every menu item routes to the correct action.
-- *Integration:* settings persist across app restart.
-- *Integration:* Clean Export emits a file with no inline markers and no trailing comment block.
-- *Integration (sample file):* the production sample file parses cleanly, round-trips, and renders all comment states correctly (read, has-unread-replies, suggestion).
-- *Integration (Open Recent stale entries):* an Open Recent entry whose file has been moved or deleted shows in the menu (we don't validate at menu-build time); clicking it shows a polite error toast ("File no longer exists at <path>. Remove from recent files?") with a Remove button that drops it from the list.
-- *Integration (Author Name change behavior):* changing Author Name in Settings affects new comments only — existing comments retain their original `author` field. Specifically: open a fixture with an existing comment by "Maya"; change Author Name to "Jordan"; the existing comment still shows "Maya" in the sidebar and YAML; a newly added comment shows "Jordan".
-- *E2E:* full first-run → set name → see sample file → add a comment → save → quit → reopen, name persists.
+
+- _Integration:_ every menu item routes to the correct action.
+- _Integration:_ settings persist across app restart.
+- _Integration:_ Clean Export emits a file with no inline markers and no trailing comment block.
+- _Integration (sample file):_ the production sample file parses cleanly, round-trips, and renders all comment states correctly (read, has-unread-replies, suggestion).
+- _Integration (Open Recent stale entries):_ an Open Recent entry whose file has been moved or deleted shows in the menu (we don't validate at menu-build time); clicking it shows a polite error toast ("File no longer exists at <path>. Remove from recent files?") with a Remove button that drops it from the list.
+- _Integration (Author Name change behavior):_ changing Author Name in Settings affects new comments only — existing comments retain their original `author` field. Specifically: open a fixture with an existing comment by "Maya"; change Author Name to "Jordan"; the existing comment still shows "Maya" in the sidebar and YAML; a newly added comment shows "Jordan".
+- _E2E:_ full first-run → set name → see sample file → add a comment → save → quit → reopen, name persists.
 
 **Tests (AI-agent)**
-- *AI-SAMPLE-01:* Run the production sample file through every read/write AI test category. Verify it works as a representative example for the skill package.
+
+- _AI-SAMPLE-01:_ Run the production sample file through every read/write AI test category. Verify it works as a representative example for the skill package.
 
 **Acceptance**
+
 - Every command in the menu bar is reachable via mouse and keyboard.
 - Settings round-trip across app restart.
 - Clean Export produces a comment-free copy.
@@ -665,6 +712,7 @@ These two AI tests verify the format is **legible to AI agents without skill aid
 **Goal:** ship the bundled skill package; round out AI tests; gate v1 release.
 
 **Deliverables**
+
 - **Skill package source** at `assets/forgemark-skill/`:
   - `SKILL.md` (uppercase, root) — single-file format spec extracted from the proposal's Storage Format and Format Spec for AI Authors sections, with YAML frontmatter (`name: forgemark`, `description: …`). Target < 4000 tokens. Section names rather than line numbers because the proposal evolves.
   - `examples/` — three sample annotated `.md` files of varying complexity (drawn from `tests/ai/fixtures/`).
@@ -683,21 +731,24 @@ These two AI tests verify the format is **legible to AI agents without skill aid
 - **`npm run verify-ai-output` script:** local-only structural-assertion runner that ingests a captured AI output (or a path to a file the AI wrote) and runs the same assertions the harness uses. No network calls.
 
 **Tests (skill package + end-to-end AI)**
-- *Lint:* `assets/forgemark-skill/` passes a size budget check (fails CI if total > 60 KB).
-- *Build:* `forgemark-skill.skill` and `forgemark-skill.zip` are produced from a single zip operation and are byte-identical (CI asserts `sha256(.skill) === sha256(.zip)`).
-- *Integration (Claude download):* clicking **Download for Claude** writes a valid `.skill` file (a zip with `.skill` extension) to the chosen path.
-- *Integration (Codex download):* clicking **Download for Codex** writes a valid `.zip` file to the chosen path.
-- *Integration (extraction):* extracting either artifact (Claude's via Claude's tooling, Codex's via standard `unzip`) yields a directory with `SKILL.md` at root, `examples/`, `AGENTS.md`, `README.md`.
-- *AI-end-to-end:* load the bundled SKILL.md as system prompt for an AI test; verify all category tests pass against the production sample file.
-- *Manual end-to-end (Claude):* download the `.skill`, install via Claude Code's skill mechanism, open the production sample file, ask Claude to perform every prompt from the test categories. Eyeball.
-- *Manual end-to-end (Codex):* download the `.zip`, extract per Codex's skill installation procedure (`.agents/skills/forgemark/` for repo-local, `~/.agents/skills/forgemark/` for user-global), open the production sample file in a Codex workspace, ask Codex to perform every prompt. Eyeball.
+
+- _Lint:_ `assets/forgemark-skill/` passes a size budget check (fails CI if total > 60 KB).
+- _Build:_ `forgemark-skill.skill` and `forgemark-skill.zip` are produced from a single zip operation and are byte-identical (CI asserts `sha256(.skill) === sha256(.zip)`).
+- _Integration (Claude download):_ clicking **Download for Claude** writes a valid `.skill` file (a zip with `.skill` extension) to the chosen path.
+- _Integration (Codex download):_ clicking **Download for Codex** writes a valid `.zip` file to the chosen path.
+- _Integration (extraction):_ extracting either artifact (Claude's via Claude's tooling, Codex's via standard `unzip`) yields a directory with `SKILL.md` at root, `examples/`, `AGENTS.md`, `README.md`.
+- _AI-end-to-end:_ load the bundled SKILL.md as system prompt for an AI test; verify all category tests pass against the production sample file.
+- _Manual end-to-end (Claude):_ download the `.skill`, install via Claude Code's skill mechanism, open the production sample file, ask Claude to perform every prompt from the test categories. Eyeball.
+- _Manual end-to-end (Codex):_ download the `.zip`, extract per Codex's skill installation procedure (`.agents/skills/forgemark/` for repo-local, `~/.agents/skills/forgemark/` for user-global), open the production sample file in a Codex workspace, ask Codex to perform every prompt. Eyeball.
 
 **Tests (AI-agent — gap-filling)**
-- *AI-ESCAPES-01:* Body containing `-->` literal — agent adds a comment that mentions the literal sequence. Verify escape was applied.
-- *AI-ESCAPES-02:* Body containing `<!--` literal — same.
-- *AI-FORMAT-FIDELITY-01:* Give an agent a complex fixture (mixed states), ask it to "do nothing — just return the file unchanged." Verify byte-equivalent output. (Tests that an agent can recognize a passthrough request and not re-render.)
+
+- _AI-ESCAPES-01:_ Body containing `-->` literal — agent adds a comment that mentions the literal sequence. Verify escape was applied.
+- _AI-ESCAPES-02:_ Body containing `<!--` literal — same.
+- _AI-FORMAT-FIDELITY-01:_ Give an agent a complex fixture (mixed states), ask it to "do nothing — just return the file unchanged." Verify byte-equivalent output. (Tests that an agent can recognize a passthrough request and not re-render.)
 
 **Acceptance**
+
 - Every AI test category has full coverage in the local catalogue + harness.
 - The bundled skill works end-to-end with both Claude and Codex (verified manually).
 - Skill package is < 60 KB.
@@ -709,6 +760,7 @@ These two AI tests verify the format is **legible to AI agents without skill aid
 **Goal:** ship-ready artifacts.
 
 **Deliverables**
+
 - Application icon (`.icns` for macOS, `.ico` for Windows) generated from the bracketed-pilcrow glyph at icon-stack sizes.
 - Code signing (macOS Developer ID), notarization, hardened-runtime entitlements.
 - Auto-update infrastructure (deferred to v1.1 if scope-tight).
@@ -716,14 +768,16 @@ These two AI tests verify the format is **legible to AI agents without skill aid
 - Cross-platform validation pass on Windows.
 
 **Tests (E2E + manual + performance)**
-- *E2E:* signed build launches without Gatekeeper prompts on a fresh macOS user account.
-- *Smoke:* a notarized build runs on a fresh macOS without development tools installed.
-- *Performance smoke (end-to-end):* open a 30,000-word annotated file with 50 existing comments. Add 5 new comments via the composer. Save. Reopen. Total elapsed under 10 seconds on a base M1 / equivalent Windows machine; UI feels responsive (no perceptible jank, no save-spinner blocking interaction).
-- *Public README check:* the public-facing README has install instructions, a screenshot, the license, a link to the proposal, and a link to the skill download.
-- *Manual:* full-app run-through against the storyboard's six flows.
-- *Cross-platform:* full-app run-through on Windows; visual snapshots compared against macOS baseline (acceptable diffs documented).
+
+- _E2E:_ signed build launches without Gatekeeper prompts on a fresh macOS user account.
+- _Smoke:_ a notarized build runs on a fresh macOS without development tools installed.
+- _Performance smoke (end-to-end):_ open a 30,000-word annotated file with 50 existing comments. Add 5 new comments via the composer. Save. Reopen. Total elapsed under 10 seconds on a base M1 / equivalent Windows machine; UI feels responsive (no perceptible jank, no save-spinner blocking interaction).
+- _Public README check:_ the public-facing README has install instructions, a screenshot, the license, a link to the proposal, and a link to the skill download.
+- _Manual:_ full-app run-through against the storyboard's six flows.
+- _Cross-platform:_ full-app run-through on Windows; visual snapshots compared against macOS baseline (acceptable diffs documented).
 
 **Acceptance**
+
 - A signed, notarized `.dmg` opens, runs, and survives the smoke test.
 - All six storyboard flows execute as the design intends on both platforms.
 
@@ -731,16 +785,16 @@ These two AI tests verify the format is **legible to AI agents without skill aid
 
 ## 4. Risk register
 
-| Risk | Likelihood | Mitigation |
-|---|---|---|
-| Anchor drift cases the strategy misses | Medium | Extensive fuzzy-match unit tests; floating-note as graceful fallback |
-| HTML-comment stripping in unanticipated platforms | Low | Document as a known fragility; "clean export" is the user-driven version |
-| ProseMirror ↔ markdown round-trip introduces drift | Medium | Round-trip parity test gates Phase 4; serializer treats body as a byte sequence between markers, never re-prettifies |
-| Tauri webview quirks on Windows | Medium | Platform matrix in CI from Phase 0; Windows-specific visual snapshots from Phase 1 |
-| Performance on large files / many comments | Low | Sidebar virtualization above 50 cards; stress test in Phase 6 |
-| AI-agent test variance | Medium | Structural assertions only; one transport retry; no logic retry; investigate failures rather than re-running |
-| Skill package size grows beyond 60 KB | Low | CI lint check fails the build if `assets/forgemark-skill/` exceeds budget |
-| `floating` field forgotten in proposal updates | Low | Pre-flight item in Phase 0; CI doc-link check verifies skill content references match proposal |
+| Risk                                               | Likelihood | Mitigation                                                                                                           |
+| -------------------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------- |
+| Anchor drift cases the strategy misses             | Medium     | Extensive fuzzy-match unit tests; floating-note as graceful fallback                                                 |
+| HTML-comment stripping in unanticipated platforms  | Low        | Document as a known fragility; "clean export" is the user-driven version                                             |
+| ProseMirror ↔ markdown round-trip introduces drift | Medium     | Round-trip parity test gates Phase 4; serializer treats body as a byte sequence between markers, never re-prettifies |
+| Tauri webview quirks on Windows                    | Medium     | Platform matrix in CI from Phase 0; Windows-specific visual snapshots from Phase 1                                   |
+| Performance on large files / many comments         | Low        | Sidebar virtualization above 50 cards; stress test in Phase 6                                                        |
+| AI-agent test variance                             | Medium     | Structural assertions only; one transport retry; no logic retry; investigate failures rather than re-running         |
+| Skill package size grows beyond 60 KB              | Low        | CI lint check fails the build if `assets/forgemark-skill/` exceeds budget                                            |
+| `floating` field forgotten in proposal updates     | Low        | Pre-flight item in Phase 0; CI doc-link check verifies skill content references match proposal                       |
 
 ---
 
