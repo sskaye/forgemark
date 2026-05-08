@@ -1,5 +1,5 @@
 // Public API of the Forgemark format layer.
-export { parseForgemarkFile, ForgemarkParseError } from "./parser";
+export { parseForgemarkFile, ForgemarkParseError, type ParseOptions } from "./parser";
 export { serializeForgemarkFile } from "./serializer";
 export { findMarkers, pairMarkers, anchorTextFor, type Marker, type MarkerPair } from "./markers";
 export {
@@ -25,3 +25,11 @@ export {
   stripAnchoredMarkers,
   contextSnippet,
 } from "./compose";
+export {
+  getAnchorStatus,
+  classifyAnchors,
+  findCandidates,
+  levenshtein,
+  type AnchorStatus,
+  type ReattachCandidate,
+} from "./reattach";

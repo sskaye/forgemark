@@ -33,6 +33,9 @@ export type DocumentState = {
   focusedCommentId: number | null;
   hoveredCommentId: number | null;
   composer: ComposerState | null;
+  // Phase 9: which orphaned comment, if any, is being reattached. The
+  // modal renders against the comment with this id. Reset on file open.
+  reattachTarget: number | null;
   // Sidebar UI controls (Phase 6). Persist within a session; reset on
   // file open.
   filter: FilterMode;
@@ -107,6 +110,7 @@ export const INITIAL_STATE: DocumentState = {
   focusedCommentId: null,
   hoveredCommentId: null,
   composer: null,
+  reattachTarget: null,
   filter: { kind: "all" },
   sort: "doc",
 };
@@ -146,6 +150,17 @@ export type DocumentAction =
   | { type: "deleteReply"; commentId: number; replyIndex: number }
   | { type: "acceptSuggestion"; commentId: number; body: string }
   | { type: "rejectSuggestion"; commentId: number; body: string }
+  | {
+      type: "reattachComment";
+      commentId: number;
+      body: string;
+      anchor_text: string;
+      context_before: string;
+      context_after: string;
+    }
+  | { type: "convertToFloating"; commentId: number; body: string }
+  | { type: "openReattach"; commentId: number }
+  | { type: "closeReattach" }
   | { type: "setFilter"; filter: FilterMode }
   | { type: "setSort"; sort: SortMode };
 
@@ -166,6 +181,7 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
         focusedCommentId: null,
         hoveredCommentId: null,
         composer: null,
+        reattachTarget: null,
         // Filter / sort persist across loads — they're a viewing
         // preference, not a document property.
       };
@@ -268,6 +284,7 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
         focusedCommentId:
           state.focusedCommentId === action.commentId ? null : state.focusedCommentId,
         composer: null,
+        reattachTarget: state.reattachTarget === action.commentId ? null : state.reattachTarget,
       };
     case "deleteReply": {
       const comments = state.comments.map((c) => {
@@ -292,6 +309,57 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
           state.focusedCommentId === action.commentId ? null : state.focusedCommentId,
         composer: null,
       };
+    case "reattachComment": {
+      const comments = state.comments.map((c) =>
+        c.id === action.commentId
+          ? {
+              ...c,
+              floating: undefined,
+              anchor_text: action.anchor_text,
+              context_before: action.context_before,
+              context_after: action.context_after,
+            }
+          : c,
+      );
+      return {
+        ...state,
+        body: action.body,
+        comments,
+        dirty: true,
+        composer: null,
+        reattachTarget: null,
+        error: null,
+      };
+    }
+    case "convertToFloating": {
+      const comments = state.comments.map((c) => {
+        if (c.id !== action.commentId) return c;
+        // Drop anchor metadata along with floating: true. Per
+        // SKILL.md the anchor fields are *optionally* cleared; we
+        // clear them to keep round-tripped YAML free of stale state.
+        const next: typeof c = {
+          ...c,
+          floating: true,
+          anchor_text: undefined,
+          context_before: undefined,
+          context_after: undefined,
+        };
+        return next;
+      });
+      return {
+        ...state,
+        body: action.body,
+        comments,
+        dirty: true,
+        composer: null,
+        reattachTarget: null,
+        error: null,
+      };
+    }
+    case "openReattach":
+      return { ...state, reattachTarget: action.commentId };
+    case "closeReattach":
+      return { ...state, reattachTarget: null };
     case "setFilter":
       return { ...state, filter: action.filter };
     case "setSort":

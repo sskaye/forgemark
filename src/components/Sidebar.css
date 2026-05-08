@@ -92,6 +92,29 @@
   gap: 10px;
 }
 
+/* Phase 9 — section grouping. Each section gets a small uppercase
+   label + the list of cards beneath it. Sections are separated by a
+   small gap so the eye picks them up as distinct groups. */
+.fm-sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fm-sidebar-section + .fm-sidebar-section {
+  margin-top: 16px;
+}
+
+.fm-sidebar-section-label {
+  font-family: var(--fm-ui);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--fm-chrome-muted);
+  padding: 0 2px;
+}
+
 .fm-sidebar-item {
   margin: 0;
   padding: 0;

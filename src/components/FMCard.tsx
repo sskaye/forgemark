@@ -17,6 +17,11 @@ type Props = {
   editing: boolean;
   // editingReplyIndex !== null when a specific reply is being edited.
   editingReplyIndex: number | null;
+  // Phase 9: anchor state classifies the card variant.
+  //   - "attached"  → markers present in body (default)
+  //   - "orphaned"  → no markers; show a "lost anchor" pill + Reattach CTA
+  //   - "floating"  → comment has floating: true; show "floating" pill
+  anchorState?: "attached" | "orphaned" | "floating";
   onFocus: () => void;
   onHover: (entering: boolean) => void;
   onReply: () => void;
@@ -27,6 +32,8 @@ type Props = {
   // `comment.suggested_edit` is present.
   onAcceptSuggestion: () => void;
   onRejectSuggestion: () => void;
+  // Phase 9: open the Reattach modal for this orphan.
+  onReattach?: () => void;
   onReplyEdit: (index: number) => void;
   onReplyDelete: (index: number) => void;
   onComposerSubmit: (body: string) => void;
@@ -47,6 +54,7 @@ export function FMCard({
   replying,
   editing,
   editingReplyIndex,
+  anchorState = "attached",
   onFocus,
   onHover,
   onReply,
@@ -55,6 +63,7 @@ export function FMCard({
   onDelete,
   onAcceptSuggestion,
   onRejectSuggestion,
+  onReattach,
   onReplyEdit,
   onReplyDelete,
   onComposerSubmit,
@@ -62,6 +71,8 @@ export function FMCard({
 }: Props) {
   const isOwn = comment.author === authorName;
   const isSuggestion = Boolean(comment.suggested_edit);
+  const isOrphan = anchorState === "orphaned";
+  const isFloating = anchorState === "floating";
   const showCollapsed = comment.resolved && !focused && !replying && !editing;
 
   const onKey = (e: KeyboardEvent<HTMLElement>) => {
@@ -77,6 +88,8 @@ export function FMCard({
     hovered ? "is-hovered" : "",
     comment.resolved ? "is-resolved" : "",
     showCollapsed ? "is-collapsed" : "",
+    isOrphan ? "is-orphan" : "",
+    isFloating ? "is-floating" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -127,6 +140,25 @@ export function FMCard({
         timestamp={comment.timestamp}
         edited={Boolean(comment.edited_at)}
       />
+      {isOrphan && (
+        <div
+          className="fm-card-pill fm-card-pill-orphan"
+          data-testid={`fm-card-orphan-pill-${comment.id}`}
+        >
+          Lost anchor
+          {comment.anchor_text && (
+            <span className="fm-card-pill-anchor-text">“{truncate(comment.anchor_text, 60)}”</span>
+          )}
+        </div>
+      )}
+      {isFloating && (
+        <div
+          className="fm-card-pill fm-card-pill-floating"
+          data-testid={`fm-card-floating-pill-${comment.id}`}
+        >
+          Floating note
+        </div>
+      )}
       {editing ? (
         <InlineComposer
           initialBody={comment.body ?? ""}
@@ -174,7 +206,33 @@ export function FMCard({
       )}
       {focused && !editing && !replying && editingReplyIndex === null && (
         <div className="fm-card-actions" role="toolbar" aria-label="Comment actions">
-          {isSuggestion ? (
+          {isOrphan ? (
+            <>
+              <button
+                type="button"
+                className="fm-card-action fm-card-action-accept"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onReattach?.();
+                }}
+                data-testid={`fm-card-reattach-${comment.id}`}
+              >
+                Reattach…
+              </button>
+              <div className="fm-card-actions-spacer" />
+              <button
+                type="button"
+                className="fm-card-action fm-card-action-danger"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                data-testid={`fm-card-delete-${comment.id}`}
+              >
+                Delete
+              </button>
+            </>
+          ) : isSuggestion ? (
             <>
               <button
                 type="button"
@@ -384,6 +442,10 @@ function stripMarkdown(s: string): string {
     .replace(/_(.+?)_/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
     .trim();
+}
+
+function truncate(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max - 1) + "…" : s;
 }
 
 function plainPreview(comment: Comment, max: number): string {

@@ -46,7 +46,11 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
           if (!opened) return;
           let parsed;
           try {
-            parsed = parseForgemarkFile(opened.text);
+            // Phase 9: tolerant mode keeps comments that are missing
+            // their marker pair so the lost-anchor banner can surface
+            // them (instead of dropping all comments on a single
+            // missing-marker case).
+            parsed = parseForgemarkFile(opened.text, { tolerant: true });
           } catch (err) {
             // Helpful "couldn't parse the comment block" surfacing — the
             // caller still gets the body, just without comments. We treat

@@ -4,8 +4,13 @@ import { useAuthorName } from "../state/preferences";
 import { RenderedView, type RenderedViewHandle } from "./RenderedView";
 import { SourceView, type SourceViewHandle } from "./SourceView";
 import { NewCommentComposer } from "./NewCommentComposer";
-import { nextCommentId, serializeForgemarkFile } from "../format";
+import { LostAnchorBanner } from "./LostAnchorBanner";
+import { nextCommentId, serializeForgemarkFile, type AnchorStatus } from "../format";
 import "./EditorPane.css";
+
+type Props = {
+  anchorStatuses: Map<number, AnchorStatus>;
+};
 
 // Editor pane. Switches between the rendered (Tiptap) view and the raw
 // markdown source. The pane scrolls vertically; the document caps at
@@ -19,7 +24,7 @@ import "./EditorPane.css";
 // Phase 8: source view is now CodeMirror-based with a "read-only review"
 // chip overlay. Card-click focus changes scroll the source view to the
 // matching marker via the SourceView imperative handle.
-export function EditorPane() {
+export function EditorPane({ anchorStatuses }: Props) {
   const { state, dispatch } = useDocument();
   const [author] = useAuthorName();
   const handleRef = useRef<RenderedViewHandle | null>(null);
@@ -149,6 +154,15 @@ export function EditorPane() {
     sourceRef.current?.scrollToMarker(state.focusedCommentId);
   }, [state.viewMode, state.focusedCommentId]);
 
+  // Phase 9: count lost anchors. The banner picks the *first* lost
+  // anchor (by id) when the user clicks Recover, then the modal
+  // walks remaining orphans on subsequent clicks.
+  const lostAnchorIds: number[] = [];
+  for (const c of state.comments) {
+    const st = anchorStatuses.get(c.id);
+    if (st && st.kind === "orphaned") lostAnchorIds.push(c.id);
+  }
+
   return (
     <main className="fm-editor-pane" data-testid="fm-editor-pane" role="main">
       {state.viewMode === "source" && (
@@ -163,6 +177,13 @@ export function EditorPane() {
         </aside>
       )}
       <div className="fm-document">
+        <LostAnchorBanner
+          count={lostAnchorIds.length}
+          onRecover={() => {
+            if (lostAnchorIds.length === 0) return;
+            dispatch({ type: "openReattach", commentId: lostAnchorIds[0] });
+          }}
+        />
         {state.viewMode === "rendered" ? (
           <RenderedView
             body={state.body}

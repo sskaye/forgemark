@@ -125,8 +125,10 @@ describe("Suggested-edit cards", () => {
     expect(screen.getByTestId("probe-dirty").textContent).toBe("dirty");
   });
 
-  it("Accept on a `from` mismatch routes to an error (lost-anchor in Phase 9)", async () => {
-    // Body's anchored text drifted from the suggestion's `from`.
+  it("Accept on a `from` mismatch surfaces an error (suggestion drift)", async () => {
+    // Body's anchored text drifted from the suggestion's `from`. For
+    // now this surfaces as an error; Phase 10 will route it into the
+    // file-conflict flow with richer recovery options.
     renderApp({
       body: "x <!-- fmc:1 -->the new phrase<!-- /fmc:1 --> y\n",
       comments: [aSuggestion()],

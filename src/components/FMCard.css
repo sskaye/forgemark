@@ -220,6 +220,48 @@
   filter: brightness(1.05);
 }
 
+/* Phase 9 — orphan / floating pills. The pill sits between the author
+   row and the body, signalling the card's anchor state. */
+.fm-card-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-bottom: 8px;
+}
+
+.fm-card-pill-orphan {
+  background: var(--fm-orphan-bg);
+  color: var(--fm-orphan-text);
+  border: 0.5px solid var(--fm-orphan-underline);
+}
+
+.fm-card-pill-floating {
+  background: var(--fm-anchor-bg-resolved);
+  color: var(--fm-prose-muted);
+  border: 0.5px solid var(--fm-divider-strong);
+}
+
+.fm-card-pill-anchor-text {
+  font-weight: 400;
+  font-style: italic;
+  color: var(--fm-prose-muted);
+  letter-spacing: 0;
+}
+
+.fm-card.is-orphan {
+  border-left: 3px solid var(--fm-orphan-underline);
+}
+
+.fm-card.is-floating {
+  /* Subtle visual cue for floating notes. */
+  border-style: dashed;
+}
+
 /* Collapsed (resolved & not focused) card variant. */
 .fm-card.is-collapsed {
   padding: 8px 12px;

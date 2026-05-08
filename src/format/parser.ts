@@ -75,13 +75,22 @@ function locateBlock(input: string): BlockLocation | null {
   };
 }
 
-export function parseForgemarkFile(input: string): ParsedFile {
+export type ParseOptions = {
+  // Phase 9 lost-anchor flow: when true, comments that are missing
+  // their marker pair are KEPT in the result (instead of triggering a
+  // hard parse error). Hard errors that indicate real corruption —
+  // unmatched markers, duplicate ids, marker without YAML record —
+  // still throw. Default false (strict, the original behaviour).
+  tolerant?: boolean;
+};
+
+export function parseForgemarkFile(input: string, opts: ParseOptions = {}): ParsedFile {
   const block = locateBlock(input);
   if (!block) {
     return { body: input, comments: [] };
   }
   const comments = parseCommentsYAML(block.yaml);
-  validateAgainstBody(block.body, comments);
+  validateAgainstBody(block.body, comments, opts);
   return { body: block.body, comments };
 }
 
@@ -321,7 +330,7 @@ function parseSuggestedEdit(raw: unknown, parentId: number): SuggestedEdit | und
 //   - Comment ids are unique within the file.
 //   - Every non-floating comment has matching open/close markers in the body.
 //   - Every marker pair in the body has a matching YAML record.
-function validateAgainstBody(body: string, comments: Comment[]) {
+function validateAgainstBody(body: string, comments: Comment[], opts: ParseOptions = {}) {
   const seen = new Map<number, Comment>();
   for (const c of comments) {
     if (seen.has(c.id)) {
@@ -356,14 +365,19 @@ function validateAgainstBody(body: string, comments: Comment[]) {
       );
     }
   }
-  // YAML record (non-floating) → marker
-  for (const c of comments) {
-    if (c.floating === true) continue;
-    if (!pairById.has(c.id)) {
-      throw new ForgemarkParseError(
-        "marker",
-        `Comment id ${c.id} has no inline marker pair in the body (and is not floating)`,
-      );
+  // YAML record (non-floating) → marker. In tolerant mode (Phase 9
+  // lost-anchor flow), missing markers are *not* a hard error — the
+  // anchor classifier will surface those comments as orphans so the
+  // user can recover them via the Reattach modal.
+  if (!opts.tolerant) {
+    for (const c of comments) {
+      if (c.floating === true) continue;
+      if (!pairById.has(c.id)) {
+        throw new ForgemarkParseError(
+          "marker",
+          `Comment id ${c.id} has no inline marker pair in the body (and is not floating)`,
+        );
+      }
     }
   }
 }

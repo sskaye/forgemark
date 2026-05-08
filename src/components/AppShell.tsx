@@ -1,18 +1,34 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TitleBar } from "./TitleBar";
 import { Sidebar } from "./Sidebar";
 import { EditorPane } from "./EditorPane";
 import { ErrorBanner } from "./ErrorBanner";
+import { ReattachModal } from "./ReattachModal";
 import { useDocument } from "../state/DocumentProvider";
 import { DocumentBindings } from "../state/DocumentBindings";
+import { classifyAnchors, insertMarkersIntoBody, removeMarkersFromBody } from "../format";
+import { contextSnippet } from "../format";
 import "./AppShell.css";
 
 // Phase 2 shell: the top-level layout, plus the document keyboard bindings
 // and auto-save effect. Real content (editor, sidebar comments) lives in
 // EditorPane and Sidebar.
 export function AppShell() {
-  const { state, setViewMode } = useDocument();
+  const { state, dispatch, setViewMode } = useDocument();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Anchor classification (Phase 9). Recomputed when body or comments
+  // change. classifyAnchors does one marker scan + per-orphan candidate
+  // generation, which the perf test bounds at < 2s for 50k-word bodies.
+  const anchorStatuses = useMemo(
+    () => classifyAnchors(state.body, state.comments),
+    [state.body, state.comments],
+  );
+
+  const reattachTargetComment =
+    state.reattachTarget != null ? state.comments.find((c) => c.id === state.reattachTarget) : null;
+  const reattachTargetStatus =
+    reattachTargetComment != null ? anchorStatuses.get(reattachTargetComment.id) : null;
 
   // Reflect file state in the document title (browser tab and Tauri OS title).
   useEffect(() => {
@@ -33,9 +49,48 @@ export function AppShell() {
       />
       <ErrorBanner />
       <div className="fm-app-body">
-        <EditorPane />
-        {sidebarOpen && <Sidebar />}
+        <EditorPane anchorStatuses={anchorStatuses} />
+        {sidebarOpen && <Sidebar anchorStatuses={anchorStatuses} />}
       </div>
+      {reattachTargetComment && reattachTargetStatus?.kind === "orphaned" && (
+        <ReattachModal
+          comment={reattachTargetComment}
+          candidates={reattachTargetStatus.candidates}
+          body={state.body}
+          onCancel={() => dispatch({ type: "closeReattach" })}
+          onReattach={(candidate) => {
+            const id = reattachTargetComment.id;
+            // Insert marker pair around the chosen range and recompute
+            // the anchor metadata from the *new* surroundings, mirroring
+            // what the new-comment composer does.
+            const newBody = insertMarkersIntoBody(state.body, candidate.from, candidate.to, id);
+            const before = state.body.slice(Math.max(0, candidate.from - 200), candidate.from);
+            const after = state.body.slice(candidate.to, candidate.to + 200);
+            dispatch({
+              type: "reattachComment",
+              commentId: id,
+              body: newBody,
+              anchor_text: candidate.text,
+              context_before: contextSnippet(before, "before"),
+              context_after: contextSnippet(after, "after"),
+            });
+          }}
+          onKeepFloating={() => {
+            // For a true orphan, no markers are present in the body, so
+            // removeMarkersFromBody is a no-op. We still call it
+            // defensively in case markers exist for some other reason
+            // (e.g. partially edited file).
+            const id = reattachTargetComment.id;
+            const newBody = removeMarkersFromBody(state.body, id);
+            dispatch({ type: "convertToFloating", commentId: id, body: newBody });
+          }}
+          onDiscard={() => {
+            const id = reattachTargetComment.id;
+            const newBody = removeMarkersFromBody(state.body, id);
+            dispatch({ type: "deleteComment", commentId: id, body: newBody });
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -1,11 +1,20 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useDocument } from "../state/DocumentProvider";
 import { useAuthorName } from "../state/preferences";
 import { FMCard } from "./FMCard";
-import { removeMarkersFromBody, replaceAnchoredText, stripAnchoredMarkers } from "../format";
+import {
+  removeMarkersFromBody,
+  replaceAnchoredText,
+  stripAnchoredMarkers,
+  type AnchorStatus,
+} from "../format";
 import type { Comment, Reply } from "../format/types";
 import type { FilterMode, SortMode } from "../state/document";
 import "./Sidebar.css";
+
+type SidebarProps = {
+  anchorStatuses: Map<number, AnchorStatus>;
+};
 
 // Sidebar (Phase 6). Owns:
 //   - Dynamic filter dropdown — populated from comment authors + "By me".
@@ -13,7 +22,7 @@ import "./Sidebar.css";
 //   - Card lifecycle dispatches (reply / edit / resolve / delete).
 //   - Global keyboard shortcuts that act on the focused card:
 //       ⌘R reply, ⌘⏎ resolve, ⌘⇧E edit own, Delete delete.
-export function Sidebar() {
+export function Sidebar({ anchorStatuses }: SidebarProps) {
   const { state, dispatch } = useDocument();
   const [authorName] = useAuthorName();
   const { comments, focusedCommentId, hoveredCommentId, composer, filter, sort } = state;
@@ -22,6 +31,13 @@ export function Sidebar() {
     () => sortComments(filterComments(comments, filter, authorName), sort),
     [comments, filter, sort, authorName],
   );
+
+  // Phase 9: split into three groups, preserving sort within each.
+  const orphans = visibleComments.filter((c) => anchorStatuses.get(c.id)?.kind === "orphaned");
+  const floatingNotes = visibleComments.filter(
+    (c) => anchorStatuses.get(c.id)?.kind === "floating",
+  );
+  const attached = visibleComments.filter((c) => anchorStatuses.get(c.id)?.kind === "attached");
 
   const open = comments.filter((c) => !c.resolved).length;
 
@@ -93,128 +109,172 @@ export function Sidebar() {
         ) : visibleComments.length === 0 ? (
           <EmptyState empty="filtered-out" />
         ) : (
-          <ul className="fm-sidebar-list" role="list">
-            {visibleComments.map((c) => {
-              const replying = composer?.mode === "reply" && composer.commentId === c.id;
-              const editing = composer?.mode === "editComment" && composer.commentId === c.id;
-              const editingReplyIndex =
-                composer?.mode === "editReply" && composer.commentId === c.id
-                  ? composer.replyIndex
-                  : null;
-              return (
-                <li key={c.id} className="fm-sidebar-item">
-                  <FocusableCard
-                    cardKey={c.id}
-                    comment={c}
-                    authorName={authorName}
-                    focused={focusedCommentId === c.id}
-                    hovered={hoveredCommentId === c.id}
-                    replying={replying}
-                    editing={editing}
-                    editingReplyIndex={editingReplyIndex}
-                    onFocus={() => dispatch({ type: "setFocusedComment", id: c.id })}
-                    onHover={(entering) =>
-                      dispatch({
-                        type: "setHoveredComment",
-                        id: entering ? c.id : null,
-                      })
-                    }
-                    onReply={() =>
-                      dispatch({
-                        type: "openComposer",
-                        composer: { mode: "reply", commentId: c.id },
-                      })
-                    }
-                    onEdit={() =>
-                      dispatch({
-                        type: "openComposer",
-                        composer: {
-                          mode: "editComment",
-                          commentId: c.id,
-                          initialBody: c.body ?? "",
-                        },
-                      })
-                    }
-                    onResolve={() => dispatch({ type: "toggleResolved", commentId: c.id })}
-                    onDelete={() => {
-                      const newBody = removeMarkersFromBody(state.body, c.id);
-                      dispatch({ type: "deleteComment", commentId: c.id, body: newBody });
-                    }}
-                    onAcceptSuggestion={() => {
-                      if (!c.suggested_edit) return;
-                      const result = replaceAnchoredText(state.body, c.id, c.suggested_edit.to);
-                      if (!result) {
-                        dispatch({
-                          type: "error",
-                          message: `Couldn't find anchor for suggestion ${c.id}.`,
-                        });
-                        return;
-                      }
-                      // `from` mismatch routes to the lost-anchor flow
-                      // (Phase 9). Phase 7 surfaces an error banner with a
-                      // clear message rather than silently drifting; the
-                      // proper Reattach modal lands in Phase 9.
-                      if (result.previousText !== c.suggested_edit.from) {
-                        dispatch({
-                          type: "error",
-                          message:
-                            "Anchored text has changed since the suggestion was made; reattach in a future build.",
-                        });
-                        return;
-                      }
-                      dispatch({
-                        type: "acceptSuggestion",
-                        commentId: c.id,
-                        body: result.body,
-                      });
-                    }}
-                    onRejectSuggestion={() => {
-                      const newBody = stripAnchoredMarkers(state.body, c.id);
-                      if (newBody == null) {
-                        dispatch({
-                          type: "error",
-                          message: `Couldn't find anchor for suggestion ${c.id}.`,
-                        });
-                        return;
-                      }
-                      dispatch({
-                        type: "rejectSuggestion",
-                        commentId: c.id,
-                        body: newBody,
-                      });
-                    }}
-                    onReplyEdit={(index) => {
-                      const reply = c.replies?.[index];
-                      if (!reply) return;
-                      dispatch({
-                        type: "openComposer",
-                        composer: {
-                          mode: "editReply",
-                          commentId: c.id,
-                          replyIndex: index,
-                          initialBody: reply.body,
-                        },
-                      });
-                    }}
-                    onReplyDelete={(index) =>
-                      dispatch({
-                        type: "deleteReply",
-                        commentId: c.id,
-                        replyIndex: index,
-                      })
-                    }
-                    onComposerSubmit={(text) => {
-                      handleComposerSubmit(state, dispatch, authorName, text);
-                    }}
-                    onComposerCancel={() => dispatch({ type: "closeComposer" })}
-                  />
-                </li>
-              );
-            })}
-          </ul>
+          <>
+            {orphans.length > 0 && (
+              <CardSection
+                label={`LOST ANCHOR · ${orphans.length}`}
+                testid="fm-sidebar-section-orphans"
+              >
+                {orphans.map((c) => renderCard(c, "orphaned"))}
+              </CardSection>
+            )}
+            {attached.length > 0 && (
+              <CardSection
+                label={orphans.length > 0 || floatingNotes.length > 0 ? "Attached" : null}
+                testid="fm-sidebar-section-attached"
+              >
+                {attached.map((c) => renderCard(c, "attached"))}
+              </CardSection>
+            )}
+            {floatingNotes.length > 0 && (
+              <CardSection
+                label={`FLOATING NOTES · ${floatingNotes.length}`}
+                testid="fm-sidebar-section-floating"
+              >
+                {floatingNotes.map((c) => renderCard(c, "floating"))}
+              </CardSection>
+            )}
+          </>
         )}
       </div>
     </aside>
+  );
+
+  function renderCard(c: Comment, anchorState: "attached" | "orphaned" | "floating") {
+    const replying = composer?.mode === "reply" && composer.commentId === c.id;
+    const editing = composer?.mode === "editComment" && composer.commentId === c.id;
+    const editingReplyIndex =
+      composer?.mode === "editReply" && composer.commentId === c.id ? composer.replyIndex : null;
+    return (
+      <li key={c.id} className="fm-sidebar-item">
+        <FocusableCard
+          cardKey={c.id}
+          comment={c}
+          authorName={authorName}
+          focused={focusedCommentId === c.id}
+          hovered={hoveredCommentId === c.id}
+          replying={replying}
+          editing={editing}
+          editingReplyIndex={editingReplyIndex}
+          anchorState={anchorState}
+          onFocus={() => dispatch({ type: "setFocusedComment", id: c.id })}
+          onHover={(entering) =>
+            dispatch({
+              type: "setHoveredComment",
+              id: entering ? c.id : null,
+            })
+          }
+          onReply={() =>
+            dispatch({
+              type: "openComposer",
+              composer: { mode: "reply", commentId: c.id },
+            })
+          }
+          onEdit={() =>
+            dispatch({
+              type: "openComposer",
+              composer: {
+                mode: "editComment",
+                commentId: c.id,
+                initialBody: c.body ?? "",
+              },
+            })
+          }
+          onResolve={() => dispatch({ type: "toggleResolved", commentId: c.id })}
+          onDelete={() => {
+            const newBody = removeMarkersFromBody(state.body, c.id);
+            dispatch({ type: "deleteComment", commentId: c.id, body: newBody });
+          }}
+          onAcceptSuggestion={() => {
+            if (!c.suggested_edit) return;
+            const result = replaceAnchoredText(state.body, c.id, c.suggested_edit.to);
+            if (!result) {
+              dispatch({
+                type: "error",
+                message: `Couldn't find anchor for suggestion ${c.id}.`,
+              });
+              return;
+            }
+            if (result.previousText !== c.suggested_edit.from) {
+              // Suggestion `from`-mismatch: the markers are still
+              // there but the anchored text drifted. Surface as an
+              // error for now — Phase 10's file-conflict handling
+              // will route this into a richer flow.
+              dispatch({
+                type: "error",
+                message:
+                  "Anchored text has changed since the suggestion was made; reattach in a future build.",
+              });
+              return;
+            }
+            dispatch({
+              type: "acceptSuggestion",
+              commentId: c.id,
+              body: result.body,
+            });
+          }}
+          onRejectSuggestion={() => {
+            const newBody = stripAnchoredMarkers(state.body, c.id);
+            if (newBody == null) {
+              dispatch({
+                type: "error",
+                message: `Couldn't find anchor for suggestion ${c.id}.`,
+              });
+              return;
+            }
+            dispatch({
+              type: "rejectSuggestion",
+              commentId: c.id,
+              body: newBody,
+            });
+          }}
+          onReattach={() => dispatch({ type: "openReattach", commentId: c.id })}
+          onReplyEdit={(index) => {
+            const reply = c.replies?.[index];
+            if (!reply) return;
+            dispatch({
+              type: "openComposer",
+              composer: {
+                mode: "editReply",
+                commentId: c.id,
+                replyIndex: index,
+                initialBody: reply.body,
+              },
+            });
+          }}
+          onReplyDelete={(index) =>
+            dispatch({
+              type: "deleteReply",
+              commentId: c.id,
+              replyIndex: index,
+            })
+          }
+          onComposerSubmit={(text) => {
+            handleComposerSubmit(state, dispatch, authorName, text);
+          }}
+          onComposerCancel={() => dispatch({ type: "closeComposer" })}
+        />
+      </li>
+    );
+  }
+}
+
+function CardSection({
+  label,
+  testid,
+  children,
+}: {
+  label: string | null;
+  testid: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="fm-sidebar-section" data-testid={testid}>
+      {label && <div className="fm-sidebar-section-label">{label}</div>}
+      <ul className="fm-sidebar-list" role="list">
+        {children}
+      </ul>
+    </div>
   );
 }
 

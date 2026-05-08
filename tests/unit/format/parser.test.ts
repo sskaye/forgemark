@@ -222,6 +222,48 @@ describe("validation invariants", () => {
     expect(() => parseForgemarkFile(text)).toThrow(/id 99 has no inline marker pair/);
   });
 
+  it("tolerant mode: keeps non-floating comments whose markers are missing (Phase 9)", () => {
+    const text = [
+      "Body with no markers at all.",
+      "",
+      "<!-- forgemark-comments",
+      "- id: 99",
+      '  anchor_text: "missing"',
+      "  author: A",
+      "  timestamp: 2026-05-07T00:00:00Z",
+      "  resolved: false",
+      "  body: |",
+      "    no markers",
+      "-->",
+      "",
+    ].join("\n");
+    const parsed = parseForgemarkFile(text, { tolerant: true });
+    expect(parsed.comments).toHaveLength(1);
+    expect(parsed.comments[0].id).toBe(99);
+    // Sanity: in tolerant mode the body stays as-is and no markers
+    // were synthesised — the lost-anchor banner does the recovery.
+    expect(parsed.body).not.toContain("fmc:99");
+  });
+
+  it("tolerant mode still rejects unmatched markers + duplicate ids (real corruption)", () => {
+    // Unmatched: open without close
+    const dangling = [
+      "Body with <!-- fmc:1 -->no close here.",
+      "",
+      "<!-- forgemark-comments",
+      "- id: 1",
+      '  anchor_text: "x"',
+      "  author: A",
+      "  timestamp: 2026-05-07T00:00:00Z",
+      "  resolved: false",
+      "  body: |",
+      "    one",
+      "-->",
+      "",
+    ].join("\n");
+    expect(() => parseForgemarkFile(dangling, { tolerant: true })).toThrow(/Unmatched open marker/);
+  });
+
   it("rejects marker pair with no YAML record", () => {
     const text = [
       "Body has <!-- fmc:1 -->x<!-- /fmc:1 --> and <!-- fmc:2 -->y<!-- /fmc:2 -->",
