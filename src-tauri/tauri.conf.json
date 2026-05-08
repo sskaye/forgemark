@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Forgemark — Untitled",
         "width": 1280,
         "height": 800,
@@ -19,7 +20,9 @@
         "minHeight": 480,
         "decorations": true,
         "transparent": false,
-        "resizable": true
+        "resizable": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {

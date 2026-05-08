@@ -1,4 +1,6 @@
-/* Base reset; the design tokens land in Phase 1. */
+/* Base reset. Theme tokens are applied as CSS custom properties on the
+   document root by ThemeProvider, so anything inside the app reads them
+   via var(--fm-…). */
 *,
 *::before,
 *::after {
@@ -14,9 +16,20 @@ body,
 }
 
 body {
-  font-family:
-    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  background: var(--fm-window-bg, #ececec);
+  color: var(--fm-prose-ink, #1b1b1a);
+  font-family: var(
+    --fm-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "SF Pro Text",
+    "Helvetica Neue",
+    Arial,
+    sans-serif
+  );
   -webkit-font-smoothing: antialiased;
-  background: #fcfcfb;
-  color: #1b1b1a;
+}
+
+button {
+  font: inherit;
 }

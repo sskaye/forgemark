@@ -1,0 +1,21 @@
+.fm-app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: var(--fm-window-bg);
+  color: var(--fm-prose-ink);
+  font-family: var(--fm-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+.fm-app-body {
+  flex: 1;
+  display: flex;
+  min-height: 0; /* allow children to scroll independently */
+  background: var(--fm-editor-bg);
+}
+
+::selection {
+  background: var(--fm-text-selection);
+}

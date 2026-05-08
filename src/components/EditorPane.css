@@ -1,0 +1,19 @@
+.fm-editor-pane {
+  flex: 1;
+  min-width: 0; /* allow shrinking below 720px when sidebar is open */
+  background: var(--fm-editor-bg);
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+}
+
+.fm-document {
+  width: 100%;
+  max-width: 720px;
+  padding: 32px 48px;
+  color: var(--fm-prose-ink);
+  font-family: var(--fm-prose);
+  font-size: 17px;
+  line-height: var(--fm-prose-leading);
+  letter-spacing: var(--fm-prose-letterspacing);
+}
