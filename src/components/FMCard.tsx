@@ -1,20 +1,62 @@
-import { type KeyboardEvent } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { Avatar } from "./Avatar";
-import type { Comment } from "../format/types";
+import { InlineComposer } from "./InlineComposer";
+import type { Comment, Reply } from "../format/types";
 import "./FMCard.css";
 
 type Props = {
   comment: Comment;
   focused: boolean;
   hovered: boolean;
+  // The current user's name; controls whether the Edit affordance shows.
+  authorName: string;
+  // True when this comment is the active reply target (an inline reply
+  // composer is rendered at the bottom of the card).
+  replying: boolean;
+  // True when the comment body itself is being edited.
+  editing: boolean;
+  // editingReplyIndex !== null when a specific reply is being edited.
+  editingReplyIndex: number | null;
   onFocus: () => void;
   onHover: (entering: boolean) => void;
+  onReply: () => void;
+  onEdit: () => void;
+  onResolve: () => void;
+  onDelete: () => void;
+  onReplyEdit: (index: number) => void;
+  onReplyDelete: (index: number) => void;
+  onComposerSubmit: (body: string) => void;
+  onComposerCancel: () => void;
 };
 
-// Phase 4 comment card. Default + read state, plus focus + hover. The
-// has-unread-replies + resolved-collapsed + suggested-edit + lost-anchor
-// + floating variants land in Phases 6 / 7 / 9.
-export function FMCard({ comment, focused, hovered, onFocus, onHover }: Props) {
+// Phase 6 comment card. Default + read state from Phase 4, plus:
+//   - Action row revealed on focus (Reply / Edit / Resolve / Delete).
+//   - Edit affordance gated to the original author.
+//   - Resolved cards render in a compact one-line collapsed form unless
+//     focused, in which case they expand back to the regular card.
+//   - Reply / Edit composers render inline.
+export function FMCard({
+  comment,
+  focused,
+  hovered,
+  authorName,
+  replying,
+  editing,
+  editingReplyIndex,
+  onFocus,
+  onHover,
+  onReply,
+  onEdit,
+  onResolve,
+  onDelete,
+  onReplyEdit,
+  onReplyDelete,
+  onComposerSubmit,
+  onComposerCancel,
+}: Props) {
+  const isOwn = comment.author === authorName;
+  const showCollapsed = comment.resolved && !focused && !replying && !editing;
+
   const onKey = (e: KeyboardEvent<HTMLElement>) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
@@ -27,9 +69,37 @@ export function FMCard({ comment, focused, hovered, onFocus, onHover }: Props) {
     focused ? "is-focused" : "",
     hovered ? "is-hovered" : "",
     comment.resolved ? "is-resolved" : "",
+    showCollapsed ? "is-collapsed" : "",
   ]
     .filter(Boolean)
     .join(" ");
+
+  if (showCollapsed) {
+    return (
+      <article
+        className={className}
+        data-testid={`fm-card-${comment.id}`}
+        data-anchor-card-id={comment.id}
+        role="button"
+        tabIndex={0}
+        aria-pressed={focused}
+        aria-label={`Resolved comment by ${comment.author}: ${plainPreview(comment, 60)}`}
+        onClick={onFocus}
+        onKeyDown={onKey}
+        onMouseEnter={() => onHover(true)}
+        onMouseLeave={() => onHover(false)}
+      >
+        <div className="fm-card-collapsed-row">
+          <Avatar name={comment.author} size={18} />
+          <span className="fm-card-collapsed-author">{comment.author}</span>
+          <span className="fm-card-collapsed-check" aria-hidden>
+            ✓
+          </span>
+          <span className="fm-card-collapsed-preview">{plainPreview(comment, 60)}</span>
+        </div>
+      </article>
+    );
+  }
 
   return (
     <article
@@ -50,8 +120,18 @@ export function FMCard({ comment, focused, hovered, onFocus, onHover }: Props) {
         timestamp={comment.timestamp}
         edited={Boolean(comment.edited_at)}
       />
-      {comment.body && <div className="fm-card-body">{stripMarkdown(comment.body)}</div>}
-      {comment.suggested_edit && (
+      {editing ? (
+        <InlineComposer
+          initialBody={comment.body ?? ""}
+          submitLabel="Save"
+          headerLabel={`Editing ${comment.author}'s comment`}
+          onSubmit={onComposerSubmit}
+          onCancel={onComposerCancel}
+        />
+      ) : (
+        comment.body && <div className="fm-card-body">{stripMarkdown(comment.body)}</div>
+      )}
+      {comment.suggested_edit && !editing && (
         <div className="fm-card-suggestion" data-testid="fm-card-suggestion">
           <span className="fm-card-suggestion-from">{comment.suggested_edit.from}</span>
           <span className="fm-card-suggestion-arrow" aria-hidden>
@@ -60,22 +140,149 @@ export function FMCard({ comment, focused, hovered, onFocus, onHover }: Props) {
           <span className="fm-card-suggestion-to">{comment.suggested_edit.to}</span>
         </div>
       )}
-      {comment.replies && comment.replies.length > 0 && (
+      {comment.replies && comment.replies.length > 0 && !editing && (
         <ul className="fm-card-replies" data-testid="fm-card-replies">
           {comment.replies.map((reply, i) => (
-            <li key={`${reply.author}-${reply.timestamp}-${i}`} className="fm-card-reply">
-              <CardAuthorRow
-                author={reply.author}
-                timestamp={reply.timestamp}
-                edited={Boolean(reply.edited_at)}
-                size={18}
-              />
-              <div className="fm-card-reply-body">{stripMarkdown(reply.body)}</div>
-            </li>
+            <ReplyView
+              key={`${reply.author}-${reply.timestamp}-${i}`}
+              reply={reply}
+              isOwn={reply.author === authorName}
+              editing={editingReplyIndex === i}
+              onEdit={() => onReplyEdit(i)}
+              onDelete={() => onReplyDelete(i)}
+              onComposerSubmit={onComposerSubmit}
+              onComposerCancel={onComposerCancel}
+            />
           ))}
         </ul>
       )}
+      {replying && (
+        <InlineComposer
+          submitLabel="Reply"
+          headerLabel={`${authorName} is replying`}
+          placeholder="Add a reply…"
+          onSubmit={onComposerSubmit}
+          onCancel={onComposerCancel}
+        />
+      )}
+      {focused && !editing && !replying && editingReplyIndex === null && (
+        <div className="fm-card-actions" role="toolbar" aria-label="Comment actions">
+          <button
+            type="button"
+            className="fm-card-action"
+            onClick={(e) => {
+              e.stopPropagation();
+              onReply();
+            }}
+            data-testid={`fm-card-reply-${comment.id}`}
+          >
+            Reply
+          </button>
+          {isOwn && (
+            <button
+              type="button"
+              className="fm-card-action"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit();
+              }}
+              data-testid={`fm-card-edit-${comment.id}`}
+            >
+              Edit
+            </button>
+          )}
+          <button
+            type="button"
+            className="fm-card-action"
+            onClick={(e) => {
+              e.stopPropagation();
+              onResolve();
+            }}
+            data-testid={`fm-card-resolve-${comment.id}`}
+          >
+            {comment.resolved ? "Reopen" : "Resolve"}
+          </button>
+          <div className="fm-card-actions-spacer" />
+          <button
+            type="button"
+            className="fm-card-action fm-card-action-danger"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            data-testid={`fm-card-delete-${comment.id}`}
+          >
+            Delete
+          </button>
+        </div>
+      )}
     </article>
+  );
+}
+
+function ReplyView({
+  reply,
+  isOwn,
+  editing,
+  onEdit,
+  onDelete,
+  onComposerSubmit,
+  onComposerCancel,
+}: {
+  reply: Reply;
+  isOwn: boolean;
+  editing: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+  onComposerSubmit: (body: string) => void;
+  onComposerCancel: () => void;
+}) {
+  return (
+    <li className="fm-card-reply">
+      <CardAuthorRow
+        author={reply.author}
+        timestamp={reply.timestamp}
+        edited={Boolean(reply.edited_at)}
+        size={18}
+      />
+      {editing ? (
+        <InlineComposer
+          initialBody={reply.body}
+          submitLabel="Save"
+          headerLabel={`Editing ${reply.author}'s reply`}
+          onSubmit={onComposerSubmit}
+          onCancel={onComposerCancel}
+        />
+      ) : (
+        <>
+          <div className="fm-card-reply-body">{stripMarkdown(reply.body)}</div>
+          <div className="fm-card-reply-actions">
+            {isOwn && (
+              <button
+                type="button"
+                className="fm-card-reply-action"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit();
+                }}
+              >
+                Edit
+              </button>
+            )}
+            <button
+              type="button"
+              className="fm-card-reply-action fm-card-reply-action-danger"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+            >
+              Delete
+            </button>
+          </div>
+        </>
+      )}
+    </li>
   );
 }
 
@@ -106,9 +313,6 @@ function CardAuthorRow({
   );
 }
 
-// Strip the simplest markdown formatting from a comment-card preview so
-// that **bold** etc. don't render as literal asterisks. Phase 4 doesn't
-// need full markdown rendering inside cards — short prose is the norm.
 function stripMarkdown(s: string): string {
   return s
     .replace(/\r\n?/g, "\n")
@@ -130,8 +334,6 @@ function plainPreview(comment: Comment, max: number): string {
   return "(no body)";
 }
 
-// Lightweight relative timestamp. Phase 4 needs only "today", "yesterday",
-// "N days ago" — and a fallback to the absolute date for older comments.
 function formatRelative(iso: string): string {
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return iso;
@@ -146,8 +348,10 @@ function formatRelative(iso: string): string {
   if (diffDay === 1) return "yesterday";
   if (diffDay < 7) return `${diffDay}d ago`;
   if (diffDay < 30) return `${Math.round(diffDay / 7)}w ago`;
-  // Beyond a month, show the date.
   const d = new Date(t);
   const monthShort = d.toLocaleString(undefined, { month: "short" });
   return `${monthShort} ${d.getDate()}`;
 }
+
+// Suppress unused-var lint for setState helper if introduced later.
+void useState;

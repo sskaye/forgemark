@@ -32,6 +32,7 @@ export function EditorPane() {
     dispatch({
       type: "openComposer",
       composer: {
+        mode: "new",
         from: captured.from,
         to: captured.to,
         selectionText: captured.text,
@@ -59,7 +60,7 @@ export function EditorPane() {
   const submitComposer = useCallback(
     (commentBody: string) => {
       const c = state.composer;
-      if (!c) return;
+      if (!c || c.mode !== "new") return;
       const handle = handleRef.current;
       if (!handle) return;
       const id = nextCommentId(state.comments);
@@ -107,7 +108,7 @@ export function EditorPane() {
           <SourceView text={state.originalText || state.body} />
         )}
       </div>
-      {state.composer && state.viewMode === "rendered" && (
+      {state.composer?.mode === "new" && state.viewMode === "rendered" && (
         <NewCommentComposer
           x={state.composer.x}
           y={state.composer.y}

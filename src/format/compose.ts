@@ -35,6 +35,16 @@ export function insertMarkersIntoBody(
   return withBoth;
 }
 
+// Remove the marker pair for the given id from a body, leaving the
+// anchored text in place. Used by the delete-comment flow (Phase 6).
+// Multiple pairs for the same id (which the parser would reject anyway)
+// are all stripped, defensively.
+export function removeMarkersFromBody(body: string, id: number): string {
+  const open = new RegExp(`<!--\\s*fmc:${id}\\s*-->`, "g");
+  const close = new RegExp(`<!--\\s*/fmc:${id}\\s*-->`, "g");
+  return body.replace(open, "").replace(close, "");
+}
+
 // Pull a snippet of context from a plain-text source, trimmed to a
 // sentence-like boundary so the orphan-recovery pass (Phase 9) has
 // something useful to match.

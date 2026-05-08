@@ -17,4 +17,9 @@ export {
 } from "./types";
 export { escapeContent, unescapeContent } from "./escape";
 export { bodyWithAnchorSpans, bodyFromAnchorSpans } from "./markers-display";
-export { nextCommentId, insertMarkersIntoBody, contextSnippet } from "./compose";
+export {
+  nextCommentId,
+  insertMarkersIntoBody,
+  removeMarkersFromBody,
+  contextSnippet,
+} from "./compose";

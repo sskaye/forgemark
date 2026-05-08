@@ -39,6 +39,7 @@ export default [
         HTMLDivElement: "readonly",
         HTMLInputElement: "readonly",
         HTMLTextAreaElement: "readonly",
+        HTMLSelectElement: "readonly",
         HTMLButtonElement: "readonly",
         StorageEvent: "readonly",
         Element: "readonly",

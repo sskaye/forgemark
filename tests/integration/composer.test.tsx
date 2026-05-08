@@ -44,6 +44,7 @@ function StateProbe() {
           dispatch({
             type: "openComposer",
             composer: {
+              mode: "new",
               from: 1,
               to: 5,
               selectionText: "Some",
