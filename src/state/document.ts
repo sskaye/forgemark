@@ -328,10 +328,20 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
       };
     }
     case "toggleResolved": {
+      const target = state.comments.find((c) => c.id === action.commentId);
+      const willBeResolved = !(target?.resolved ?? false);
       const comments = state.comments.map((c) =>
         c.id === action.commentId ? { ...c, resolved: !c.resolved } : c,
       );
-      return { ...state, comments, dirty: true };
+      // Becoming resolved should immediately collapse the card. The
+      // showCollapsed predicate in FMCard requires `!focused`, so
+      // unfocus the card on the resolve transition. Re-opening
+      // (resolved → unresolved) keeps focus.
+      const focusedCommentId =
+        willBeResolved && state.focusedCommentId === action.commentId
+          ? null
+          : state.focusedCommentId;
+      return { ...state, comments, dirty: true, focusedCommentId };
     }
     case "deleteComment":
       return {
