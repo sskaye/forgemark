@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { TitleBar } from "./TitleBar";
 import { Sidebar } from "./Sidebar";
 import { EditorPane } from "./EditorPane";
+import { ErrorBanner } from "./ErrorBanner";
 import { useDocument } from "../state/DocumentProvider";
 import { DocumentBindings } from "../state/DocumentBindings";
 import "./AppShell.css";
@@ -30,6 +31,7 @@ export function AppShell() {
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen((s) => !s)}
       />
+      <ErrorBanner />
       <div className="fm-app-body">
         <EditorPane />
         {sidebarOpen && <Sidebar />}

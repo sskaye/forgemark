@@ -8,6 +8,11 @@ const defaultLogger: Logger = (msg, err) => {
   console.error("[forgemark] " + msg, err);
 };
 
+function errorMessage(prefix: string, err: unknown): string {
+  if (err instanceof Error) return prefix + ": " + err.message;
+  return prefix + ": " + String(err);
+}
+
 // Phase 2 ergonomic bindings — live until Phase 11 wires the native menu
 // bar. Renders nothing.
 //
@@ -47,6 +52,7 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
           });
         } catch (err) {
           logger("open failed", err);
+          dispatch({ type: "error", message: errorMessage("Open failed", err) });
         }
       } else if (key === "s") {
         e.preventDefault();
@@ -69,6 +75,7 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
           }
         } catch (err) {
           logger("save failed", err);
+          dispatch({ type: "error", message: errorMessage("Save failed", err) });
         }
       } else if (key === "n") {
         e.preventDefault();
@@ -90,6 +97,7 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
         dispatch({ type: "saved", text: state.body });
       } catch (err) {
         logger("auto-save failed", err);
+        dispatch({ type: "error", message: errorMessage("Auto-save failed", err) });
       }
     }, 500);
     return () => clearTimeout(handle);

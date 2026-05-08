@@ -25,6 +25,9 @@ export type DocumentState = {
   viewMode: "rendered" | "source";
   // True when the open file is read-only on disk.
   readOnly: boolean;
+  // Last user-facing error (file open / save). Cleared when the user
+  // dismisses the banner, opens a different file, or saves successfully.
+  error: string | null;
 };
 
 export const INITIAL_STATE: DocumentState = {
@@ -35,6 +38,7 @@ export const INITIAL_STATE: DocumentState = {
   dirty: false,
   viewMode: "rendered",
   readOnly: false,
+  error: null,
 };
 
 export type DocumentAction =
@@ -48,7 +52,9 @@ export type DocumentAction =
   | { type: "edit"; body: string }
   | { type: "saved"; text: string }
   | { type: "setViewMode"; viewMode: "rendered" | "source" }
-  | { type: "newUntitled" };
+  | { type: "newUntitled" }
+  | { type: "error"; message: string }
+  | { type: "dismissError" };
 
 export function reduceDocument(state: DocumentState, action: DocumentAction): DocumentState {
   switch (action.type) {
@@ -61,6 +67,7 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
         dirty: false,
         viewMode: "rendered",
         readOnly: action.readOnly,
+        error: null,
       };
     case "edit":
       // No-op if the body hasn't actually changed (Tiptap can fire updates
@@ -77,11 +84,16 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
         originalText: action.text,
         body: action.text,
         dirty: false,
+        error: null,
       };
     case "setViewMode":
       return { ...state, viewMode: action.viewMode };
     case "newUntitled":
       return { ...INITIAL_STATE };
+    case "error":
+      return { ...state, error: action.message };
+    case "dismissError":
+      return { ...state, error: null };
     default:
       return state;
   }
