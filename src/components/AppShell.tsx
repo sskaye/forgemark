@@ -22,6 +22,7 @@ import { contextSnippet, parseForgemarkFile } from "../format";
 import { useFontSize, useFirstRun } from "../state/preferences";
 import { saveMarkdownFile } from "../services/fileIO";
 import { applyWindowAction, isWindowAction } from "../services/windowActions";
+import { ask } from "@tauri-apps/plugin-dialog";
 import "./AppShell.css";
 // Bundled sample file — Vite's `?raw` import pulls in the markdown text
 // at build time so the first-run "Open sample" path doesn't need a
@@ -68,7 +69,7 @@ export function AppShell() {
   // from src/state/menuBridge.ts after the Rust side fires a menu
   // command. Each id routes to the matching JS-side action.
   useEffect(() => {
-    const onCustom = (e: Event) => {
+    const onCustom = async (e: Event) => {
       const detail = (e as CustomEvent<string>).detail;
       if (detail === "settings") {
         setSettingsOpen(true);
@@ -81,24 +82,31 @@ export function AppShell() {
       if (detail === "close-file") {
         // File > Close — clear the document, keep the window open
         // (TextEdit / Pages convention). Prompt before discarding
-        // unsaved work.
-        if (
-          state.dirty &&
-          !window.confirm("You have unsaved changes. Close without saving?")
-        ) {
-          return;
+        // unsaved work via Tauri's dialog plugin (window.confirm()
+        // is suppressed in the Tauri webview; ask() is the
+        // platform-appropriate equivalent).
+        if (state.dirty) {
+          const proceed = await ask("You have unsaved changes. Close without saving?", {
+            title: "Close document",
+            kind: "warning",
+            okLabel: "Discard changes",
+            cancelLabel: "Cancel",
+          });
+          if (!proceed) return;
         }
         dispatch({ type: "newUntitled" });
         return;
       }
       if (isWindowAction(detail)) {
-        void applyWindowAction(detail).catch((err) => {
+        try {
+          await applyWindowAction(detail);
+        } catch (err) {
           dispatch({
             type: "error",
             message:
               "Window resize failed: " + (err instanceof Error ? err.message : String(err)),
           });
-        });
+        }
         return;
       }
     };
