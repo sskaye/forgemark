@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useDocument } from "../state/DocumentProvider";
 import { useAuthorName } from "../state/preferences";
 import { RenderedView, type RenderedViewHandle } from "./RenderedView";
-import { SourceView } from "./SourceView";
+import { SourceView, type SourceViewHandle } from "./SourceView";
 import { NewCommentComposer } from "./NewCommentComposer";
-import { nextCommentId } from "../format";
+import { nextCommentId, serializeForgemarkFile } from "../format";
 import "./EditorPane.css";
 
 // Editor pane. Switches between the rendered (Tiptap) view and the raw
@@ -15,15 +15,22 @@ import "./EditorPane.css";
 // the rendered view via a ref; on submit, the rendered view applies the
 // anchor mark and returns the new body, which is dispatched along with
 // the new Comment.
+//
+// Phase 8: source view is now CodeMirror-based with a "read-only review"
+// chip overlay. Card-click focus changes scroll the source view to the
+// matching marker via the SourceView imperative handle.
 export function EditorPane() {
   const { state, dispatch } = useDocument();
   const [author] = useAuthorName();
   const handleRef = useRef<RenderedViewHandle | null>(null);
+  const sourceRef = useRef<SourceViewHandle | null>(null);
 
   // Composer trigger: ⌘⌥M opens the composer at the current selection.
   // Selections inside fenced code blocks or inline code spans are
-  // refused, mirroring the parser-level rule from Phase 3.
+  // refused, mirroring the parser-level rule from Phase 3. In Source
+  // view the trigger is a no-op — Source is read-only review.
   const openComposer = useCallback(() => {
+    if (state.viewMode !== "rendered") return;
     const handle = handleRef.current;
     if (!handle) return;
     const captured = handle.captureSelection();
@@ -42,7 +49,7 @@ export function EditorPane() {
         y: captured.rect.bottom + 6,
       },
     });
-  }, [dispatch]);
+  }, [dispatch, state.viewMode]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -123,8 +130,38 @@ export function EditorPane() {
   // works in read-only Tiptap, which is what the composer needs.
   const editorReadOnly = state.readOnly;
 
+  // Source view always shows the *current* serialized form (body +
+  // trailing comments block) — not the bytes-as-loaded — so toggling
+  // back and forth after edits reflects what would be written to disk.
+  const sourceText = useMemo(
+    () =>
+      state.viewMode === "source"
+        ? serializeForgemarkFile({ body: state.body, comments: state.comments })
+        : "",
+    [state.viewMode, state.body, state.comments],
+  );
+
+  // Card focus → scroll source to its marker. Only fires in Source mode;
+  // the rendered view does its own scrolling via DOM measurement.
+  useEffect(() => {
+    if (state.viewMode !== "source") return;
+    if (state.focusedCommentId == null) return;
+    sourceRef.current?.scrollToMarker(state.focusedCommentId);
+  }, [state.viewMode, state.focusedCommentId]);
+
   return (
     <main className="fm-editor-pane" data-testid="fm-editor-pane" role="main">
+      {state.viewMode === "source" && (
+        <aside
+          className="fm-source-chip"
+          data-testid="fm-source-chip"
+          title="You can read here, but commenting only works in Rendered view."
+          aria-label="Source view, read-only review"
+        >
+          <span className="fm-source-chip-dot" aria-hidden="true" />
+          <span>Source view · read-only review</span>
+        </aside>
+      )}
       <div className="fm-document">
         {state.viewMode === "rendered" ? (
           <RenderedView
@@ -138,7 +175,7 @@ export function EditorPane() {
             handleRef={handleRef}
           />
         ) : (
-          <SourceView text={state.originalText || state.body} />
+          <SourceView ref={sourceRef} text={sourceText} />
         )}
       </div>
       {state.composer?.mode === "new" && state.viewMode === "rendered" && (

@@ -1,10 +1,41 @@
 .fm-editor-pane {
+  position: relative; /* anchor for the source-view chip */
   flex: 1;
   min-width: 0; /* allow shrinking below 720px when sidebar is open */
   background: var(--fm-editor-bg);
   overflow-y: auto;
   display: flex;
   justify-content: center;
+}
+
+/* "Source view · read-only review" chip (Phase 8). Sits in the editor
+   pane's top-left, outside the document column. Phase 9 stacks the
+   lost-anchor banner *above* this chip; the banner is a separate
+   element with its own positioning, so vertical stacking suffices. */
+.fm-source-chip {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  background: var(--fm-card-bg);
+  border: 0.5px solid var(--fm-divider-strong);
+  border-radius: 999px;
+  font-family: var(--fm-ui);
+  font-size: 11.5px;
+  color: var(--fm-chrome-muted);
+  box-shadow: var(--fm-card-shadow);
+  cursor: default;
+}
+
+.fm-source-chip-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--fm-prose-faint);
 }
 
 .fm-document {

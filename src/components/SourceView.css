@@ -1,10 +1,51 @@
+/* CodeMirror host. The pane around it provides padding; CodeMirror
+   only paints text + decorations. */
 .fm-source-view {
   font-family: var(--fm-mono);
   font-size: 13px;
   line-height: 1.65;
   color: var(--fm-prose-ink);
-  margin: 0;
+  user-select: text;
+}
+
+.fm-source-view .cm-editor {
+  background: transparent;
+}
+
+.fm-source-view .cm-content {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  user-select: text;
+}
+
+/* Marker dimming. Markers are HTML-comments, so they're "structural"
+   text, not user prose — the source view shows them so the format is
+   transparent, but at low contrast so they don't dominate the reading. */
+.fm-source-view .fm-cm-marker {
+  color: var(--fm-prose-faint);
+}
+
+/* Trailing comments-block tint. Subtle background so the eye picks up
+   that this is structured metadata rather than continued prose. */
+.fm-source-view .fm-cm-trailing-block {
+  background: rgba(0, 0, 0, 0.025);
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+[data-theme="dark"] .fm-source-view .fm-cm-trailing-block {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Flash on scroll-to-marker, applied via the data-flash-marker attr. */
+@keyframes fm-cm-flash {
+  0% {
+    background-color: var(--fm-anchor-bg-focus);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.fm-source-view[data-flash-marker] .fm-cm-marker {
+  animation: fm-cm-flash 600ms ease-out;
 }
