@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Hardened-runtime entitlements for the macOS notarized build.
+         Forgemark only writes user-chosen files (via Tauri's native
+         save dialog) and reads them back; nothing else needs special
+         capability. -->
+
+    <!-- Allow writing to user-selected files outside the app sandbox.
+         Tauri's dialog plugin uses a file-selection ticket, but the
+         app still needs com.apple.security.files.user-selected.read-
+         write to follow through on the chosen path. -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+
+    <!-- Allow JIT for the system webview's JavaScript engine. WKWebView
+         needs allow-jit on hardened runtime. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+
+    <!-- Forgemark fetches no third-party servers from the
+         renderer; tighten the network entitlement to client-only so
+         the app cannot accept inbound connections. -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+</dict>
+</plist>

@@ -1,6 +1,6 @@
 [package]
 name = "forgemark"
-version = "0.1.0"
+version = "1.0.0"
 description = "Collaborative review of markdown documents by humans and AI agents."
 authors = ["Forgemark contributors"]
 edition = "2021"

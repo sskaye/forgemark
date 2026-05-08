@@ -1,7 +1,7 @@
 {
   "name": "forgemark",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "description": "Collaborative review of markdown documents by humans and AI agents.",
   "scripts": {
@@ -16,6 +16,7 @@
     "test:e2e": "playwright test",
     "test:ai": "RUN_AI_TESTS=1 vitest run tests/ai/",
     "build:skill": "node scripts/build-skill.mjs",
+    "build:icons": "tauri icon assets/forgemark-icon.svg --output src-tauri/icons",
     "verify-ai-output": "node scripts/verify-ai-output.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

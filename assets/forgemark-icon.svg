@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Forgemark application icon source. The "bracketed pilcrow" glyph
+  per the design handoff: a paragraph mark held inside square
+  brackets, evoking both prose review (¶) and structured comment
+  containers ([ … ]).
+
+  The icon stack (.icns, .ico, the various PNG sizes Tauri emits) is
+  regenerated from this SVG via:
+    npm run icon
+
+  Edit this file when the icon needs to change; the generated assets
+  in src-tauri/icons/ are produced output and should not be
+  hand-edited.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Squircle background. The path is a Bezier-approximated
+       superellipse so the corners read as the standard macOS app
+       icon mask. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2A2A2D" />
+      <stop offset="100%" stop-color="#1B1B1B" />
+    </linearGradient>
+  </defs>
+  <path
+    d="M 512 0
+       C 230 0 0 230 0 512
+       C 0 794 230 1024 512 1024
+       C 794 1024 1024 794 1024 512
+       C 1024 230 794 0 512 0 Z"
+    fill="url(#bg)" />
+
+  <!-- Left bracket. -->
+  <path
+    d="M 280 256
+       L 280 768
+       L 360 768
+       L 360 728
+       L 320 728
+       L 320 296
+       L 360 296
+       L 360 256 Z"
+    fill="#FCFCFB" />
+
+  <!-- Right bracket. -->
+  <path
+    d="M 744 256
+       L 664 256
+       L 664 296
+       L 704 296
+       L 704 728
+       L 664 728
+       L 664 768
+       L 744 768 Z"
+    fill="#FCFCFB" />
+
+  <!-- Pilcrow (¶). Geometric, not a glyph from a font — that way the
+       icon renders identically without the Forgemark UI font. The
+       shape is the "double-stem" form: a closed bowl on the left,
+       two vertical stems descending from its top edge. -->
+  <!-- Left stem, descender. -->
+  <rect x="468" y="304" width="36" height="416" fill="#FCFCFB" />
+  <!-- Right stem, descender. -->
+  <rect x="544" y="304" width="36" height="416" fill="#FCFCFB" />
+  <!-- Bowl (the "P" loop). Approximated as a rounded rectangle that
+       sits flush against the inner edge of the left stem, ending
+       partway down. -->
+  <path
+    d="M 504 304
+       L 504 540
+       L 410 540
+       C 350 540 350 460 350 420
+       C 350 380 350 304 410 304
+       L 504 304 Z"
+    fill="#FCFCFB" />
+  <!-- Carve out the inside of the bowl so it reads as an open shape. -->
+  <ellipse cx="430" cy="420" rx="38" ry="58" fill="url(#bg)" />
+</svg>
