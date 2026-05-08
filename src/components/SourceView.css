@@ -1,0 +1,10 @@
+.fm-source-view {
+  font-family: var(--fm-mono);
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--fm-prose-ink);
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}

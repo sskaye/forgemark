@@ -33,6 +33,13 @@ export default [
         clearInterval: "readonly",
         requestAnimationFrame: "readonly",
         cancelAnimationFrame: "readonly",
+        performance: "readonly",
+        KeyboardEvent: "readonly",
+        HTMLElement: "readonly",
+        Element: "readonly",
+        Node: "readonly",
+        Event: "readonly",
+        navigator: "readonly",
       },
     },
     plugins: {

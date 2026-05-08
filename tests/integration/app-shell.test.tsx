@@ -1,13 +1,27 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { ThemeProvider } from "../../src/theme/ThemeProvider";
+import { DocumentProvider } from "../../src/state/DocumentProvider";
 import { AppShell } from "../../src/components/AppShell";
 import { LAYOUT } from "../../src/theme/tokens";
+
+// AppShell pulls in DocumentBindings which imports the Tauri plugins;
+// they don't actually run unless we fire a keydown, but the module
+// resolution still happens. Mock to a no-op so no test ever accidentally
+// invokes the real APIs.
+vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn() }));
+vi.mock("@tauri-apps/plugin-fs", () => ({
+  readTextFile: vi.fn(),
+  writeTextFile: vi.fn(),
+  stat: vi.fn(),
+}));
 
 function renderShell(preference: "light" | "dark" = "light") {
   return render(
     <ThemeProvider initialPreference={preference}>
-      <AppShell />
+      <DocumentProvider>
+        <AppShell />
+      </DocumentProvider>
     </ThemeProvider>,
   );
 }
