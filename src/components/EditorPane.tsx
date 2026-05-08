@@ -57,7 +57,7 @@ export function EditorPane() {
     return () => window.removeEventListener("keydown", onKey);
   }, [openComposer]);
 
-  const submitComposer = useCallback(
+  const submitComment = useCallback(
     (commentBody: string) => {
       const c = state.composer;
       if (!c || c.mode !== "new") return;
@@ -77,6 +77,39 @@ export function EditorPane() {
           timestamp: new Date().toISOString(),
           resolved: false,
           body: commentBody,
+        },
+      });
+    },
+    [state.composer, state.comments, author, dispatch],
+  );
+
+  // Phase 7: suggested-edit submission. The composer captures both the
+  // proposed replacement and an (optional) accompanying body. We apply
+  // the same anchor mark as a regular new comment, then store the
+  // Comment with `suggested_edit: { from, to }` and an optional body.
+  const submitSuggestion = useCallback(
+    (replacement: string, optionalBody: string) => {
+      const c = state.composer;
+      if (!c || c.mode !== "new") return;
+      const handle = handleRef.current;
+      if (!handle) return;
+      const id = nextCommentId(state.comments);
+      const newBody = handle.applyAnchor(c.from, c.to, id);
+      dispatch({
+        type: "addComment",
+        body: newBody,
+        comment: {
+          id,
+          anchor_text: c.selectionText,
+          context_before: c.contextBefore,
+          context_after: c.contextAfter,
+          author,
+          timestamp: new Date().toISOString(),
+          resolved: false,
+          // body is optional for suggestions per the schema; only
+          // include it when the user typed something.
+          ...(optionalBody.length > 0 ? { body: optionalBody } : {}),
+          suggested_edit: { from: c.selectionText, to: replacement },
         },
       });
     },
@@ -113,7 +146,8 @@ export function EditorPane() {
           x={state.composer.x}
           y={state.composer.y}
           selectionPreview={state.composer.selectionText}
-          onSubmit={submitComposer}
+          onSubmitComment={submitComment}
+          onSubmitSuggestion={submitSuggestion}
           onCancel={cancelComposer}
         />
       )}

@@ -45,6 +45,44 @@ export function removeMarkersFromBody(body: string, id: number): string {
   return body.replace(open, "").replace(close, "");
 }
 
+// Replace the text inside a comment's marker pair with `replacement`
+// and strip the marker pair from the body. Returns the new body plus the
+// previously-anchored text (so callers can compare against
+// suggested_edit.from for the lost-anchor branch).
+//
+// Returns null when no marker pair for the id exists (e.g. floating
+// note, or already removed).
+import { findMarkers, pairMarkers } from "./markers";
+
+export function replaceAnchoredText(
+  body: string,
+  id: number,
+  replacement: string,
+): { body: string; previousText: string } | null {
+  const markers = findMarkers(body);
+  const { pairs } = pairMarkers(markers);
+  const pair = pairs.find((p) => p.id === id);
+  if (!pair) return null;
+  const previousText = body.slice(pair.open.end, pair.close.start);
+  const before = body.slice(0, pair.open.start);
+  const after = body.slice(pair.close.end);
+  return { body: before + replacement + after, previousText };
+}
+
+// Strip the marker pair for `id` from the body without touching the
+// anchored text. Used by reject-suggestion (the prose stays exactly as
+// it was; only the markers and YAML record are removed).
+export function stripAnchoredMarkers(body: string, id: number): string | null {
+  const markers = findMarkers(body);
+  const { pairs } = pairMarkers(markers);
+  const pair = pairs.find((p) => p.id === id);
+  if (!pair) return null;
+  const before = body.slice(0, pair.open.start);
+  const inside = body.slice(pair.open.end, pair.close.start);
+  const after = body.slice(pair.close.end);
+  return before + inside + after;
+}
+
 // Pull a snippet of context from a plain-text source, trimmed to a
 // sentence-like boundary so the orphan-recovery pass (Phase 9) has
 // something useful to match.

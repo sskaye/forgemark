@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useDocument } from "../state/DocumentProvider";
 import { useAuthorName } from "../state/preferences";
 import { FMCard } from "./FMCard";
-import { removeMarkersFromBody } from "../format";
+import { removeMarkersFromBody, replaceAnchoredText, stripAnchoredMarkers } from "../format";
 import type { Comment, Reply } from "../format/types";
 import type { FilterMode, SortMode } from "../state/document";
 import "./Sidebar.css";
@@ -34,9 +34,10 @@ export function Sidebar() {
       const c = comments.find((x) => x.id === focusedCommentId);
       if (!c) return;
       const mod = e.metaKey || e.ctrlKey;
-      // ⌘R — reply
+      // ⌘R — reply (no-op on suggestion cards per Phase 7 design)
       if (mod && !e.shiftKey && e.key.toLowerCase() === "r") {
         e.preventDefault();
+        if (c.suggested_edit) return;
         dispatch({
           type: "openComposer",
           composer: { mode: "reply", commentId: c.id },
@@ -138,6 +139,49 @@ export function Sidebar() {
                     onDelete={() => {
                       const newBody = removeMarkersFromBody(state.body, c.id);
                       dispatch({ type: "deleteComment", commentId: c.id, body: newBody });
+                    }}
+                    onAcceptSuggestion={() => {
+                      if (!c.suggested_edit) return;
+                      const result = replaceAnchoredText(state.body, c.id, c.suggested_edit.to);
+                      if (!result) {
+                        dispatch({
+                          type: "error",
+                          message: `Couldn't find anchor for suggestion ${c.id}.`,
+                        });
+                        return;
+                      }
+                      // `from` mismatch routes to the lost-anchor flow
+                      // (Phase 9). Phase 7 surfaces an error banner with a
+                      // clear message rather than silently drifting; the
+                      // proper Reattach modal lands in Phase 9.
+                      if (result.previousText !== c.suggested_edit.from) {
+                        dispatch({
+                          type: "error",
+                          message:
+                            "Anchored text has changed since the suggestion was made; reattach in a future build.",
+                        });
+                        return;
+                      }
+                      dispatch({
+                        type: "acceptSuggestion",
+                        commentId: c.id,
+                        body: result.body,
+                      });
+                    }}
+                    onRejectSuggestion={() => {
+                      const newBody = stripAnchoredMarkers(state.body, c.id);
+                      if (newBody == null) {
+                        dispatch({
+                          type: "error",
+                          message: `Couldn't find anchor for suggestion ${c.id}.`,
+                        });
+                        return;
+                      }
+                      dispatch({
+                        type: "rejectSuggestion",
+                        commentId: c.id,
+                        body: newBody,
+                      });
                     }}
                     onReplyEdit={(index) => {
                       const reply = c.replies?.[index];

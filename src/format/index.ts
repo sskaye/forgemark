@@ -21,5 +21,7 @@ export {
   nextCommentId,
   insertMarkersIntoBody,
   removeMarkersFromBody,
+  replaceAnchoredText,
+  stripAnchoredMarkers,
   contextSnippet,
 } from "./compose";

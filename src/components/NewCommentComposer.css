@@ -108,3 +108,59 @@
   outline: 0.5px solid var(--fm-accent);
   outline-offset: 2px;
 }
+
+.fm-composer-toggle {
+  font-family: var(--fm-ui);
+  font-size: 11.5px;
+  color: var(--fm-chrome-muted);
+  background: transparent;
+  border: 0.5px solid var(--fm-divider-strong);
+  border-radius: 5px;
+  padding: 3px 9px;
+  cursor: default;
+}
+
+.fm-composer-toggle.is-active {
+  color: var(--fm-suggest-text);
+  background: var(--fm-suggest-bg);
+  border-color: var(--fm-suggest-stroke);
+}
+
+.fm-composer-toggle:hover:not(.is-active) {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--fm-chrome-text);
+}
+
+[data-theme="dark"] .fm-composer-toggle:hover:not(.is-active) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.fm-composer-suggest-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fm-composer-field-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--fm-chrome-muted);
+  margin-top: 2px;
+}
+
+.fm-composer-readonly {
+  font-family: var(--fm-prose);
+  font-size: 13px;
+  color: var(--fm-prose-muted);
+  background: var(--fm-anchor-bg);
+  padding: 6px 8px;
+  border-radius: 4px;
+  text-decoration: line-through;
+  word-break: break-word;
+}
+
+.fm-composer-body-optional {
+  font-size: 12.5px;
+}

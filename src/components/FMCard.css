@@ -208,6 +208,18 @@
   background: rgba(255, 69, 58, 0.1);
 }
 
+.fm-card-action-accept {
+  font-weight: 600;
+  color: var(--fm-accent-text);
+  background: var(--fm-success);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+.fm-card-action-accept:hover {
+  background: var(--fm-success);
+  filter: brightness(1.05);
+}
+
 /* Collapsed (resolved & not focused) card variant. */
 .fm-card.is-collapsed {
   padding: 8px 12px;

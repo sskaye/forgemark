@@ -144,6 +144,8 @@ export type DocumentAction =
   | { type: "toggleResolved"; commentId: number }
   | { type: "deleteComment"; commentId: number; body: string }
   | { type: "deleteReply"; commentId: number; replyIndex: number }
+  | { type: "acceptSuggestion"; commentId: number; body: string }
+  | { type: "rejectSuggestion"; commentId: number; body: string }
   | { type: "setFilter"; filter: FilterMode }
   | { type: "setSort"; sort: SortMode };
 
@@ -275,6 +277,21 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
       });
       return { ...state, comments, dirty: true, composer: null };
     }
+    case "acceptSuggestion":
+    case "rejectSuggestion":
+      // Both terminal (per proposal §117): remove the comment and update
+      // the body. Caller computed the new body — accept replaces the
+      // anchored text with `to`; reject leaves the anchored text in place
+      // and just strips the markers.
+      return {
+        ...state,
+        body: action.body,
+        comments: state.comments.filter((c) => c.id !== action.commentId),
+        dirty: true,
+        focusedCommentId:
+          state.focusedCommentId === action.commentId ? null : state.focusedCommentId,
+        composer: null,
+      };
     case "setFilter":
       return { ...state, filter: action.filter };
     case "setSort":

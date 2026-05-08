@@ -23,6 +23,10 @@ type Props = {
   onEdit: () => void;
   onResolve: () => void;
   onDelete: () => void;
+  // Phase 7: suggested-edit lifecycle handlers. Only invoked when
+  // `comment.suggested_edit` is present.
+  onAcceptSuggestion: () => void;
+  onRejectSuggestion: () => void;
   onReplyEdit: (index: number) => void;
   onReplyDelete: (index: number) => void;
   onComposerSubmit: (body: string) => void;
@@ -49,12 +53,15 @@ export function FMCard({
   onEdit,
   onResolve,
   onDelete,
+  onAcceptSuggestion,
+  onRejectSuggestion,
   onReplyEdit,
   onReplyDelete,
   onComposerSubmit,
   onComposerCancel,
 }: Props) {
   const isOwn = comment.author === authorName;
+  const isSuggestion = Boolean(comment.suggested_edit);
   const showCollapsed = comment.resolved && !focused && !replying && !editing;
 
   const onKey = (e: KeyboardEvent<HTMLElement>) => {
@@ -167,53 +174,107 @@ export function FMCard({
       )}
       {focused && !editing && !replying && editingReplyIndex === null && (
         <div className="fm-card-actions" role="toolbar" aria-label="Comment actions">
-          <button
-            type="button"
-            className="fm-card-action"
-            onClick={(e) => {
-              e.stopPropagation();
-              onReply();
-            }}
-            data-testid={`fm-card-reply-${comment.id}`}
-          >
-            Reply
-          </button>
-          {isOwn && (
-            <button
-              type="button"
-              className="fm-card-action"
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit();
-              }}
-              data-testid={`fm-card-edit-${comment.id}`}
-            >
-              Edit
-            </button>
+          {isSuggestion ? (
+            <>
+              <button
+                type="button"
+                className="fm-card-action fm-card-action-accept"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAcceptSuggestion();
+                }}
+                data-testid={`fm-card-accept-${comment.id}`}
+              >
+                ✓ Accept
+              </button>
+              <button
+                type="button"
+                className="fm-card-action"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRejectSuggestion();
+                }}
+                data-testid={`fm-card-reject-${comment.id}`}
+              >
+                Reject
+              </button>
+              {isOwn && (
+                <button
+                  type="button"
+                  className="fm-card-action"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit();
+                  }}
+                  data-testid={`fm-card-edit-${comment.id}`}
+                >
+                  Edit
+                </button>
+              )}
+              <div className="fm-card-actions-spacer" />
+              <button
+                type="button"
+                className="fm-card-action fm-card-action-danger"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                data-testid={`fm-card-delete-${comment.id}`}
+              >
+                Delete
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="fm-card-action"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onReply();
+                }}
+                data-testid={`fm-card-reply-${comment.id}`}
+              >
+                Reply
+              </button>
+              {isOwn && (
+                <button
+                  type="button"
+                  className="fm-card-action"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit();
+                  }}
+                  data-testid={`fm-card-edit-${comment.id}`}
+                >
+                  Edit
+                </button>
+              )}
+              <button
+                type="button"
+                className="fm-card-action"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onResolve();
+                }}
+                data-testid={`fm-card-resolve-${comment.id}`}
+              >
+                {comment.resolved ? "Reopen" : "Resolve"}
+              </button>
+              <div className="fm-card-actions-spacer" />
+              <button
+                type="button"
+                className="fm-card-action fm-card-action-danger"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                data-testid={`fm-card-delete-${comment.id}`}
+              >
+                Delete
+              </button>
+            </>
           )}
-          <button
-            type="button"
-            className="fm-card-action"
-            onClick={(e) => {
-              e.stopPropagation();
-              onResolve();
-            }}
-            data-testid={`fm-card-resolve-${comment.id}`}
-          >
-            {comment.resolved ? "Reopen" : "Resolve"}
-          </button>
-          <div className="fm-card-actions-spacer" />
-          <button
-            type="button"
-            className="fm-card-action fm-card-action-danger"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            data-testid={`fm-card-delete-${comment.id}`}
-          >
-            Delete
-          </button>
         </div>
       )}
     </article>
