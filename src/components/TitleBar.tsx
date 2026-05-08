@@ -54,13 +54,16 @@ function SettingsButton({ onClick }: { onClick: () => void }) {
       data-testid="fm-titlebar-settings"
     >
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-        <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.1" />
+        {/* 6-tooth gear: outer R=6.5, inner r=4.5, hub r=2.5. Each
+            tooth spans 30° with a 30° gap; vertices alternate
+            outer-outer-inner-inner around the circle. */}
         <path
-          d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4M12.6 12.6l-1.4-1.4M4.8 4.8L3.4 3.4"
+          d="M14.28 6.32 L14.28 9.68 L12.35 9.16 L11.18 11.18 L12.60 12.60 L9.68 14.28 L9.16 12.35 L6.84 12.35 L6.32 14.28 L3.40 12.60 L4.82 11.18 L3.65 9.16 L1.72 9.68 L1.72 6.32 L3.65 6.84 L4.82 4.82 L3.40 3.40 L6.32 1.72 L6.84 3.65 L9.16 3.65 L9.68 1.72 L12.60 3.40 L11.18 4.82 L12.35 6.84 Z"
           stroke="currentColor"
           strokeWidth="1.1"
-          strokeLinecap="round"
+          strokeLinejoin="round"
         />
+        <circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.1" />
       </svg>
     </button>
   );

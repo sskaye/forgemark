@@ -45,12 +45,13 @@ describe("Phase 11 — Settings modal", () => {
     expect(await screen.findByTestId("fm-settings-modal")).toBeInTheDocument();
   });
 
-  it("AI Participation section exposes the placeholder line", async () => {
+  it("AI Participation section exposes both skill download buttons (Phase 12)", async () => {
     renderApp();
     fireEvent.click(screen.getByTestId("fm-titlebar-settings"));
-    expect(await screen.findByTestId("fm-settings-ai-placeholder")).toHaveTextContent(
-      /skill download arrives with a future build/i,
+    expect(await screen.findByTestId("fm-settings-skill-claude")).toHaveTextContent(
+      /Download for Claude/i,
     );
+    expect(screen.getByTestId("fm-settings-skill-codex")).toHaveTextContent(/Download for Codex/i);
   });
 
   it("Author name change persists to localStorage", async () => {

@@ -76,6 +76,30 @@ export default [
   },
   prettier,
   {
+    // Node-side scripts run via `node`/`tsx`, not the renderer. They
+    // need the Node globals enabled.
+    files: ["scripts/**/*.{mjs,js,ts}"],
+    languageOptions: {
+      globals: {
+        process: "readonly",
+        console: "readonly",
+        Buffer: "readonly",
+        __dirname: "readonly",
+        __filename: "readonly",
+      },
+    },
+  },
+  {
+    // The renderer uses `fetch` (browser) but eslint's default lib
+    // doesn't expose it. Add it alongside the other browser globals.
+    files: ["src/**/*.{ts,tsx}"],
+    languageOptions: {
+      globals: {
+        fetch: "readonly",
+      },
+    },
+  },
+  {
     ignores: [
       "dist",
       "node_modules",
