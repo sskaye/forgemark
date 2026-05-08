@@ -10,9 +10,32 @@ import { TaskList } from "@tiptap/extension-task-list";
 import { TaskItem } from "@tiptap/extension-task-item";
 import { Markdown } from "tiptap-markdown";
 import { useEffect, useMemo, useRef } from "react";
-import { bodyWithAnchorSpans } from "../format";
+import { bodyFromAnchorSpans, bodyWithAnchorSpans } from "../format";
 import { AnchorMark } from "./AnchorMark";
 import "./RenderedView.css";
+
+// Captured selection metadata used by the new-comment composer. Phase 5.
+export type CapturedSelection = {
+  from: number;
+  to: number;
+  text: string;
+  contextBefore: string;
+  contextAfter: string;
+  insideCode: boolean;
+  // Editor-local viewport coordinates of the selection's *end* — handy
+  // for positioning the composer just below the highlighted text.
+  rect: { left: number; bottom: number };
+};
+
+export type RenderedViewHandle = {
+  // Captures the current selection. Returns null when the selection is
+  // empty / collapsed. The caller decides whether to open the composer.
+  captureSelection(): CapturedSelection | null;
+  // Apply a paired anchor marker pair to the given range and return the
+  // updated body (with marker comments restored from the rendered span
+  // wrappers). Used by the composer on submit.
+  applyAnchor(from: number, to: number, id: number): string;
+};
 
 type Props = {
   // Markdown body of the document. Marker comments (`<!-- fmc:N -->...
@@ -29,6 +52,9 @@ type Props = {
   hoveredCommentId: number | null;
   onAnchorClick: (id: number | null) => void;
   onAnchorHover: (id: number | null) => void;
+  // Phase 5 composer trigger handle. The parent attaches this and calls
+  // `current.captureSelection()` from the ⌘⌥M shortcut handler.
+  handleRef?: React.MutableRefObject<RenderedViewHandle | null>;
 };
 
 // Phase 4 rendered view. Inline anchor spans are pre-rendered into the
@@ -48,6 +74,7 @@ export function RenderedView({
   hoveredCommentId,
   onAnchorClick,
   onAnchorHover,
+  handleRef,
 }: Props) {
   const lastInitialRef = useRef("");
   const initialMarkdown = useMemo(() => bodyWithAnchorSpans(body), [body]);
@@ -94,7 +121,12 @@ export function RenderedView({
         markdown?: { getMarkdown?: () => string };
       };
       const md = storage.markdown?.getMarkdown?.() ?? "";
-      onEdit(md);
+      // Convert any anchor `<span data-anchor-id>` wrappers back to the
+      // canonical marker comments so the document state's `body` always
+      // holds the format-layer source of truth (Phase 5). This is the
+      // single editor → state boundary; the inverse `bodyWithAnchorSpans`
+      // is applied on the way back in.
+      onEdit(bodyFromAnchorSpans(md));
     },
   });
 
@@ -168,7 +200,83 @@ export function RenderedView({
     });
   }, [editor, focusedCommentId, hoveredCommentId, body]);
 
+  // Phase 5: expose composer-supporting methods to the parent so the
+  // EditorPane can capture the selection and apply the anchor mark.
+  useEffect(() => {
+    if (!handleRef) return;
+    handleRef.current = {
+      captureSelection: () => {
+        if (!editor) return null;
+        const { state, view } = editor;
+        const { from, to, empty } = state.selection;
+        if (empty) return null;
+        const text = state.doc.textBetween(from, to, " ", " ");
+        if (text.trim().length === 0) return null;
+        const insideCode = isSelectionInsideCode(editor);
+        const beforeLen = Math.min(120, from);
+        const afterLen = Math.min(120, state.doc.content.size - to);
+        const contextBefore = state.doc.textBetween(Math.max(0, from - beforeLen), from, " ", " ");
+        const contextAfter = state.doc.textBetween(
+          to,
+          Math.min(state.doc.content.size, to + afterLen),
+          " ",
+          " ",
+        );
+        const coords = view.coordsAtPos(to);
+        return {
+          from,
+          to,
+          text,
+          contextBefore,
+          contextAfter,
+          insideCode,
+          rect: { left: coords.left, bottom: coords.bottom },
+        };
+      },
+      applyAnchor: (from: number, to: number, id: number) => {
+        if (!editor) return body;
+        // Apply the AnchorMark to the captured range. We don't need the
+        // editor to be `editable: true` for chained commands — Tiptap
+        // runs them via dispatchTransaction directly.
+        editor
+          .chain()
+          .setTextSelection({ from, to })
+          .setMark("anchor", { anchorId: String(id) })
+          .run();
+        const storage = editor.storage as unknown as {
+          markdown?: { getMarkdown?: () => string };
+        };
+        const md = storage.markdown?.getMarkdown?.() ?? "";
+        // Tiptap-markdown emits `<span data-anchor-id="N">…</span>` for
+        // the AnchorMark. Convert back to canonical marker comments.
+        return bodyFromAnchorSpans(md);
+      },
+    };
+    return () => {
+      if (handleRef.current) handleRef.current = null;
+    };
+  }, [editor, handleRef, body]);
+
   return (
     <EditorContent editor={editor} className="fm-rendered-view" data-testid="fm-rendered-view" />
   );
+}
+
+// Walk the ProseMirror selection's nearest enclosing nodes to detect
+// whether it lives inside a code block or an inline code mark. Used by
+// the composer trigger to refuse comments inside code regions (mirrors
+// the parser-level rule from Phase 3).
+function isSelectionInsideCode(editor: NonNullable<ReturnType<typeof useEditor>>): boolean {
+  const { state } = editor;
+  const { from, to } = state.selection;
+  let inside = false;
+  state.doc.nodesBetween(from, to, (node) => {
+    if (node.type.name === "codeBlock") inside = true;
+    // Inline code is a Mark applied to text nodes.
+    if (node.isText && node.marks.some((m) => m.type.name === "code")) {
+      inside = true;
+    }
+    return !inside; // stop descending once we know
+  });
+  return inside;
 }

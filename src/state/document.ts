@@ -44,6 +44,29 @@ export type DocumentState = {
   // wires click-to-focus and hover-symmetry; later phases reuse them.
   focusedCommentId: number | null;
   hoveredCommentId: number | null;
+  // Composer state: when non-null, the new-comment composer is open
+  // beside the captured selection. Phase 5.
+  composer: ComposerState | null;
+};
+
+// Captured selection at the moment the composer opens. Held in document
+// state so submission can apply the marker pair at the same offsets even
+// if the user scrolls or clicks elsewhere.
+export type ComposerState = {
+  // ProseMirror positions in the editor at composer-open time.
+  from: number;
+  to: number;
+  // Plain text of the selection — used for `anchor_text` and as a
+  // user-visible reminder in the composer chrome.
+  selectionText: string;
+  // Surrounding plain-text context, used for `context_before` /
+  // `context_after` on the new comment.
+  contextBefore: string;
+  contextAfter: string;
+  // Editor pane viewport coordinates the composer should anchor near.
+  // Stored in client-pixel space (window-relative).
+  x: number;
+  y: number;
 };
 
 export const INITIAL_STATE: DocumentState = {
@@ -58,6 +81,7 @@ export const INITIAL_STATE: DocumentState = {
   error: null,
   focusedCommentId: null,
   hoveredCommentId: null,
+  composer: null,
 };
 
 export type DocumentAction =
@@ -77,7 +101,10 @@ export type DocumentAction =
   | { type: "error"; message: string }
   | { type: "dismissError" }
   | { type: "setFocusedComment"; id: number | null }
-  | { type: "setHoveredComment"; id: number | null };
+  | { type: "setHoveredComment"; id: number | null }
+  | { type: "openComposer"; composer: ComposerState }
+  | { type: "closeComposer" }
+  | { type: "addComment"; comment: Comment; body: string };
 
 export function reduceDocument(state: DocumentState, action: DocumentAction): DocumentState {
   switch (action.type) {
@@ -94,6 +121,7 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
         error: null,
         focusedCommentId: null,
         hoveredCommentId: null,
+        composer: null,
       };
     case "edit":
       // No-op if the body hasn't actually changed (Tiptap can fire updates
@@ -126,6 +154,20 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
     case "setHoveredComment":
       if (state.hoveredCommentId === action.id) return state;
       return { ...state, hoveredCommentId: action.id };
+    case "openComposer":
+      return { ...state, composer: action.composer };
+    case "closeComposer":
+      return { ...state, composer: null };
+    case "addComment":
+      return {
+        ...state,
+        body: action.body,
+        comments: [...state.comments, action.comment].sort((a, b) => a.id - b.id),
+        dirty: true,
+        composer: null,
+        focusedCommentId: action.comment.id,
+        error: null,
+      };
     default:
       return state;
   }

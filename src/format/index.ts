@@ -16,4 +16,5 @@ export {
   type ParsedFile,
 } from "./types";
 export { escapeContent, unescapeContent } from "./escape";
-export { bodyWithAnchorSpans } from "./markers-display";
+export { bodyWithAnchorSpans, bodyFromAnchorSpans } from "./markers-display";
+export { nextCommentId, insertMarkersIntoBody, contextSnippet } from "./compose";

@@ -16,3 +16,24 @@ export function bodyWithAnchorSpans(body: string): string {
     .replace(MARKER_OPEN_RE_G, (_full, id: string) => `<span data-anchor-id="${id}">`)
     .replace(MARKER_CLOSE_RE_G, () => `</span>`);
 }
+
+// Reverse direction: convert anchor `<span data-anchor-id="N">…</span>`
+// wrappers in markdown text back to the canonical marker comments.
+//
+// We track a stack so each closing `</span>` becomes the close marker for
+// the most recently opened anchor. Other `<span>`s in the user's prose
+// (without `data-anchor-id`) are left alone.
+const ANCHOR_OPEN_OR_CLOSE = /<span data-anchor-id="(\d+)"[^>]*>|<\/span>/g;
+
+export function bodyFromAnchorSpans(text: string): string {
+  const stack: string[] = [];
+  return text.replace(ANCHOR_OPEN_OR_CLOSE, (match, id?: string) => {
+    if (id) {
+      stack.push(id);
+      return `<!-- fmc:${id} -->`;
+    }
+    const popped = stack.pop();
+    if (!popped) return match; // unrelated </span>; leave it
+    return `<!-- /fmc:${popped} -->`;
+  });
+}
