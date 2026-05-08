@@ -47,12 +47,28 @@ The canonical spec lives in [`assets/forgemark-skill/SKILL.md`](assets/forgemark
 
 The Settings → AI Participation panel exposes two download buttons:
 
-- **Download for Claude (`.skill`)** — install via Claude Code's standard skill flow.
-- **Download for Codex (`.zip`)** — extract to `.agents/skills/forgemark/` (repo-local) or `~/.agents/skills/forgemark/` (user-global).
+- **Download for Claude (`.skill`)**
+- **Download for Codex (`.zip`)**
 
 Both files contain identical content; the extension is what your AI tool expects. With the skill installed, asking your agent to "add a comment", "address that review note", or "suggest a tighter wording" produces well-formed Forgemark output that the app reads back without complaint.
 
-The skill is also a regular zip — feed `SKILL.md` to any LLM as system context if your tool doesn't have a skill mechanism.
+### Install in Claude Code (CLI)
+
+```bash
+unzip ~/Downloads/forgemark-skill.skill -d ~/.claude/skills/forgemark
+```
+
+User-global, available in every project. Restart any running Claude Code sessions; new sessions auto-discover the skill on startup. To verify, type `/` in Claude Code — `/forgemark` should appear in the autocomplete.
+
+For project-local install (commit alongside the repo so teammates pick it up automatically), extract to `<repo>/.claude/skills/forgemark/` instead. Project-local takes precedence over user-global if both exist.
+
+### Install in Codex CLI
+
+Extract the `.zip` to `~/.agents/skills/forgemark/` (user-global) or `.agents/skills/forgemark/` in a repo (project-local). Codex picks it up on the next run.
+
+### Other tools
+
+The skill is a regular zip. Extract it and feed `SKILL.md` to your agent as system context if your tool doesn't have a skill mechanism.
 
 ## Build
 
