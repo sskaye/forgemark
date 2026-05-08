@@ -4,6 +4,9 @@ import { Sidebar } from "./Sidebar";
 import { EditorPane } from "./EditorPane";
 import { ErrorBanner } from "./ErrorBanner";
 import { ReattachModal } from "./ReattachModal";
+import { FileConflictBanner } from "./FileConflictBanner";
+import { EditDuringOpenModal } from "./EditDuringOpenModal";
+import { SaveConflictModal } from "./SaveConflictModal";
 import { useDocument } from "../state/DocumentProvider";
 import { DocumentBindings } from "../state/DocumentBindings";
 import { classifyAnchors, insertMarkersIntoBody, removeMarkersFromBody } from "../format";
@@ -48,6 +51,54 @@ export function AppShell() {
         onToggleSidebar={() => setSidebarOpen((s) => !s)}
       />
       <ErrorBanner />
+      {/* Phase 10 — file-conflict surfaces. The banner shows when the
+          file changed on disk but we have no unsaved work; the
+          edit-during-open modal blocks when there *is* unsaved work; the
+          save-conflict modal opens when ⌘S is pressed mid-conflict. The
+          three-way decision lives here so DocumentBindings can stay
+          focused on side effects. */}
+      {state.externalChange != null && !state.dirty && !state.saveConflictOpen && (
+        <FileConflictBanner
+          onKeepYours={() => dispatch({ type: "dismissExternalChange" })}
+          onReloadFromDisk={() => dispatch({ type: "applyExternalChange" })}
+        />
+      )}
+      {state.externalChange != null &&
+        state.dirty &&
+        !state.editDuringOpenDismissed &&
+        !state.saveConflictOpen && (
+          <EditDuringOpenModal
+            state={state}
+            onCancel={() => dispatch({ type: "dismissEditDuringOpen" })}
+            onKeepYours={() => dispatch({ type: "dismissExternalChange" })}
+            onReloadFromDisk={() => dispatch({ type: "applyExternalChange" })}
+          />
+        )}
+      {/* Banner stays visible even with unsaved work once the user
+          clicks Cancel on the edit-during-open modal — the conflict is
+          still pending and we want to keep it surfaced. */}
+      {state.externalChange != null &&
+        state.dirty &&
+        state.editDuringOpenDismissed &&
+        !state.saveConflictOpen && (
+          <FileConflictBanner
+            onKeepYours={() => dispatch({ type: "dismissExternalChange" })}
+            onReloadFromDisk={() => dispatch({ type: "applyExternalChange" })}
+          />
+        )}
+      {state.saveConflictOpen && state.externalChange != null && (
+        <SaveConflictModal
+          state={state}
+          onCancel={() => dispatch({ type: "dismissSaveConflict" })}
+          onOverwrite={() => {
+            // Drop the externalChange (so the next save isn't gated)
+            // and request a save. DocumentBindings owns the file IO
+            // and consumes the request via a useEffect on pendingSave.
+            dispatch({ type: "dismissExternalChange" });
+            dispatch({ type: "requestSave" });
+          }}
+        />
+      )}
       <div className="fm-app-body">
         <EditorPane anchorStatuses={anchorStatuses} />
         {sidebarOpen && <Sidebar anchorStatuses={anchorStatuses} />}

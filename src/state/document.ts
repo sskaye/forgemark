@@ -19,6 +19,7 @@
 // resolve toggling, deletion, and sidebar filter / sort.
 
 import type { Comment, Reply } from "../format/types";
+import type { FileFingerprint } from "../services/conflict";
 
 export type DocumentState = {
   filePath: string | null;
@@ -36,10 +37,41 @@ export type DocumentState = {
   // Phase 9: which orphaned comment, if any, is being reattached. The
   // modal renders against the comment with this id. Reset on file open.
   reattachTarget: number | null;
+  // Phase 10: a pending external change detected by the file watcher.
+  // null when the in-memory state is in sync with the disk (or the
+  // user has explicitly chosen to keep their version).
+  externalChange: ExternalChange | null;
+  // Phase 10: true while the save-conflict modal is open (set by
+  // DocumentBindings when ⌘S is pressed and externalChange != null).
+  saveConflictOpen: boolean;
+  // Phase 10: tracks whether the user has cancelled the
+  // edit-during-open modal for the *current* externalChange. Reset
+  // when a new externalChange is detected. Without this, every
+  // re-render would re-open the modal.
+  editDuringOpenDismissed: boolean;
+  // Phase 10: a one-shot request to run save logic. The save-conflict
+  // modal sets this when the user picks Overwrite — DocumentBindings
+  // is the only thing with file-IO services, so the request travels
+  // through state to reach it.
+  pendingSave: boolean;
   // Sidebar UI controls (Phase 6). Persist within a session; reset on
   // file open.
   filter: FilterMode;
   sort: SortMode;
+};
+
+// Phase 10: the disk content that conflicts with the in-memory state.
+// Held verbatim so "Reload from disk" can replace the state, and parsed
+// alongside so the diff strip in the save-conflict modal can compare
+// comments and body.
+export type ExternalChange = {
+  text: string;
+  body: string;
+  comments: Comment[];
+  fingerprint: FileFingerprint;
+  // Set when the disk bytes failed to parse — drives the "Unknown
+  // changes" fallback in the save-conflict modal.
+  parseError?: string;
 };
 
 // Composer state. Tagged-union by mode:
@@ -111,6 +143,10 @@ export const INITIAL_STATE: DocumentState = {
   hoveredCommentId: null,
   composer: null,
   reattachTarget: null,
+  externalChange: null,
+  saveConflictOpen: false,
+  editDuringOpenDismissed: false,
+  pendingSave: false,
   filter: { kind: "all" },
   sort: "doc",
 };
@@ -161,6 +197,21 @@ export type DocumentAction =
   | { type: "convertToFloating"; commentId: number; body: string }
   | { type: "openReattach"; commentId: number }
   | { type: "closeReattach" }
+  | {
+      type: "externalChangeDetected";
+      text: string;
+      body: string;
+      comments: Comment[];
+      fingerprint: FileFingerprint;
+      parseError?: string;
+    }
+  | { type: "dismissExternalChange" }
+  | { type: "applyExternalChange" }
+  | { type: "openSaveConflict" }
+  | { type: "dismissSaveConflict" }
+  | { type: "dismissEditDuringOpen" }
+  | { type: "requestSave" }
+  | { type: "clearPendingSave" }
   | { type: "setFilter"; filter: FilterMode }
   | { type: "setSort"; sort: SortMode };
 
@@ -182,6 +233,10 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
         hoveredCommentId: null,
         composer: null,
         reattachTarget: null,
+        externalChange: null,
+        saveConflictOpen: false,
+        editDuringOpenDismissed: false,
+        pendingSave: false,
         // Filter / sort persist across loads — they're a viewing
         // preference, not a document property.
       };
@@ -199,6 +254,7 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
         body: action.body,
         dirty: false,
         error: null,
+        pendingSave: false,
       };
     case "setViewMode":
       return { ...state, viewMode: action.viewMode };
@@ -360,6 +416,66 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
       return { ...state, reattachTarget: action.commentId };
     case "closeReattach":
       return { ...state, reattachTarget: null };
+    case "externalChangeDetected":
+      return {
+        ...state,
+        externalChange: {
+          text: action.text,
+          body: action.body,
+          comments: action.comments,
+          fingerprint: action.fingerprint,
+          parseError: action.parseError,
+        },
+        // A new conflict resets the dismiss bit — if the user had
+        // already cancelled the modal for an *older* externalChange,
+        // we still want them to see this fresh one.
+        editDuringOpenDismissed: false,
+      };
+    case "dismissExternalChange":
+      // "Keep your version" — drop the disk content from state. The
+      // user has chosen their bytes. ⌘S will overwrite normally.
+      return {
+        ...state,
+        externalChange: null,
+        saveConflictOpen: false,
+        editDuringOpenDismissed: false,
+      };
+    case "applyExternalChange": {
+      // "Reload from disk" — replace state with the disk bytes. This
+      // mirrors the `load` reducer minus the path/filename plumbing
+      // (the file is the same; only its content changed).
+      const ec = state.externalChange;
+      if (!ec) return state;
+      return {
+        ...state,
+        originalText: ec.text,
+        body: ec.body,
+        comments: ec.comments,
+        dirty: false,
+        error: null,
+        focusedCommentId: null,
+        hoveredCommentId: null,
+        composer: null,
+        reattachTarget: null,
+        externalChange: null,
+        saveConflictOpen: false,
+        editDuringOpenDismissed: false,
+      };
+    }
+    case "openSaveConflict":
+      return { ...state, saveConflictOpen: true };
+    case "dismissSaveConflict":
+      // Cancel — keep the externalChange pending so the banner
+      // remains and a subsequent ⌘S re-opens this modal.
+      return { ...state, saveConflictOpen: false };
+    case "dismissEditDuringOpen":
+      // Cancel — keep externalChange pending; banner shows even with
+      // unsaved work, and a subsequent ⌘S still hits save-conflict.
+      return { ...state, editDuringOpenDismissed: true };
+    case "requestSave":
+      return { ...state, pendingSave: true };
+    case "clearPendingSave":
+      return { ...state, pendingSave: false };
     case "setFilter":
       return { ...state, filter: action.filter };
     case "setSort":

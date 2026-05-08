@@ -11,6 +11,7 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: vi.fn(),
   writeTextFile: vi.fn(),
   stat: vi.fn(),
+  watch: vi.fn(() => Promise.resolve(() => {})),
 }));
 
 beforeEach(() => {
