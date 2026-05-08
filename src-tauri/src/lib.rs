@@ -12,14 +12,31 @@
 // items (text-size, sidebar) live in Settings; comment-card actions
 // (Reply, Resolve, Edit, Delete, Reattach) live on the card itself.
 
+use std::sync::Mutex;
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-use tauri::Emitter;
+use tauri::{Emitter, Manager, RunEvent};
+
+// Queue of file paths that arrived before the webview was ready to
+// receive them. macOS fires RunEvent::Opened during cold-start (when
+// the user right-clicks → Open With → Forgemark on a file), often
+// before the JS event listener is attached. The frontend's
+// `take_pending_files` command drains this on mount.
+#[derive(Default)]
+struct PendingFiles(Mutex<Vec<String>>);
+
+#[tauri::command]
+fn take_pending_files(state: tauri::State<PendingFiles>) -> Vec<String> {
+    let mut guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
+    std::mem::take(&mut *guard)
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .manage(PendingFiles::default())
+        .invoke_handler(tauri::generate_handler![take_pending_files])
         .setup(|app| {
             let menu = build_menu(app.handle())?;
             app.set_menu(menu)?;
@@ -29,8 +46,30 @@ pub fn run() {
             });
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    // RunEvent::Opened fires when macOS hands the app one or more
+    // files (Finder Open With, drag-onto-dock, double-click on a
+    // file association). We forward each path through a single
+    // `forgemark:open-path` event the JS side already listens for.
+    // For cold-start launches the webview may not have its listener
+    // attached yet, so we also stash the paths in PendingFiles for
+    // the JS `take_pending_files` invoke to claim on mount.
+    app.run(|app, event| {
+        if let RunEvent::Opened { urls } = event {
+            let pending = app.state::<PendingFiles>();
+            let mut guard = pending.0.lock().unwrap_or_else(|e| e.into_inner());
+            for url in urls {
+                if let Ok(path) = url.to_file_path() {
+                    let path_str = path.to_string_lossy().to_string();
+                    // Best-effort live emit (no-op if no listener).
+                    let _ = app.emit("forgemark:open-path", path_str.clone());
+                    guard.push(path_str);
+                }
+            }
+        }
+    });
 }
 
 fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {

@@ -14,6 +14,7 @@
 // same surface area as production without needing a Tauri runtime.
 
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 
 // Many menu ids map straight to a keyboard shortcut. Rather than
 // duplicate the keyboard handler logic, we synthesize a keydown event
@@ -53,12 +54,46 @@ export async function startMenuBridge(): Promise<UnlistenFn | null> {
   // (e.g. running in a browser dev server). We return null so callers
   // can gracefully no-op.
   try {
-    return await listen<string>("forgemark:menu", (event) => {
+    const unlistenMenu = await listen<string>("forgemark:menu", (event) => {
       route(event.payload);
     });
+
+    // macOS file-association handling. RunEvent::Opened fires from
+    // Rust whenever Finder hands the app a file (Open With, drag-on-
+    // dock, double-click). For runtime opens the listener picks them
+    // up live; for cold-start launches the URL may have arrived
+    // before the listener was attached, so we also drain the Rust-
+    // side queue via take_pending_files().
+    const unlistenOpen = await listen<string>("forgemark:open-path", (event) => {
+      dispatchOpenPath(event.payload);
+    });
+
+    // Drain any cold-start queue. invoke() returns the array and
+    // clears the Rust state in one round-trip.
+    try {
+      const pending = await invoke<string[]>("take_pending_files");
+      for (const path of pending) {
+        dispatchOpenPath(path);
+      }
+    } catch {
+      // older Tauri builds without take_pending_files — ignore
+    }
+
+    return () => {
+      unlistenMenu();
+      unlistenOpen();
+    };
   } catch {
     return null;
   }
+}
+
+function dispatchOpenPath(path: string) {
+  if (typeof window === "undefined") return;
+  if (!path) return;
+  window.dispatchEvent(
+    new CustomEvent("forgemark:open-path", { detail: { path } }),
+  );
 }
 
 export function route(id: string) {
