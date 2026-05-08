@@ -25,27 +25,13 @@ const SYNTHESIZE_AS_KEYDOWN: Record<string, KeyboardEventInit> = {
   save: { key: "s", metaKey: true },
   "save-as": { key: "s", metaKey: true, shiftKey: true },
   "new-comment": { key: "m", metaKey: true, altKey: true },
-  reply: { key: "r", metaKey: true },
-  resolve: { key: "Enter", metaKey: true },
-  "edit-comment": { key: "e", metaKey: true, shiftKey: true },
-  "delete-comment": { key: "Delete" },
-  "toggle-source": { key: "m", metaKey: true, shiftKey: true },
+  "suggest-edit": { key: "e", metaKey: true, altKey: true },
 };
 
-// Some menu ids are application-level (Settings, Clean Export, Toggle
-// Sidebar). These are sent as `forgemark:menu` DOM CustomEvents so the
-// AppShell can react.
-const APP_LEVEL_IDS = new Set([
-  "settings",
-  "clean-export",
-  "toggle-sidebar",
-  "inc-text",
-  "dec-text",
-  "reset-text",
-  "reattach",
-  "suggest-edit",
-  "close",
-]);
+// App-level ids dispatched as `forgemark:menu` DOM CustomEvents so
+// the AppShell can react. Tight set — only commands that aren't
+// already a keyboard shortcut.
+const APP_LEVEL_IDS = new Set(["settings", "clean-export", "close"]);
 
 export async function startMenuBridge(): Promise<UnlistenFn | null> {
   // listen() will throw or hang if the Tauri runtime isn't present

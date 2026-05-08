@@ -1,0 +1,44 @@
+.fm-context-menu {
+  position: fixed;
+  z-index: 4000;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--fm-card-bg);
+  border: 0.5px solid var(--fm-divider-strong);
+  border-radius: 6px;
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.16),
+    0 1px 3px rgba(0, 0, 0, 0.1);
+  font-family: var(--fm-ui);
+  font-size: 13px;
+}
+
+[data-theme="dark"] .fm-context-menu {
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.45),
+    0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.fm-context-menu-item {
+  text-align: left;
+  padding: 5px 12px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fm-prose-ink);
+  cursor: default;
+  font: inherit;
+}
+
+.fm-context-menu-item:hover {
+  background: var(--fm-accent);
+  color: var(--fm-accent-text);
+}
+
+.fm-context-menu-item:focus-visible {
+  outline: none;
+  background: var(--fm-accent);
+  color: var(--fm-accent-text);
+}

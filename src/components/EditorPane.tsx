@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDocument } from "../state/DocumentProvider";
 import { useAuthorName } from "../state/preferences";
 import { RenderedView, type RenderedViewHandle } from "./RenderedView";
 import { SourceView, type SourceViewHandle } from "./SourceView";
 import { NewCommentComposer } from "./NewCommentComposer";
 import { LostAnchorBanner } from "./LostAnchorBanner";
+import { ContextMenu } from "./ContextMenu";
 import { nextCommentId, serializeForgemarkFile, type AnchorStatus } from "../format";
 import "./EditorPane.css";
 
@@ -29,32 +30,44 @@ export function EditorPane({ anchorStatuses }: Props) {
   const [author] = useAuthorName();
   const handleRef = useRef<RenderedViewHandle | null>(null);
   const sourceRef = useRef<SourceViewHandle | null>(null);
+  // Right-click context menu state. Lives here (not in document
+  // state) because it's strictly local to the editor pane and
+  // shouldn't survive viewMode toggles or external state events.
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
 
-  // Composer trigger: ⌘⌥M opens the composer at the current selection.
-  // Selections inside fenced code blocks or inline code spans are
-  // refused, mirroring the parser-level rule from Phase 3. In Source
-  // view the trigger is a no-op — Source is read-only review.
-  const openComposer = useCallback(() => {
-    if (state.viewMode !== "rendered") return;
-    const handle = handleRef.current;
-    if (!handle) return;
-    const captured = handle.captureSelection();
-    if (!captured) return; // empty / collapsed selection
-    if (captured.insideCode) return; // selection inside fenced or inline code
-    dispatch({
-      type: "openComposer",
-      composer: {
-        mode: "new",
-        from: captured.from,
-        to: captured.to,
-        selectionText: captured.text,
-        contextBefore: captured.contextBefore,
-        contextAfter: captured.contextAfter,
-        x: captured.rect.left,
-        y: captured.rect.bottom + 6,
-      },
-    });
-  }, [dispatch, state.viewMode]);
+  // Composer trigger: ⌘⌥M (or the right-click menu) opens the
+  // composer at the current selection. Selections inside fenced code
+  // blocks or inline code spans are refused, mirroring the
+  // parser-level rule from Phase 3. In Source view the trigger is a
+  // no-op — Source is read-only review.
+  const openComposer = useCallback(
+    (initialMode: "comment" | "suggest" = "comment") => {
+      if (state.viewMode !== "rendered") return;
+      const handle = handleRef.current;
+      if (!handle) return;
+      const captured = handle.captureSelection();
+      if (!captured) return; // empty / collapsed selection
+      if (captured.insideCode) return; // selection inside fenced or inline code
+      dispatch({
+        type: "openComposer",
+        composer: {
+          mode: "new",
+          from: captured.from,
+          to: captured.to,
+          selectionText: captured.text,
+          contextBefore: captured.contextBefore,
+          contextAfter: captured.contextAfter,
+          x: captured.rect.left,
+          y: captured.rect.bottom + 6,
+          initialMode,
+        },
+      });
+    },
+    [dispatch, state.viewMode],
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -63,11 +76,48 @@ export function EditorPane({ anchorStatuses }: Props) {
       if (e.key.toLowerCase() === "m") {
         e.preventDefault();
         openComposer();
+      } else if (e.key.toLowerCase() === "e") {
+        e.preventDefault();
+        openComposer("suggest");
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [openComposer]);
+
+  // Right-click handling. Three regions:
+  //   - inside a textarea / input: let the OS native menu show.
+  //   - inside the rendered editor with a non-empty selection: show
+  //     our custom menu (New Comment / Suggest Edit).
+  //   - anywhere else (incl. rendered editor with no selection):
+  //     suppress the default menu, show nothing.
+  useEffect(() => {
+    const onCtx = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      // Allow the OS menu inside form controls (composer textareas,
+      // settings inputs).
+      if (target.closest("textarea, input")) return;
+      // Inside the rendered editor: show the custom menu when there
+      // is a non-empty selection.
+      const inRendered = target.closest(".fm-rendered-view");
+      if (inRendered && state.viewMode === "rendered") {
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed || sel.toString().trim().length === 0) {
+          e.preventDefault();
+          return;
+        }
+        e.preventDefault();
+        setContextMenu({ x: e.clientX, y: e.clientY });
+        return;
+      }
+      // Everywhere else (sidebar, modals outside textareas, banners,
+      // title bar): suppress.
+      e.preventDefault();
+    };
+    window.addEventListener("contextmenu", onCtx);
+    return () => window.removeEventListener("contextmenu", onCtx);
+  }, [state.viewMode]);
 
   const submitComment = useCallback(
     (commentBody: string) => {
@@ -207,6 +257,26 @@ export function EditorPane({ anchorStatuses }: Props) {
           onSubmitComment={submitComment}
           onSubmitSuggestion={submitSuggestion}
           onCancel={cancelComposer}
+          initialMode={state.composer.initialMode}
+        />
+      )}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={[
+            {
+              label: "New Comment",
+              onSelect: () => openComposer("comment"),
+              testid: "fm-context-new-comment",
+            },
+            {
+              label: "Suggest Edit",
+              onSelect: () => openComposer("suggest"),
+              testid: "fm-context-suggest-edit",
+            },
+          ]}
+          onDismiss={() => setContextMenu(null)}
         />
       )}
     </main>

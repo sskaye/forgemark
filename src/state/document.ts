@@ -101,6 +101,10 @@ export type NewComposerState = {
   contextAfter: string;
   x: number;
   y: number;
+  // Optional initial composer mode. Defaults to "comment". The
+  // right-click context menu's "Suggest edit" path sets this to
+  // "suggest" so the composer opens with the toggle pre-engaged.
+  initialMode?: "comment" | "suggest";
 };
 
 export type ReplyComposerState = {

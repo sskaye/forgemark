@@ -17,6 +17,10 @@ type Props = {
   onSubmitSuggestion: (replacement: string, body: string) => void;
   // Cancel handler — Esc or click-outside.
   onCancel: () => void;
+  // Initial mode. Defaults to "comment". The right-click context
+  // menu's "Suggest edit" path opens the composer in "suggest"
+  // mode directly.
+  initialMode?: "comment" | "suggest";
 };
 
 // New-comment composer (Phase 5 + Phase 7).
@@ -39,11 +43,12 @@ export function NewCommentComposer({
   onSubmitComment,
   onSubmitSuggestion,
   onCancel,
+  initialMode = "comment",
 }: Props) {
   const [author] = useAuthorName();
   const [body, setBody] = useState("");
   const [replacement, setReplacement] = useState("");
-  const [suggesting, setSuggesting] = useState(false);
+  const [suggesting, setSuggesting] = useState(initialMode === "suggest");
   const bodyRef = useRef<HTMLTextAreaElement | null>(null);
   const replacementRef = useRef<HTMLTextAreaElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
