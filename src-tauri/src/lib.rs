@@ -64,8 +64,11 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .id("clean-export")
         .accelerator("CmdOrCtrl+Shift+E")
         .build(app)?;
-    let close = MenuItemBuilder::new("Close").id("close").accelerator("CmdOrCtrl+W").build(app)?;
 
+    // File > Close uses Cocoa's native close_window() so ⌘W actually
+    // closes the window. A custom-id close item would emit a
+    // forgemark:menu event with no JS listener and silently do
+    // nothing.
     let file_submenu = SubmenuBuilder::new(app, "File")
         .item(&new)
         .item(&open)
@@ -74,7 +77,7 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .item(&save_as)
         .item(&clean_export)
         .separator()
-        .item(&close)
+        .close_window()
         .build()?;
 
     // Edit menu — Undo / Redo / Cut / Copy / Paste. Select All is

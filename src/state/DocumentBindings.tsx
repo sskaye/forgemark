@@ -130,34 +130,41 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
 
   // Save handler — shared by ⌘S and the pending-save effect (which
   // fires when the save-conflict modal's Overwrite is clicked).
-  const performSave = useCallback(async () => {
-    const s = stateRef.current;
-    if (s.readOnly) return;
-    const text = s.dirty
-      ? serializeForgemarkFile({ body: s.body, comments: s.comments })
-      : s.originalText;
-    try {
-      const path = await saveMarkdownFile(s.filePath, text);
-      if (!path) return; // user cancelled save dialog
-      dispatch({ type: "saved", text, body: s.body });
-      if (path !== s.filePath) {
-        dispatch({
-          type: "load",
-          filePath: path,
-          fileName: filenameFromPath(path),
-          text,
-          body: s.body,
-          comments: s.comments,
-          readOnly: false,
-        });
+  const performSave = useCallback(
+    async (opts: { forcePrompt?: boolean } = {}) => {
+      const s = stateRef.current;
+      if (s.readOnly) return;
+      const text = s.dirty
+        ? serializeForgemarkFile({ body: s.body, comments: s.comments })
+        : s.originalText;
+      // Save As (⌘⇧S) forces the location prompt regardless of whether
+      // the buffer already has a path; plain Save (⌘S) reuses the
+      // path when set.
+      const seedPath = opts.forcePrompt ? null : s.filePath;
+      try {
+        const path = await saveMarkdownFile(seedPath, text);
+        if (!path) return; // user cancelled save dialog
+        dispatch({ type: "saved", text, body: s.body });
+        if (path !== s.filePath) {
+          dispatch({
+            type: "load",
+            filePath: path,
+            fileName: filenameFromPath(path),
+            text,
+            body: s.body,
+            comments: s.comments,
+            readOnly: false,
+          });
+        }
+        // Refresh baseline so the watcher doesn't fire on our own write.
+        baselineRef.current = await fingerprint(text, null);
+      } catch (err) {
+        logger("save failed", err);
+        dispatch({ type: "error", message: errorMessage("Save failed", err) });
       }
-      // Refresh baseline so the watcher doesn't fire on our own write.
-      baselineRef.current = await fingerprint(text, null);
-    } catch (err) {
-      logger("save failed", err);
-      dispatch({ type: "error", message: errorMessage("Save failed", err) });
-    }
-  }, [dispatch, logger]);
+    },
+    [dispatch, logger],
+  );
 
   // ── Keyboard shortcuts ──
   useEffect(() => {
@@ -214,11 +221,15 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
         if (s.readOnly) return;
         // Phase 10: if there's a pending external change, route into
         // the save-conflict modal instead of overwriting silently.
+        // (Save As also routes here — the conflict resolution comes
+        // first.)
         if (s.externalChange != null) {
           dispatch({ type: "openSaveConflict" });
           return;
         }
-        await performSave();
+        // ⌘S = save in place (or prompt for Untitled);
+        // ⌘⇧S = Save As, always prompts.
+        await performSave({ forcePrompt: e.shiftKey });
       } else if (key === "n") {
         e.preventDefault();
         dispatch({ type: "newUntitled" });
