@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Forgemark — Design rationale</title>
+<style>
+  :root {
+    --ink: #1a1a1c;
+    --ink-2: #4a4a50;
+    --ink-3: #6f6f76;
+    --faint: #8a8a90;
+    --rule: rgba(0,0,0,0.10);
+    --bg: oklch(0.985 0.003 80);
+    --paper: #ffffff;
+    --accent: #0A84FF;
+    --orphan: #A055A8;
+    --success: #1F8A5B;
+    --ui: -apple-system, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --display: -apple-system, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --prose: ui-serif, "New York", "Charter", "Iowan Old Style", Georgia, serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--prose);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6;
+    font-size: 16px;
+  }
+
+  .page {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 80px 32px 120px;
+  }
+
+  .eyebrow {
+    font-family: var(--ui);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--faint);
+    font-weight: 600;
+    margin-bottom: 14px;
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-size: 38px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    margin: 0 0 14px;
+    text-wrap: balance;
+  }
+
+  .lede {
+    font-size: 18px;
+    line-height: 1.55;
+    color: var(--ink-2);
+    margin: 0 0 8px;
+    text-wrap: pretty;
+  }
+
+  .meta {
+    font-family: var(--ui);
+    font-size: 12px;
+    color: var(--faint);
+    border-bottom: 0.5px solid var(--rule);
+    padding-bottom: 28px;
+    margin-bottom: 36px;
+  }
+
+  h2 {
+    font-family: var(--display);
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+    margin: 48px 0 12px;
+    text-wrap: balance;
+  }
+
+  h3 {
+    font-family: var(--display);
+    font-size: 16px;
+    font-weight: 600;
+    margin: 28px 0 6px;
+  }
+
+  p { margin: 0 0 14px; text-wrap: pretty; }
+
+  p strong { font-weight: 600; }
+
+  ul, ol { padding-left: 22px; margin: 0 0 16px; }
+  li { margin-bottom: 6px; }
+  li::marker { color: var(--faint); }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    background: rgba(0,0,0,0.04);
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
+
+  blockquote {
+    margin: 18px 0;
+    padding: 12px 16px;
+    background: rgba(0,0,0,0.025);
+    border-left: 2px solid var(--ink-3);
+    border-radius: 0 4px 4px 0;
+    font-style: italic;
+    color: var(--ink-2);
+  }
+  blockquote p:last-child { margin-bottom: 0; }
+
+  .pushback {
+    margin: 22px 0;
+    padding: 16px 20px;
+    background: rgba(168,85,170,0.05);
+    border: 0.5px solid rgba(168,85,170,0.30);
+    border-radius: 6px;
+  }
+  .pushback .label {
+    font-family: var(--ui);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--orphan);
+    margin-bottom: 6px;
+    display: block;
+  }
+  .pushback p:last-child { margin-bottom: 0; }
+
+  .answers {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 16px;
+  }
+  .answers li {
+    padding: 12px 0;
+    border-bottom: 0.5px solid var(--rule);
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 16px;
+    margin: 0;
+  }
+  .answers li:last-child { border-bottom: none; }
+  .answers .q {
+    font-family: var(--ui);
+    font-size: 12px;
+    color: var(--faint);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding-top: 2px;
+    width: 32px;
+    text-align: right;
+  }
+  .answers .a { font-size: 15px; line-height: 1.55; }
+  .answers .a strong { font-weight: 600; }
+  .answers .a em { color: var(--ink-3); font-style: normal; font-size: 13.5px; display: block; margin-top: 4px; font-family: var(--ui); }
+
+  .links {
+    margin-top: 60px;
+    padding: 22px 0;
+    border-top: 0.5px solid var(--rule);
+    font-family: var(--ui);
+    font-size: 13px;
+    color: var(--ink-3);
+    display: flex;
+    gap: 22px;
+    flex-wrap: wrap;
+  }
+  .links a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--rule); padding-bottom: 1px; }
+  .links a:hover { border-bottom-color: var(--accent); }
+
+  .pull {
+    margin: 28px -16px;
+    padding: 18px 24px;
+    border-left: 3px solid var(--ink);
+    font-family: var(--display);
+    font-size: 19px;
+    line-height: 1.4;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <div class="eyebrow">Forgemark · Design rationale</div>
+
+  <h1>The file is the document. The UI is a lens on it.</h1>
+
+  <p class="lede">Two pages on the calls we made designing Forgemark, what we changed our minds about, and what the brief didn&rsquo;t account for.</p>
+
+  <div class="meta">v1 · macOS · prepared for the proposal authors</div>
+
+  <h2>The throughline</h2>
+
+  <p>The brief gave us five pillars; one of them ended up doing more work than the others. <strong>The file is the source of truth</strong> stops being a design pillar and starts being a constraint the moment you sit with the format. Every choice downstream — the lost-anchor recovery flow, the source view, how AI authors are presented, even the Clean Export confirmation copy — comes from taking that pillar seriously.</p>
+
+  <p>Practically: the markdown file is plain text that humans, AI agents, and external editors will all touch. The UI is a lens on a file that may have changed underneath it. That reframes most of the screens.</p>
+
+  <div class="pull">
+    The UI doesn&rsquo;t own the data. It renders the file, helps you change it, and accepts that other tools will change it too.
+  </div>
+
+  <h2>What we held tight on</h2>
+
+  <h3>Native, quietly</h3>
+  <p>SF Pro everywhere, system mono for source, traffic-light chrome, system-blue accent that respects the user&rsquo;s appearance preference. Tauri was chosen specifically to feel native and we did not want to spend that affordance on brand expression. The wordmark is a single bracketed pilcrow — present in the title bar and About dialog and almost nowhere else.</p>
+
+  <h3>AI authors are peers, not patients</h3>
+  <p>Same avatar treatment. No badge. No glyph. Identity is a name. We considered a small monogram or model glyph in the avatar and rejected it: the moment you put a marker on AI comments, you&rsquo;re telling the user to read those differently, and the brief is explicit that we are not doing that. If a reviewer needs to skim only human comments, the existing author-filter handles it without the design taking a position.</p>
+
+  <h3>Anchor highlights are quiet, but distinct</h3>
+  <p>The reviewer asked for distinct over subtle, and we agreed once we saw both side-by-side in dark mode. Subtle reads as decorative; distinct reads as functional. We held the chroma low so a paragraph with five anchors still reads as prose, not as a chart.</p>
+
+  <h2>What we changed our minds about</h2>
+
+  <h3>The orphan card</h3>
+  <p>Initial draft called drift-detached comments <em>orphaned</em>, with a purple "?" icon. Two problems: <em>orphaned</em> is jargon you have to learn, and the icon read as &ldquo;an unanswered question someone asked,&rdquo; not &ldquo;the system can&rsquo;t locate the passage this is about.&rdquo; Renamed to <strong>Lost anchor</strong>. The label is a noun phrase that says exactly what is wrong, in two short words, with no verb. The icon stays — but the copy carries the load.</p>
+
+  <h3>Resolved comments</h3>
+  <p>We went back and forth on hide-by-default vs. collapse-in-place. Collapse-in-place won. Hidden-by-default makes the sidebar lighter but it punishes the most common second action after resolving (reopening one minute later, often because a reply came in or because you were wrong). A one-line collapsed card is the right cost.</p>
+
+  <h3>Tweaks vs. product</h3>
+  <p>The first prototype exposed seven Tweaks: theme, pairing, highlight intensity, density, font size, show-resolved, identity. Five of those were design decisions disguised as preferences. They&rsquo;re now locked. Theme, font size, and author identity remain tweakable because users genuinely have a stake in them; the rest are the design.</p>
+
+  <h2>The five open questions, answered</h2>
+
+  <ol class="answers">
+    <li>
+      <span class="q">Q1</span>
+      <span class="a"><strong>Right-pinned, not detachable.</strong>
+        <em>A second window doubles the cognitive surface for marginal benefit. Reviewers think paragraph-by-paragraph; the sidebar belongs next to the paragraph.</em>
+      </span>
+    </li>
+    <li>
+      <span class="q">Q2</span>
+      <span class="a"><strong>Resolved comments collapsed in place, not hidden.</strong>
+        <em>Reopen-rate is high enough that hiding penalizes the recovery action. Collapsed one-line cards keep the sidebar quiet without losing the breadcrumb.</em>
+      </span>
+    </li>
+    <li>
+      <span class="q">Q3</span>
+      <span class="a"><strong>Per-document, default rendered.</strong>
+        <em>A global preference loses you the file-by-file context (a code-heavy file might warrant source view by default). Per-document state, no global override, default to rendered.</em>
+      </span>
+    </li>
+    <li>
+      <span class="q">Q4</span>
+      <span class="a"><strong>Skipped for v1.</strong>
+        <em>Body diff is a real concern but it&rsquo;s a different product surface. Stub note in the rationale; revisit when AI agents are doing this often enough to pattern-match.</em>
+      </span>
+    </li>
+    <li>
+      <span class="q">Q5</span>
+      <span class="a"><strong>Dashed magenta underline; banner above the prose; sidebar section pinned to top.</strong>
+        <em>Yellow is anchor, green is suggestion, red would alarm, blue is focus. Magenta is the only unused slot in the palette and reads as &ldquo;needs your eye&rdquo; without claiming severity. Dashed (vs. solid) reinforces uncertainty. The banner gives a recovery action without forcing a modal on file-open.</em>
+      </span>
+    </li>
+  </ol>
+
+  <h2>Pushback</h2>
+
+  <div class="pushback">
+    <span class="label">Issue 1 · the source view is not symmetric with rendered view</span>
+    <p>Pillar #2 says raw-source should feel like a peer view, not an admin escape hatch. We held to that visually — same layout, same scroll position, anchored cards stay clickable from source — but in practice <strong>some interactions only make sense in rendered view</strong>. You can&rsquo;t select a passage to comment in source mode (the YAML markers would land in the wrong place); accept-suggestion in source would need to rewrite both the prose AND the YAML block in one operation. Source view is currently read-mostly. We think this is correct, but we did not call it out as a divergence from the pillar. Flagging.</p>
+  </div>
+
+  <div class="pushback">
+    <span class="label">Issue 2 · the format does not survive a rename</span>
+    <p>Comments anchor by inline marker pair AND by anchor_text snapshot AND by context windows. None of these survive a passage being deleted entirely. The lost-anchor flow handles drift, not deletion. <strong>If a reviewer deletes a paragraph that had three comments, those three comments become lost-anchor cards with no surviving prose to match against.</strong> The current Reattach modal would offer 0% matches. Either (a) lost-anchor cards need a "no candidates — keep as note?" path, or (b) deletions need a confirmation when the passage carries comments. We&rsquo;ve mocked (a) implicitly via the Discard button, but (b) is not in v1.</p>
+  </div>
+
+  <div class="pushback">
+    <span class="label">Issue 3 · the brief assumes one document</span>
+    <p>Every screen we&rsquo;ve drawn is single-document. The proposal does not address how reviewers move between files in a session. There is no recents list, no file switcher, no project concept. <strong>Macros</strong> open many files in a workday and Forgemark&rsquo;s current chrome punts on this entirely. Decision needed: do we ship single-file v1 with reviewers re-using ⌘O, or do we add a sidebar drawer with recent files? We chose the former and want explicit alignment.</p>
+  </div>
+
+  <div class="pushback">
+    <span class="label">Issue 4 · simultaneous human + AI editing is undefined</span>
+    <p>If an AI agent edits the file while a human has it open in Forgemark, what happens? The proposal&rsquo;s anchor-drift recovery handles open-after-edit; it does not handle edit-during-open. We&rsquo;ve assumed Tauri-side file watching detects the change and offers a reload prompt, but the UX of "your unsaved comment composer will be lost" is not designed. This intersects with the v1 multi-author exclusion in the brief. Calling it out so it doesn&rsquo;t surface as a v1.1 surprise.</p>
+  </div>
+
+  <h2>What&rsquo;s in the box</h2>
+
+  <ul>
+    <li><strong>Forgemark.html</strong> — interactive prototype. All six flows are wired (select-to-comment, reply, edit, suggest-edit accept/reject, resolve, reattach). Light/dark theme, prose-size slider, author-identity switcher exposed as Tweaks.</li>
+    <li><strong>Forgemark — Design System.html</strong> — tokens, type pairings, highlight matrix in light + dark, the full card-state matrix, plus First Run, Settings, Empty State, Clean Export, and the right-click Comment menu. Every state in the brief is enumerated and labelled.</li>
+    <li><strong>Forgemark — Storyboard.html</strong> — the six flows as freeze-frames with beats.</li>
+    <li><strong>This document.</strong></li>
+  </ul>
+
+  <h2>What&rsquo;s explicitly not in the box</h2>
+
+  <ul>
+    <li>The application icon (.icns / .ico) — wordmark candidates exist; production export is a build-pipeline task.</li>
+    <li>Full keyboard-shortcut reference card — shortcuts are present in the menu bar mock; a separate sheet would be useful for the help screen.</li>
+    <li>Settings flows for the .skill download — affordance exists in the Settings mock; the link target depends on engineering.</li>
+    <li>Body-edit diff view — see open question 4. Skipped per direction.</li>
+  </ul>
+
+  <div class="links">
+    <a href="Forgemark.html">→ Prototype</a>
+    <a href="Forgemark - Design System.html">→ Design system</a>
+    <a href="Forgemark - Storyboard.html">→ Storyboard</a>
+  </div>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Forgemark — Six-flow storyboard</title>
+<style>
+  :root {
+    --ink: #1a1a1c;
+    --ink-2: #58585c;
+    --faint: #8a8a90;
+    --rule: rgba(0,0,0,0.10);
+    --rule-strong: rgba(0,0,0,0.18);
+    --bg: oklch(0.985 0.003 80);
+    --paper: #ffffff;
+    --panel: #fbfaf7;
+    --accent: #0A84FF;
+    --success: #1F8A5B;
+    --suggest: rgba(60,170,90,0.16);
+    --suggest-stroke: rgba(60,170,90,0.45);
+    --anchor: rgba(255,200,0,0.42);
+    --anchor-focus: rgba(255,180,0,0.78);
+    --anchor-resolved: rgba(255,200,0,0.18);
+    --orphan: rgba(168,85,170,0.85);
+    --orphan-tint: rgba(168,85,170,0.06);
+    --ui: -apple-system, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --display: -apple-system, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --prose: ui-serif, "New York", "Charter", "Iowan Old Style", Georgia, serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--ui);
+    -webkit-font-smoothing: antialiased;
+    padding: 56px 64px 80px;
+  }
+
+  .doc-header {
+    max-width: 1280px;
+    margin: 0 auto 40px;
+  }
+  .eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--faint);
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  h1 {
+    font-family: var(--display);
+    font-size: 32px;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    margin: 0 0 14px;
+    text-wrap: pretty;
+  }
+  .sub {
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--ink-2);
+    max-width: 720px;
+    text-wrap: pretty;
+  }
+
+  .grid {
+    max-width: 1280px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 28px;
+  }
+
+  .frame {
+    background: var(--paper);
+    border: 0.5px solid var(--rule);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.03), 0 6px 24px rgba(0,0,0,0.04);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .frame-stage {
+    height: 280px;
+    background: var(--panel);
+    border-bottom: 0.5px solid var(--rule);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+  }
+
+  .frame-meta {
+    padding: 16px 20px 18px;
+  }
+  .frame-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ink-2);
+    background: rgba(0,0,0,0.04);
+    border-radius: 4px;
+    padding: 2px 7px;
+    margin-bottom: 8px;
+  }
+  .frame-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0 0 6px;
+  }
+  .frame-desc {
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--ink-2);
+    text-wrap: pretty;
+    margin: 0;
+  }
+  .beats {
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: 11.5px;
+    color: var(--ink-2);
+  }
+  .beats li {
+    padding: 3px 0 3px 16px;
+    position: relative;
+    line-height: 1.5;
+  }
+  .beats li::before {
+    content: "→";
+    position: absolute;
+    left: 0;
+    color: var(--faint);
+    font-family: var(--mono);
+    font-size: 10px;
+  }
+
+  /* Mini chrome elements */
+  .mini-titlebar {
+    height: 26px;
+    background: linear-gradient(to bottom, #f7f6f3, #efece6);
+    border-bottom: 0.5px solid var(--rule);
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .traffic { display: flex; gap: 6px; }
+  .traffic span {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #ddd;
+    display: block;
+  }
+  .traffic span:nth-child(1) { background: #ed6a5e; }
+  .traffic span:nth-child(2) { background: #f5bd4f; }
+  .traffic span:nth-child(3) { background: #62c554; }
+  .mini-title {
+    flex: 1;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ink-2);
+    font-family: var(--ui);
+  }
+
+  .pane {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+  .editor {
+    flex: 1.4;
+    background: var(--paper);
+    padding: 14px 18px;
+    font-family: var(--prose);
+    font-size: 11px;
+    line-height: 1.55;
+    color: var(--ink);
+    overflow: hidden;
+  }
+  .editor h2 {
+    font-family: var(--display);
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0 0 8px;
+  }
+  .editor p { margin: 0 0 7px; }
+  .sidebar {
+    flex: 1;
+    background: #f8f7f3;
+    border-left: 0.5px solid var(--rule);
+    padding: 12px 12px;
+    overflow: hidden;
+  }
+  .sidebar-head {
+    font-size: 9.5px;
+    color: var(--faint);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 700;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .card {
+    background: var(--paper);
+    border: 0.5px solid var(--rule);
+    border-radius: 7px;
+    padding: 9px 10px;
+    margin-bottom: 6px;
+    font-family: var(--ui);
+  }
+  .card.focused {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent), 0 6px 18px rgba(10,132,255,0.18);
+  }
+  .card .au {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .av {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: oklch(0.85 0.04 240);
+    color: var(--ink);
+    font-size: 8px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .av.maya { background: oklch(0.86 0.05 30); }
+  .av.devon { background: oklch(0.86 0.05 130); }
+  .au-name { font-size: 10.5px; font-weight: 600; color: var(--ink); }
+  .au-time { font-size: 9.5px; color: var(--faint); margin-left: auto; }
+  .card-body { font-size: 10.5px; line-height: 1.5; color: var(--ink); }
+
+  .anchor { background: var(--anchor); padding: 0 1px; border-radius: 1px; }
+  .anchor-focus {
+    background: var(--anchor-focus);
+    padding: 0 1px;
+    border-radius: 1px;
+    box-shadow: 0 0 0 1px rgba(190,135,0,0.3);
+  }
+  .anchor-resolved { background: var(--anchor-resolved); padding: 0 1px; border-radius: 1px; opacity: 0.85; }
+  .anchor-suggest {
+    background: var(--suggest);
+    padding: 0 1px;
+    border-radius: 1px;
+  }
+  .anchor-orphan {
+    border-bottom: 1px dashed var(--orphan);
+    text-underline-offset: 2.5px;
+  }
+  s { color: var(--faint); text-decoration-color: rgba(207,40,40,0.6); }
+  ins { background: var(--suggest); text-decoration: none; color: var(--success); }
+
+  /* Composer in stage */
+  .composer {
+    position: absolute;
+    width: 240px;
+    background: var(--paper);
+    border: 0.5px solid var(--rule-strong);
+    border-radius: 8px;
+    box-shadow: 0 14px 36px rgba(0,0,0,0.16), 0 1px 4px rgba(0,0,0,0.10);
+    padding: 10px;
+    font-family: var(--ui);
+  }
+  .composer .ph { font-size: 11px; color: var(--faint); padding: 4px 0; min-height: 36px; }
+  .composer .row { display: flex; gap: 6px; align-items: center; justify-content: space-between; margin-top: 6px; }
+  .composer .toggle { font-size: 10px; color: var(--ink-2); display: inline-flex; gap: 4px; align-items: center; }
+  .btn-primary {
+    font-size: 10.5px; font-weight: 600;
+    background: var(--accent); color: white;
+    border: 0.5px solid rgba(0,0,0,0.10);
+    border-radius: 5px;
+    padding: 3px 9px;
+    font-family: var(--ui);
+  }
+  .btn-secondary {
+    font-size: 10.5px;
+    background: transparent; color: var(--ink-2);
+    border: 0.5px solid var(--rule-strong);
+    border-radius: 5px;
+    padding: 3px 9px;
+    font-family: var(--ui);
+  }
+  .btn-success {
+    font-size: 10.5px; font-weight: 600;
+    background: var(--success); color: white;
+    border: 0.5px solid rgba(0,0,0,0.10);
+    border-radius: 5px;
+    padding: 3px 9px;
+    font-family: var(--ui);
+  }
+  .kbd {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    color: var(--faint);
+  }
+
+  /* Banner */
+  .banner {
+    background: var(--orphan-tint);
+    border: 0.5px solid var(--orphan);
+    border-radius: 6px;
+    padding: 6px 9px;
+    font-size: 10px;
+    color: var(--ink);
+    margin-bottom: 9px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .banner .icon {
+    width: 11px; height: 11px;
+    border-radius: 50%;
+    border: 1px solid var(--orphan);
+    color: var(--orphan);
+    flex-shrink: 0;
+    display: inline-block;
+    text-align: center;
+    line-height: 9px;
+    font-size: 8px;
+    font-weight: 700;
+  }
+
+  /* Onboarding panel */
+  .onboard {
+    flex: 1;
+    background: var(--paper);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    text-align: center;
+  }
+  .onboard .glyph {
+    width: 44px; height: 44px;
+    border-radius: 9px;
+    background: linear-gradient(135deg, oklch(0.55 0.14 35), oklch(0.42 0.12 35));
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 12px;
+    color: white;
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: -0.04em;
+  }
+  .onboard h3 { font-family: var(--display); font-size: 16px; margin: 0 0 4px; font-weight: 600; }
+  .onboard p { font-size: 11px; color: var(--ink-2); margin: 0 0 12px; max-width: 260px; line-height: 1.5; }
+  .field {
+    width: 220px;
+    height: 26px;
+    border: 0.5px solid var(--rule-strong);
+    border-radius: 6px;
+    background: var(--paper);
+    padding: 0 9px;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    color: var(--ink);
+    font-family: var(--ui);
+    margin-bottom: 8px;
+  }
+  .field .cursor { width: 1px; height: 12px; background: var(--accent); animation: blink 1s steps(2, end) infinite; margin-left: 1px; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* Dialog overlay (clean export) */
+  .dialog-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(20,20,24,0.30);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .dialog {
+    width: 280px;
+    background: #fbfaf7;
+    border-radius: 10px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.32), 0 1px 3px rgba(0,0,0,0.18);
+    padding: 16px 18px 12px;
+    text-align: center;
+  }
+  .dialog h4 { font-family: var(--display); font-size: 13px; font-weight: 600; margin: 0 0 6px; }
+  .dialog p { font-size: 11px; color: var(--ink-2); margin: 0 0 12px; line-height: 1.5; }
+  .dialog .actions { display: flex; gap: 6px; justify-content: center; }
+
+  /* Reattach modal */
+  .reattach {
+    width: 320px;
+    background: var(--paper);
+    border-radius: 10px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.30), 0 1px 3px rgba(0,0,0,0.16);
+    overflow: hidden;
+  }
+  .reattach .head { padding: 10px 12px; border-bottom: 0.5px solid var(--rule); }
+  .reattach .head h5 { font-size: 11.5px; font-weight: 600; margin: 0 0 3px; }
+  .reattach .head .meta { font-size: 10px; color: var(--ink-2); line-height: 1.5; }
+  .reattach .opt { padding: 7px 10px; border-bottom: 0.5px solid var(--rule); cursor: default; font-size: 10px; line-height: 1.5; color: var(--ink-2); }
+  .reattach .opt.sel { background: rgba(10,132,255,0.07); border-left: 2px solid var(--accent); padding-left: 8px; }
+  .reattach .opt .score { font-family: var(--mono); font-size: 9px; color: var(--success); font-weight: 700; letter-spacing: 0.04em; margin-bottom: 2px; }
+  .reattach .foot { padding: 8px 10px; display: flex; justify-content: flex-end; gap: 4px; }
+
+  .doc-foot {
+    max-width: 1280px;
+    margin: 56px auto 0;
+    color: var(--faint);
+    font-size: 11px;
+    border-top: 0.5px solid var(--rule);
+    padding-top: 18px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .doc-foot a { color: var(--ink-2); text-decoration: none; }
+  .doc-foot a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div class="doc-header">
+  <div class="eyebrow">Forgemark · Storyboard</div>
+  <h1>Six flows, one frame each</h1>
+  <p class="sub">Key-moment freeze frames for the six flows in the brief. Each frame shows the screen at the most informative beat — not every transition. Beats below describe the rest of the sequence and the GUI control that drives each one (every interaction except typing must have a button — proposal §42).</p>
+</div>
+
+<div class="grid">
+
+  <!-- 1. First run -->
+  <div class="frame">
+    <div class="frame-stage">
+      <div class="mini-titlebar">
+        <div class="traffic"><span></span><span></span><span></span></div>
+        <div class="mini-title">Welcome to Forgemark</div>
+        <div style="width: 36px;"></div>
+      </div>
+      <div class="pane">
+        <div class="onboard">
+          <div class="glyph">F</div>
+          <h3>Welcome to Forgemark</h3>
+          <p>Comments live inside your markdown files. Set the name your replies should appear under.</p>
+          <div class="field">Maya<span class="cursor"></span></div>
+          <div style="display: flex; gap: 6px;">
+            <button class="btn-secondary">Skip</button>
+            <button class="btn-primary">Open sample file →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-meta">
+      <div class="frame-num">01</div>
+      <h2 class="frame-title">First run</h2>
+      <p class="frame-desc">Single field, single primary button. Lands the user in a sample file pre-populated with a human and an AI comment so the format is shown rather than explained.</p>
+      <ul class="beats">
+        <li>App launches, no document open</li>
+        <li>Free-text name field, focus pre-placed</li>
+        <li>Open sample → two-pane view with two existing comments</li>
+        <li>Author name persists; can be changed later in Preferences</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 2. Add a comment -->
+  <div class="frame">
+    <div class="frame-stage">
+      <div class="mini-titlebar">
+        <div class="traffic"><span></span><span></span><span></span></div>
+        <div class="mini-title">proposal-q3.md</div>
+        <div style="width: 36px;"></div>
+      </div>
+      <div class="pane" style="position: relative;">
+        <div class="editor">
+          <h2>Q3 Roadmap</h2>
+          <p>The team has aligned on three priorities for the quarter, with the largest ROI expected from <span class="anchor-focus">a refresh of the onboarding sequence</span> and the smallest from the dashboard work.</p>
+          <p>We&rsquo;ll revisit the order at month-end if signal warrants.</p>
+        </div>
+        <div class="sidebar">
+          <div class="sidebar-head"><span>4 comments</span><span>·</span></div>
+          <div class="card">
+            <div class="au"><span class="av">C</span><span class="au-name">Claude</span><span class="au-time">2d</span></div>
+            <div class="card-body" style="color: var(--ink-2);">Two of these are reversible; the tour replacement is not…</div>
+          </div>
+          <div class="card focused">
+            <div class="au"><span class="av maya">M</span><span class="au-name">Maya</span><span class="au-time">now</span></div>
+            <div class="card-body"><em style="color: var(--faint);">Typing…</em></div>
+          </div>
+        </div>
+        <div class="composer" style="top: 78px; left: 28px;">
+          <div style="font-size: 10px; color: var(--ink); padding: 3px 0 6px;">Will the cohort study be done in time?</div>
+          <div style="border-top: 0.5px solid var(--rule); margin: 4px 0 6px;"></div>
+          <div class="row">
+            <span class="toggle">
+              <span style="width: 18px; height: 11px; border-radius: 6px; background: rgba(0,0,0,0.10); display: inline-block; position: relative;"><span style="position: absolute; left: 1px; top: 1px; width: 9px; height: 9px; border-radius: 50%; background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.18);"></span></span>
+              Suggest edit
+            </span>
+            <span style="display: flex; gap: 6px; align-items: center;">
+              <span class="kbd">⌘⏎</span>
+              <button class="btn-primary">Comment</button>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-meta">
+      <div class="frame-num">02</div>
+      <h2 class="frame-title">Add a comment</h2>
+      <p class="frame-desc">Selection persists as a focused-anchor highlight, composer floats next to the selection. Submit by ⌘↵ or by clicking the button — both are canonical.</p>
+      <ul class="beats">
+        <li>Select text → highlight saturates (focused anchor)</li>
+        <li>Composer appears anchored to the selection</li>
+        <li>Type → ⌘↵ or click "Comment"</li>
+        <li>Card lands in sidebar, scrolls into view, marks itself read</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 3. Reply to AI -->
+  <div class="frame">
+    <div class="frame-stage">
+      <div class="mini-titlebar">
+        <div class="traffic"><span></span><span></span><span></span></div>
+        <div class="mini-title">proposal-q3.md</div>
+        <div style="width: 36px;"></div>
+      </div>
+      <div class="pane">
+        <div class="editor">
+          <h2>Q3 Roadmap</h2>
+          <p>The team has aligned on <span class="anchor-focus">three priorities</span> for the quarter — kickoff default, retire sandbox, and replace the tour. Two of these are reversible in a sprint; the tour replacement is not.</p>
+        </div>
+        <div class="sidebar">
+          <div class="sidebar-head"><span>3 open</span><span>filter</span></div>
+          <div class="card focused">
+            <div class="au"><span class="av">C</span><span class="au-name">Claude</span><span class="au-time">2d</span></div>
+            <div class="card-body" style="margin-bottom: 6px;">Two of these are reversible in a sprint; the tour replacement is not. Should the recommendation order them by reversibility instead of impact?</div>
+            <div style="padding-left: 8px; border-left: 2px solid var(--rule); margin-bottom: 6px;">
+              <div class="au"><span class="av maya">M</span><span class="au-name">Maya</span><span class="au-time">now</span></div>
+              <div class="card-body">Good catch. Let&rsquo;s split the recommendation by reversibility tier and surface that in the doc itself.</div>
+            </div>
+            <div style="display: flex; gap: 4px; padding-top: 5px; border-top: 0.5px solid var(--rule);">
+              <button class="btn-primary">Reply</button>
+              <button class="btn-secondary">Resolve</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-meta">
+      <div class="frame-num">03</div>
+      <h2 class="frame-title">Reply to a comment by Claude</h2>
+      <p class="frame-desc">Same card, same thread. The reply nests under Claude&rsquo;s comment with a left rule. No "AI" badge — name is the only signal that one author is non-human.</p>
+      <ul class="beats">
+        <li>Click anchor or card → card focuses, body highlights</li>
+        <li>Click Reply → nested composer slides in</li>
+        <li>⌘↵ or button → reply commits, thread sets has-unread-replies for other authors</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 4. Suggest an edit -->
+  <div class="frame">
+    <div class="frame-stage">
+      <div class="mini-titlebar">
+        <div class="traffic"><span></span><span></span><span></span></div>
+        <div class="mini-title">proposal-q3.md</div>
+        <div style="width: 36px;"></div>
+      </div>
+      <div class="pane">
+        <div class="editor">
+          <h2>Q3 Roadmap</h2>
+          <p>The team has aligned on three priorities for the quarter, with the largest ROI expected from <span class="anchor-suggest">a refresh of the onboarding sequence</span>.</p>
+          <p>The proposed work targets month-1 churn directly.</p>
+        </div>
+        <div class="sidebar">
+          <div class="sidebar-head"><span>1 suggested edit</span></div>
+          <div class="card focused">
+            <div class="au"><span class="av">G</span><span class="au-name">ChatGPT</span><span class="au-time">1h</span></div>
+            <div style="font-size: 10px; line-height: 1.55; padding: 4px 0; border-top: 0.5px solid var(--rule); margin-top: 4px;">
+              <div><s>a refresh of the onboarding sequence</s></div>
+              <div><ins>a rebuild of the first-run sequence (sign-up → first save)</ins></div>
+            </div>
+            <div class="card-body" style="color: var(--ink-2); margin-top: 4px;">Tightens the scope to the surface the data points at.</div>
+            <div style="display: flex; gap: 4px; padding-top: 6px; margin-top: 6px; border-top: 0.5px solid var(--rule);">
+              <button class="btn-success">✓ Accept</button>
+              <button class="btn-secondary">Reject</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-meta">
+      <div class="frame-num">04</div>
+      <h2 class="frame-title">Suggest an edit</h2>
+      <p class="frame-desc">From/to layout matches Google Docs muscle memory. Accept is filled green, Reject is tertiary — both terminal, both clearly weighted toward acceptance being the productive default.</p>
+      <ul class="beats">
+        <li>Author selects passage, toggles "Suggest edit" in composer</li>
+        <li>Composer splits into from / to fields</li>
+        <li>Card renders strikethrough + insertion, anchored with green tint</li>
+        <li>Accept → text replaces in body, card disappears, anchor markers removed</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 5. Reattach lost anchor -->
+  <div class="frame">
+    <div class="frame-stage">
+      <div class="mini-titlebar">
+        <div class="traffic"><span></span><span></span><span></span></div>
+        <div class="mini-title">proposal-q3.md — edited externally</div>
+        <div style="width: 36px;"></div>
+      </div>
+      <div class="pane" style="position: relative;">
+        <div class="editor">
+          <div class="banner">
+            <span class="icon">?</span>
+            <span><strong style="font-weight: 600;">1 comment lost its anchor.</strong> The file was edited outside Forgemark.</span>
+            <button class="btn-primary" style="padding: 2px 7px;">Recover…</button>
+          </div>
+          <p>We&rsquo;ve seen the strongest signal in <span class="anchor-orphan">month-1 churn (specifically week 2–3)</span>, which the proposed work targets directly.</p>
+        </div>
+        <div class="sidebar">
+          <div class="sidebar-head" style="color: var(--orphan);"><span>LOST ANCHOR · 1</span></div>
+          <div class="card" style="border-color: var(--orphan); border-left: 2px solid var(--orphan);">
+            <div class="au"><span class="av devon">D</span><span class="au-name">Devon</span><span class="au-time">3d</span></div>
+            <div class="card-body" style="color: var(--ink-2);">Was the original window week-3 or month-1?</div>
+            <div style="font-size: 9.5px; color: var(--orphan); font-style: italic; margin-top: 5px;">was: "onboarding-driven churn (specifically week-3)"</div>
+          </div>
+        </div>
+        <div class="dialog-overlay">
+          <div class="reattach">
+            <div class="head">
+              <h5>Reattach lost anchor</h5>
+              <div class="meta">Devon&rsquo;s comment was anchored to <em>"onboarding-driven churn (specifically week-3)"</em></div>
+            </div>
+            <div class="opt sel">
+              <div class="score">82% MATCH</div>
+              <div>…strongest signal in <span class="anchor">month-1 churn (specifically week 2–3)</span>, which the proposed work…</div>
+            </div>
+            <div class="opt">
+              <div class="score" style="color: var(--ink-2);">61% MATCH</div>
+              <div>…correlates with early-funnel drop-off…</div>
+            </div>
+            <div class="foot">
+              <button class="btn-secondary">Cancel</button>
+              <button class="btn-primary">Reattach here</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-meta">
+      <div class="frame-num">05</div>
+      <h2 class="frame-title">Reopen file edited externally</h2>
+      <p class="frame-desc">A document that drifted. Banner above the prose, lost-anchor section pinned to top of sidebar, dashed magenta underline on the renderer&rsquo;s best guess. Reattach modal lists ranked candidates plus a manual-pick option.</p>
+      <ul class="beats">
+        <li>File opens; reattachment strategy runs (proposal §185)</li>
+        <li>Drifted comments collected into Lost-anchor section</li>
+        <li>Click Recover… on banner or Reattach… on the card</li>
+        <li>Pick a passage → markers re-write into the file → dashed underline becomes a normal anchor</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 6. Clean export -->
+  <div class="frame">
+    <div class="frame-stage">
+      <div class="mini-titlebar">
+        <div class="traffic"><span></span><span></span><span></span></div>
+        <div class="mini-title">proposal-q3.md</div>
+        <div style="width: 36px;"></div>
+      </div>
+      <div class="pane" style="position: relative;">
+        <div class="editor">
+          <h2>Q3 Roadmap</h2>
+          <p>The team has aligned on <span class="anchor">three priorities</span> for the quarter — kickoff default, retire sandbox, replace tour.</p>
+          <p>We&rsquo;ll revisit the order at month-end if signal warrants.</p>
+        </div>
+        <div class="sidebar">
+          <div class="sidebar-head"><span>4 comments</span></div>
+          <div class="card"><div class="au"><span class="av">C</span><span class="au-name">Claude</span></div><div class="card-body" style="color: var(--ink-2);">Should we order by reversibility…</div></div>
+          <div class="card"><div class="au"><span class="av maya">M</span><span class="au-name">Maya</span></div><div class="card-body" style="color: var(--ink-2);">Good catch. Let&rsquo;s split…</div></div>
+        </div>
+        <div class="dialog-overlay">
+          <div class="dialog">
+            <h4>Export a clean copy?</h4>
+            <p>This will save a new file with all 4 comments and anchor markers stripped. The current file is unchanged.</p>
+            <div class="actions">
+              <button class="btn-secondary">Cancel</button>
+              <button class="btn-primary">Choose location…</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-meta">
+      <div class="frame-num">06</div>
+      <h2 class="frame-title">Clean export</h2>
+      <p class="frame-desc">Confirmation modal before a destructive-feeling action, reassures the user that the working file is untouched. Native save dialog follows.</p>
+      <ul class="beats">
+        <li>File menu → Clean Export… (⌘⇧E)</li>
+        <li>Confirmation modal with comment count to be stripped</li>
+        <li>Choose location… → native macOS save sheet</li>
+        <li>Resulting file: prose only, no anchor markers, no YAML block</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+<div class="doc-foot">
+  <span>Forgemark · Six-flow storyboard · v1</span>
+  <span><a href="Forgemark.html">→ Open the prototype</a> · <a href="Forgemark - Design System.html">→ Design system</a> · <a href="Forgemark - Rationale.html">→ Rationale</a></span>
+</div>
+
+</body>
+</html>
