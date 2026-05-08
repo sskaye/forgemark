@@ -17,6 +17,7 @@
     "test:ai": "RUN_AI_TESTS=1 vitest run tests/ai/",
     "build:skill": "node scripts/build-skill.mjs",
     "build:icons": "tauri icon assets/forgemark-icon.svg --output src-tauri/icons",
+    "release": "node scripts/release.mjs",
     "verify-ai-output": "node scripts/verify-ai-output.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
