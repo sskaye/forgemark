@@ -114,50 +114,93 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .item(&suggest_edit)
         .build()?;
 
-    // Window menu — macOS standard plus a Move & Resize submenu so
-    // the keyboard window-resize shortcuts (Ctrl+Cmd+arrows /
-    // Ctrl+Cmd+F) work the way users expect from Rectangle, Magnet,
-    // and the macOS Sequoia native commands. Items emit
-    // window-* ids that the JS bridge handles via the Tauri window
-    // API (set_size + set_position).
+    // Window menu — matches the macOS native structure so users
+    // can find what they expect, and System Settings → Keyboard →
+    // Shortcuts → App Shortcuts can remap by item name. Item names
+    // reproduce Apple's exactly: "Left", "Right", "Top Left",
+    // "Return to Previous Size", etc.
+    //
+    // Default accelerators are Ctrl+Option+arrow (matches Rectangle
+    // and Magnet defaults). Tauri/Electron can't bind to Fn (Globe),
+    // so we can't reproduce the macOS Sequoia native Fn+Ctrl+arrow
+    // exactly — pick the next-most-conventional set instead.
+
+    // Halves
+    let mr_h_left = MenuItemBuilder::new("Left")
+        .id("window-left-half")
+        .accelerator("Ctrl+Alt+Left")
+        .build(app)?;
+    let mr_h_right = MenuItemBuilder::new("Right")
+        .id("window-right-half")
+        .accelerator("Ctrl+Alt+Right")
+        .build(app)?;
+    let mr_h_top = MenuItemBuilder::new("Top")
+        .id("window-top-half")
+        .accelerator("Ctrl+Alt+Up")
+        .build(app)?;
+    let mr_h_bottom = MenuItemBuilder::new("Bottom")
+        .id("window-bottom-half")
+        .accelerator("Ctrl+Alt+Down")
+        .build(app)?;
+    let halves_submenu = SubmenuBuilder::new(app, "Halves")
+        .item(&mr_h_left)
+        .item(&mr_h_right)
+        .item(&mr_h_top)
+        .item(&mr_h_bottom)
+        .build()?;
+
+    // Quarters
+    let mr_q_tl = MenuItemBuilder::new("Top Left")
+        .id("window-top-left-quarter")
+        .accelerator("Ctrl+Alt+U")
+        .build(app)?;
+    let mr_q_tr = MenuItemBuilder::new("Top Right")
+        .id("window-top-right-quarter")
+        .accelerator("Ctrl+Alt+I")
+        .build(app)?;
+    let mr_q_bl = MenuItemBuilder::new("Bottom Left")
+        .id("window-bottom-left-quarter")
+        .accelerator("Ctrl+Alt+J")
+        .build(app)?;
+    let mr_q_br = MenuItemBuilder::new("Bottom Right")
+        .id("window-bottom-right-quarter")
+        .accelerator("Ctrl+Alt+K")
+        .build(app)?;
+    let quarters_submenu = SubmenuBuilder::new(app, "Quarters")
+        .item(&mr_q_tl)
+        .item(&mr_q_tr)
+        .item(&mr_q_bl)
+        .item(&mr_q_br)
+        .build()?;
+
+    let mr_return = MenuItemBuilder::new("Return to Previous Size")
+        .id("window-return-previous")
+        .accelerator("Ctrl+Alt+R")
+        .build(app)?;
+
+    let move_resize_submenu = SubmenuBuilder::new(app, "Move & Resize")
+        .item(&halves_submenu)
+        .item(&quarters_submenu)
+        .separator()
+        .item(&mr_return)
+        .build()?;
+
+    // Fill / Center live at the Window-menu top level (matches macOS).
     let mr_fill = MenuItemBuilder::new("Fill")
         .id("window-fill")
-        .accelerator("Ctrl+Cmd+F")
+        .accelerator("Ctrl+Alt+F")
         .build(app)?;
     let mr_center = MenuItemBuilder::new("Center")
         .id("window-center")
-        .accelerator("Ctrl+Cmd+C")
+        .accelerator("Ctrl+Alt+C")
         .build(app)?;
-    let mr_left = MenuItemBuilder::new("Left Half")
-        .id("window-left-half")
-        .accelerator("Ctrl+Cmd+Left")
-        .build(app)?;
-    let mr_right = MenuItemBuilder::new("Right Half")
-        .id("window-right-half")
-        .accelerator("Ctrl+Cmd+Right")
-        .build(app)?;
-    let mr_top = MenuItemBuilder::new("Top Half")
-        .id("window-top-half")
-        .accelerator("Ctrl+Cmd+Up")
-        .build(app)?;
-    let mr_bottom = MenuItemBuilder::new("Bottom Half")
-        .id("window-bottom-half")
-        .accelerator("Ctrl+Cmd+Down")
-        .build(app)?;
-    let move_resize_submenu = SubmenuBuilder::new(app, "Move & Resize")
-        .item(&mr_fill)
-        .item(&mr_center)
-        .separator()
-        .item(&mr_left)
-        .item(&mr_right)
-        .item(&mr_top)
-        .item(&mr_bottom)
-        .build()?;
 
     let window_submenu = SubmenuBuilder::new(app, "Window")
         .minimize()
-        .maximize()
+        .maximize() // shows as "Zoom" — the Cocoa convention
         .separator()
+        .item(&mr_fill)
+        .item(&mr_center)
         .item(&move_resize_submenu)
         .build()?;
 

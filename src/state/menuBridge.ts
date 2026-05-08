@@ -41,6 +41,11 @@ const APP_LEVEL_IDS = new Set([
   "window-right-half",
   "window-top-half",
   "window-bottom-half",
+  "window-top-left-quarter",
+  "window-top-right-quarter",
+  "window-bottom-left-quarter",
+  "window-bottom-right-quarter",
+  "window-return-previous",
 ]);
 
 export async function startMenuBridge(): Promise<UnlistenFn | null> {
