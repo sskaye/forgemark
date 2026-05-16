@@ -30,13 +30,21 @@ fn take_pending_files(state: tauri::State<PendingFiles>) -> Vec<String> {
     std::mem::take(&mut *guard)
 }
 
+#[tauri::command]
+fn print_current_webview(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.print().map_err(|err| err.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .manage(PendingFiles::default())
-        .invoke_handler(tauri::generate_handler![take_pending_files])
+        .invoke_handler(tauri::generate_handler![
+            take_pending_files,
+            print_current_webview
+        ])
         .setup(|app| {
             let menu = build_menu(app.handle())?;
             app.set_menu(menu)?;
@@ -103,6 +111,10 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .id("clean-export")
         .accelerator("CmdOrCtrl+Shift+E")
         .build(app)?;
+    let print = MenuItemBuilder::new("Print…")
+        .id("print")
+        .accelerator("CmdOrCtrl+P")
+        .build(app)?;
 
     // File > Close clears the open document but keeps the window
     // open (TextEdit / Pages convention). Quitting the app is ⌘Q via
@@ -121,12 +133,18 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .item(&save_as)
         .item(&clean_export)
         .separator()
+        .item(&print)
+        .separator()
         .item(&close_file)
         .build()?;
 
-    // Edit menu — Undo / Redo / Cut / Copy / Paste. Select All is
-    // omitted intentionally; clicking + drag-select is faster than
-    // the menu route, and the menu was getting noisy.
+    // Edit menu — Undo / Redo / Cut / Copy / Paste, plus Forgemark's
+    // compact Find/Replace bar. Extra find commands stay keyboard-only
+    // so the menu remains quiet.
+    let find_replace = MenuItemBuilder::new("Find/Replace…")
+        .id("find-replace")
+        .accelerator("CmdOrCtrl+F")
+        .build(app)?;
     let edit_submenu = SubmenuBuilder::new(app, "Edit")
         .undo()
         .redo()
@@ -134,6 +152,8 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .cut()
         .copy()
         .paste()
+        .separator()
+        .item(&find_replace)
         .build()?;
 
     // Comment menu — only the two creation commands. Card-level

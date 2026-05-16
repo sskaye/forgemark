@@ -1,0 +1,113 @@
+.fm-print-document {
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  width: 720px;
+  opacity: 0;
+  pointer-events: none;
+  background: #fff;
+  color: #111;
+}
+
+.fm-print-header h1 {
+  margin: 0 0 24px;
+  font-family: var(--fm-ui-display);
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.fm-print-rendered .ProseMirror {
+  outline: none;
+}
+
+.fm-print-prose {
+  font-family: var(--fm-prose);
+  font-size: 12pt;
+  line-height: 1.5;
+  color: #111;
+}
+
+.fm-print-prose [data-anchor-id] {
+  background: rgba(255, 200, 72, 0.24);
+}
+
+.fm-print-review {
+  break-before: page;
+  margin-top: 32px;
+  font-family: var(--fm-ui);
+}
+
+.fm-print-review h2 {
+  margin: 0 0 14px;
+  font-size: 16px;
+}
+
+.fm-print-review ol {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.fm-print-review-item {
+  margin: 0 0 18px;
+  break-inside: avoid;
+}
+
+.fm-print-review-meta {
+  font-size: 10pt;
+  font-weight: 600;
+  color: #333;
+}
+
+.fm-print-anchor {
+  margin: 6px 0;
+  padding-left: 10px;
+  border-left: 2px solid #bbb;
+  color: #444;
+}
+
+.fm-print-comment-body {
+  white-space: pre-wrap;
+  margin: 6px 0;
+}
+
+.fm-print-suggestion {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 8px;
+  border: 1px solid #c8dccf;
+  background: #eef8f1;
+  font-family: var(--fm-mono);
+  font-size: 10pt;
+}
+
+.fm-print-replies {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.fm-print-reply-author {
+  font-weight: 600;
+}
+
+@media print {
+  html,
+  body,
+  #root {
+    height: auto;
+    background: #fff !important;
+  }
+
+  .fm-app-shell > :not(.fm-print-document) {
+    display: none !important;
+  }
+
+  .fm-print-document {
+    position: static;
+    width: auto;
+    opacity: 1;
+    pointer-events: auto;
+    display: block;
+    padding: 0;
+  }
+}

@@ -1,17 +1,17 @@
 # Forgemark conventions
 
-Quick reference for engineers working in this repo. The implementation plan in `docs/implementation-plan.md` is the long-form source.
+Quick reference for engineers working in this repo. For the current code map, read `docs/ARCHITECTURE.md`.
 
 ## Branch naming
 
-- `phaseN-<short-slug>` — main implementation work for phase N (e.g. `phase3-yaml-parser`).
+- `feature/<short-slug>` — new user-facing behavior.
 - `fix/<short-slug>` — bug fixes outside the phase cadence.
 - `chore/<short-slug>` — tooling, deps, refactors with no behavior change.
 
 ## Commit messages
 
 - One subject line ≤ 72 chars, imperative mood ("Add foo," not "Added foo").
-- Body wraps at 72; explain _why_, not _what_.
+- Body wraps at 72; explain *why*, not *what*.
 - Co-author trailer when work was paired or AI-assisted.
 
 ## Code style
@@ -27,7 +27,7 @@ Quick reference for engineers working in this repo. The implementation plan in `
 - Unit tests live next to source as `<file>.test.ts(x)` OR in `tests/unit/`.
 - Integration tests under `tests/integration/`.
 - E2E tests under `tests/e2e/`.
-- AI-agent tests under `tests/ai/`. Never run in CI — see implementation plan §2 CI policy.
+- AI-agent tests under `tests/ai/`. Never run in CI; run them manually with `RUN_AI_TESTS=1 npm run test:ai` or by giving an agent the skill plus one fixture/case pair.
 - `tests/utils/flaky.ts` provides `flaky.flaky(...)` for tests that need a single logic retry. Use sparingly.
 
 ## Forward-compat markers
@@ -46,7 +46,7 @@ These are greppable in CI and called out in the v1.1 planning meeting.
 src/                  # React + TS UI
 src-tauri/            # Tauri shell (Rust)
 tests/                # All test code
-docs/                 # Proposal, design handoff, plan, feedback
+docs/                 # Current architecture notes and retained token source
 assets/               # Skill package, sample files, app icon sources
 .github/workflows/    # CI (no AI tests)
 ```

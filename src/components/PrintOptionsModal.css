@@ -1,0 +1,18 @@
+.fm-print-options-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fm-print-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--fm-ui);
+  font-size: 13px;
+  color: var(--fm-prose-ink);
+}
+
+.fm-print-option input {
+  margin: 0;
+}

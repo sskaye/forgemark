@@ -1,5 +1,5 @@
-// Forgemark design tokens — TypeScript translation of the canonical
-// `docs/design_handoff_v1_1/tokens.js` source. Values must match the source
+// Forgemark design tokens — TypeScript translation of the retained
+// `docs/design-tokens.js` source snapshot. Values must match the source
 // byte-for-byte; the contract test in `tests/unit/tokens.test.ts` enforces
 // this.
 //

@@ -2,7 +2,7 @@
 
 A desktop application for collaborative review of markdown documents — by humans **and** AI agents working as peers. Comments, threaded replies, and suggested edits all live inside the markdown file itself, so an AI agent reading the raw file sees the full review context with no special tooling.
 
-> **Status:** v1.0.0 — see [CHANGELOG](CHANGELOG.md) for what shipped.
+> **Status:** v1.1.0 — see [CHANGELOG](CHANGELOG.md) for what shipped.
 
 ## What it is
 
@@ -10,7 +10,7 @@ A desktop application for collaborative review of markdown documents — by huma
 - **For AI agents:** the same comments are plain markdown. Read existing comments, add new ones, address them — all by editing the file. The bundled [skill package](#ai-agents) teaches Claude / Codex / any other capable LLM the format in one read.
 - **Not** a Google Docs replacement, not a real-time co-editor, not a git client. Specifically a review tool.
 
-The full product proposal is at [`docs/markdown-commenter-proposal.md`](docs/markdown-commenter-proposal.md). The phased build plan is at [`docs/implementation-plan.md`](docs/implementation-plan.md).
+For contributors and agents, the current code map is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Install
 
@@ -109,7 +109,7 @@ AI-agent tests are **never run in CI** — they call live LLMs and are stochasti
 - **Primary path (recommended):** open Claude Code, invoke a sub-agent with a fixture from `tests/ai/fixtures/`, the skill content at `assets/forgemark-skill/SKILL.md`, and a prompt from `tests/ai/cases/`. Capture the result in the PR description.
 - **Optional SDK harness:** `RUN_AI_TESTS=1 npm run test:ai` (requires `ANTHROPIC_API_KEY`).
 
-See `docs/implementation-plan.md` §2 for the methodology.
+The prompt fixtures and expected behaviors live under `tests/ai/`.
 
 ## Repo layout
 
@@ -117,7 +117,7 @@ See `docs/implementation-plan.md` §2 for the methodology.
 src/                React + TypeScript UI
 src-tauri/          Tauri shell (Rust)
 tests/              Unit, integration, E2E, perf, AI-agent tests
-docs/               Proposal, design handoff, implementation plan
+docs/               Current architecture notes and retained token source
 assets/             Skill package, sample documents, app icon
 scripts/            Build helpers (skill packaging, icon generation, verifier)
 .github/workflows/  CI (no AI tests)

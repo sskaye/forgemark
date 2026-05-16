@@ -9,7 +9,8 @@ For each case:
 - **Expectations** — properties the agent's answer must satisfy
 - **Last run** — captured output from the most recent sub-agent invocation, with notes on whether expectations were met
 
-The harness is documented in `docs/implementation-plan.md §2`. Locally, a developer spawns a Claude Code sub-agent with the fixture path and one of the prompts below, then verifies the answer matches expectations.
+Locally, a developer spawns a Claude Code sub-agent with the fixture path and one
+of the prompts below, then verifies the answer matches expectations.
 
 ---
 

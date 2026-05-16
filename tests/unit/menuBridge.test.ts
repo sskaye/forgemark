@@ -24,6 +24,10 @@ describe("menuBridge.route", () => {
     expect(onCustom).toHaveBeenCalled();
     const e = onCustom.mock.calls[0][0] as CustomEvent<string>;
     expect(e.detail).toBe("settings");
+    route("print");
+    expect((onCustom.mock.calls[1][0] as CustomEvent<string>).detail).toBe("print");
+    route("find-replace");
+    expect((onCustom.mock.calls[2][0] as CustomEvent<string>).detail).toBe("find-replace");
     window.removeEventListener("forgemark:menu", onCustom);
   });
 

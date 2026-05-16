@@ -9,6 +9,8 @@ import { EditDuringOpenModal } from "./EditDuringOpenModal";
 import { SaveConflictModal } from "./SaveConflictModal";
 import { SettingsModal } from "./SettingsModal";
 import { CleanExportModal } from "./CleanExportModal";
+import { PrintDocument } from "./PrintDocument";
+import { PrintOptionsModal, type PrintOptions } from "./PrintOptionsModal";
 import { FirstRunWelcome } from "./FirstRunWelcome";
 import { useDocument } from "../state/DocumentProvider";
 import { DocumentBindings } from "../state/DocumentBindings";
@@ -22,6 +24,7 @@ import { contextSnippet, parseForgemarkFile } from "../format";
 import { useFontSize, useFirstRun } from "../state/preferences";
 import { saveMarkdownFile } from "../services/fileIO";
 import { applyWindowAction, isWindowAction } from "../services/windowActions";
+import { invoke } from "@tauri-apps/api/core";
 import { ask } from "@tauri-apps/plugin-dialog";
 import "./AppShell.css";
 // Bundled sample file — Vite's `?raw` import pulls in the markdown text
@@ -37,6 +40,9 @@ export function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [cleanExportOpen, setCleanExportOpen] = useState(false);
+  const [printOptionsOpen, setPrintOptionsOpen] = useState(false);
+  const [printOptions, setPrintOptions] = useState<PrintOptions | null>(null);
+  const [printRequestId, setPrintRequestId] = useState(0);
   const [fontSize] = useFontSize();
   const { firstRunDone, markDone } = useFirstRun();
 
@@ -47,8 +53,34 @@ export function AppShell() {
     document.documentElement.style.setProperty("--fm-font-size", fontSize + "px");
   }, [fontSize]);
 
+  const continueToPrint = (options: PrintOptions) => {
+    setPrintOptions(options);
+    setPrintOptionsOpen(false);
+    setPrintRequestId((id) => id + 1);
+  };
+
+  useEffect(() => {
+    if (printRequestId === 0 || !printOptions) return;
+    let cancelled = false;
+    const schedule =
+      typeof window.requestAnimationFrame === "function"
+        ? (cb: () => void) => window.requestAnimationFrame(() => window.requestAnimationFrame(cb))
+        : (cb: () => void) => window.setTimeout(cb, 0);
+    schedule(async () => {
+      if (cancelled) return;
+      try {
+        await invoke("print_current_webview");
+      } catch {
+        window.print();
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [printOptions, printRequestId]);
+
   // Phase 11 keyboard shortcuts that aren't tied to the document
-  // model: Settings (⌘,) and Clean Export (⌘⇧E).
+  // model: Settings (⌘,), Clean Export (⌘⇧E), and Print (⌘P).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
@@ -56,6 +88,9 @@ export function AppShell() {
       if (e.key === ",") {
         e.preventDefault();
         setSettingsOpen(true);
+      } else if (!e.shiftKey && !e.altKey && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        setPrintOptionsOpen(true);
       } else if (e.shiftKey && e.key.toLowerCase() === "e") {
         e.preventDefault();
         if (state.filePath) setCleanExportOpen(true);
@@ -77,6 +112,10 @@ export function AppShell() {
       }
       if (detail === "clean-export") {
         if (state.filePath) setCleanExportOpen(true);
+        return;
+      }
+      if (detail === "print") {
+        setPrintOptionsOpen(true);
         return;
       }
       if (detail === "close-file") {
@@ -103,8 +142,7 @@ export function AppShell() {
         } catch (err) {
           dispatch({
             type: "error",
-            message:
-              "Window resize failed: " + (err instanceof Error ? err.message : String(err)),
+            message: "Window resize failed: " + (err instanceof Error ? err.message : String(err)),
           });
         }
         return;
@@ -198,7 +236,21 @@ export function AppShell() {
         <EditorPane anchorStatuses={anchorStatuses} />
         {sidebarOpen && <Sidebar anchorStatuses={anchorStatuses} />}
       </div>
+      {printOptions && (
+        <PrintDocument
+          body={state.body}
+          comments={state.comments}
+          fileName={state.fileName}
+          options={printOptions}
+        />
+      )}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+      {printOptionsOpen && (
+        <PrintOptionsModal
+          onCancel={() => setPrintOptionsOpen(false)}
+          onContinue={continueToPrint}
+        />
+      )}
       {cleanExportOpen && state.filePath && (
         <CleanExportModal
           commentCount={state.comments.length}

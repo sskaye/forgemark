@@ -105,6 +105,10 @@ Auto-update infrastructure is **deferred to v1.1**. Until then, releases are man
 
 ## Manual
 
-- Cross-platform validation pass on Windows: open every fixture under `tests/ai/fixtures/`, run through the six storyboard flows from `docs/design_handoff_v1_1/README.md` §13, capture screenshots, compare against the macOS baseline.
+- Cross-platform validation pass on Windows: open every fixture under
+  `tests/ai/fixtures/`, then exercise the core flows from
+  `docs/ARCHITECTURE.md`: add a comment, suggest/accept/reject an edit,
+  recover a lost anchor, use Settings skill download, run Clean Export, and
+  verify external-change conflict handling where practical.
 - Manual end-to-end with **Claude Code**: install the `.skill`, open the production sample, run every prompt from `tests/ai/cases/*.md`. Expected: all PASS.
 - Manual end-to-end with **Codex CLI**: extract the `.zip` to `~/.agents/skills/forgemark/`, same exercise.

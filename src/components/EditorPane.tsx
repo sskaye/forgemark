@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDocument } from "../state/DocumentProvider";
 import { useAuthorName } from "../state/preferences";
-import { RenderedView, type RenderedViewHandle } from "./RenderedView";
+import { RenderedView, type RenderedSearchMatch, type RenderedViewHandle } from "./RenderedView";
 import { SourceView, type SourceViewHandle } from "./SourceView";
 import { NewCommentComposer } from "./NewCommentComposer";
+import { FindReplaceBar } from "./FindReplaceBar";
 import { LostAnchorBanner } from "./LostAnchorBanner";
 import { ContextMenu } from "./ContextMenu";
 import { nextCommentId, serializeForgemarkFile, type AnchorStatus } from "../format";
@@ -26,10 +27,18 @@ type Props = {
 // chip overlay. Card-click focus changes scroll the source view to the
 // matching marker via the SourceView imperative handle.
 export function EditorPane({ anchorStatuses }: Props) {
-  const { state, dispatch } = useDocument();
+  const { state, dispatch, setViewMode } = useDocument();
   const [author] = useAuthorName();
   const handleRef = useRef<RenderedViewHandle | null>(null);
   const sourceRef = useRef<SourceViewHandle | null>(null);
+  const [findState, setFindState] = useState({
+    open: false,
+    replaceVisible: false,
+    query: "",
+    replacement: "",
+    matches: [] as RenderedSearchMatch[],
+    activeIndex: -1,
+  });
   // Right-click context menu state. Lives here (not in document
   // state) because it's strictly local to the editor pane and
   // shouldn't survive viewMode toggles or external state events.
@@ -69,21 +78,127 @@ export function EditorPane({ anchorStatuses }: Props) {
     [dispatch, state.viewMode],
   );
 
+  const openFindReplace = useCallback(
+    (replaceVisible: boolean) => {
+      if (state.viewMode !== "rendered") {
+        setViewMode("rendered");
+      }
+      const selected = handleRef.current?.selectedText()?.trim();
+      setFindState((prev) => ({
+        ...prev,
+        open: true,
+        replaceVisible: replaceVisible || prev.replaceVisible,
+        query: selected && selected.length > 0 ? selected : prev.query,
+        activeIndex: selected && selected.length > 0 ? 0 : prev.activeIndex,
+      }));
+    },
+    [setViewMode, state.viewMode],
+  );
+
+  const closeFindReplace = useCallback(() => {
+    handleRef.current?.clearSearch();
+    setFindState((prev) => ({ ...prev, open: false, matches: [], activeIndex: -1 }));
+  }, []);
+
+  const moveActiveMatch = useCallback((direction: 1 | -1) => {
+    setFindState((prev) => {
+      if (!prev.open || prev.matches.length === 0) return prev;
+      const next =
+        prev.activeIndex < 0
+          ? direction > 0
+            ? 0
+            : prev.matches.length - 1
+          : (prev.activeIndex + direction + prev.matches.length) % prev.matches.length;
+      handleRef.current?.activateSearchMatch(prev.matches, next);
+      return { ...prev, activeIndex: next };
+    });
+  }, []);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
-      if (!mod || !e.altKey) return;
-      if (e.key.toLowerCase() === "m") {
+      if (!mod) return;
+      const key = e.key.toLowerCase();
+      if (e.altKey) {
+        if (key === "m") {
+          e.preventDefault();
+          openComposer();
+        } else if (key === "e") {
+          e.preventDefault();
+          openComposer("suggest");
+        } else if (key === "f") {
+          e.preventDefault();
+          openFindReplace(true);
+        }
+        return;
+      }
+      if (key === "f") {
         e.preventDefault();
-        openComposer();
-      } else if (e.key.toLowerCase() === "e") {
+        openFindReplace(false);
+      } else if (key === "g") {
         e.preventDefault();
-        openComposer("suggest");
+        moveActiveMatch(e.shiftKey ? -1 : 1);
+      } else if (key === "e") {
+        e.preventDefault();
+        const selected = handleRef.current?.selectedText()?.trim();
+        if (!selected) return;
+        if (state.viewMode !== "rendered") setViewMode("rendered");
+        setFindState((prev) => ({
+          ...prev,
+          open: true,
+          query: selected,
+          activeIndex: 0,
+        }));
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [openComposer]);
+  }, [moveActiveMatch, openComposer, openFindReplace, setViewMode, state.viewMode]);
+
+  useEffect(() => {
+    const onMenu = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail;
+      if (detail === "find-replace") openFindReplace(false);
+    };
+    window.addEventListener("forgemark:menu", onMenu);
+    return () => window.removeEventListener("forgemark:menu", onMenu);
+  }, [openFindReplace]);
+
+  useEffect(() => {
+    if (!findState.open) return;
+    if (state.viewMode !== "rendered") return;
+    const handle = handleRef.current;
+    if (!handle) return;
+    if (findState.query.length === 0) {
+      handle.clearSearch();
+      if (findState.matches.length > 0 || findState.activeIndex !== -1) {
+        setFindState((prev) => ({ ...prev, matches: [], activeIndex: -1 }));
+      }
+      return;
+    }
+    const matches = handle.search(findState.query, false, -1);
+    const activeIndex =
+      matches.length === 0 ? -1 : Math.min(Math.max(findState.activeIndex, 0), matches.length - 1);
+    if (activeIndex >= 0) handle.activateSearchMatch(matches, activeIndex);
+    setFindState((prev) => {
+      if (!prev.open) return prev;
+      if (
+        prev.activeIndex === activeIndex &&
+        prev.matches.length === matches.length &&
+        prev.matches.every((m, i) => m.from === matches[i]?.from && m.to === matches[i]?.to)
+      ) {
+        return prev;
+      }
+      return { ...prev, matches, activeIndex };
+    });
+  }, [
+    findState.activeIndex,
+    findState.matches,
+    findState.open,
+    findState.query,
+    state.body,
+    state.viewMode,
+  ]);
 
   // Right-click handling. Three regions:
   //   - inside a textarea / input: let the OS native menu show.
@@ -180,6 +295,25 @@ export function EditorPane({ anchorStatuses }: Props) {
 
   const cancelComposer = useCallback(() => dispatch({ type: "closeComposer" }), [dispatch]);
 
+  const replaceActiveMatch = useCallback(() => {
+    const match = findState.matches[findState.activeIndex];
+    if (!match) return;
+    if (handleRef.current?.replaceSearchMatch(match, findState.replacement)) {
+      setFindState((prev) => ({ ...prev, activeIndex: Math.max(0, prev.activeIndex) }));
+    }
+  }, [findState.activeIndex, findState.matches, findState.replacement]);
+
+  const replaceAllMatches = useCallback(() => {
+    if (findState.matches.length === 0) return;
+    const replaced = handleRef.current?.replaceAllSearchMatches(
+      findState.matches,
+      findState.replacement,
+    );
+    if (replaced) {
+      setFindState((prev) => ({ ...prev, activeIndex: -1 }));
+    }
+  }, [findState.matches, findState.replacement]);
+
   // Phase 4 said the editor stays read-only when comments exist; Phase 5
   // keeps the same posture for free-form prose editing. Selection still
   // works in read-only Tiptap, which is what the composer needs.
@@ -206,9 +340,7 @@ export function EditorPane({ anchorStatuses }: Props) {
     if (state.focusedCommentId == null) return;
     const pane = paneRef.current;
     if (!pane) return;
-    const span = pane.querySelector<HTMLElement>(
-      `[data-anchor-id="${state.focusedCommentId}"]`,
-    );
+    const span = pane.querySelector<HTMLElement>(`[data-anchor-id="${state.focusedCommentId}"]`);
     if (!span || typeof span.scrollIntoView !== "function") return;
     span.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [state.focusedCommentId, state.viewMode]);
@@ -230,12 +362,29 @@ export function EditorPane({ anchorStatuses }: Props) {
   }
 
   return (
-    <main
-      ref={paneRef}
-      className="fm-editor-pane"
-      data-testid="fm-editor-pane"
-      role="main"
-    >
+    <main ref={paneRef} className="fm-editor-pane" data-testid="fm-editor-pane" role="main">
+      {findState.open && (
+        <FindReplaceBar
+          query={findState.query}
+          replacement={findState.replacement}
+          replaceVisible={findState.replaceVisible}
+          matchCount={findState.matches.length}
+          activeIndex={findState.activeIndex}
+          readOnly={state.readOnly}
+          onQueryChange={(query) =>
+            setFindState((prev) => ({ ...prev, query, activeIndex: query ? 0 : -1 }))
+          }
+          onReplacementChange={(replacement) => setFindState((prev) => ({ ...prev, replacement }))}
+          onToggleReplace={() =>
+            setFindState((prev) => ({ ...prev, replaceVisible: !prev.replaceVisible }))
+          }
+          onNext={() => moveActiveMatch(1)}
+          onPrevious={() => moveActiveMatch(-1)}
+          onReplace={replaceActiveMatch}
+          onReplaceAll={replaceAllMatches}
+          onClose={closeFindReplace}
+        />
+      )}
       {state.viewMode === "source" && (
         <aside
           className="fm-source-chip"
