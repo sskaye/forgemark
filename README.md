@@ -2,7 +2,7 @@
 
 A desktop application for collaborative review of markdown documents — by humans **and** AI agents working as peers. Comments, threaded replies, and suggested edits all live inside the markdown file itself, so an AI agent reading the raw file sees the full review context with no special tooling.
 
-> **Status:** v1.0.0 — see [CHANGELOG](CHANGELOG.md) for what shipped.
+> **Status:** v1.1.0 — see [CHANGELOG](CHANGELOG.md) for what shipped.
 
 ## What it is
 

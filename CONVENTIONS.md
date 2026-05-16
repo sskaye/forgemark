@@ -1,7 +1,6 @@
 # Forgemark conventions
 
-Quick reference for engineers working in this repo. For the current code map,
-read `docs/ARCHITECTURE.md`.
+Quick reference for engineers working in this repo. For the current code map, read `docs/ARCHITECTURE.md`.
 
 ## Branch naming
 
@@ -12,7 +11,7 @@ read `docs/ARCHITECTURE.md`.
 ## Commit messages
 
 - One subject line ≤ 72 chars, imperative mood ("Add foo," not "Added foo").
-- Body wraps at 72; explain _why_, not _what_.
+- Body wraps at 72; explain *why*, not *what*.
 - Co-author trailer when work was paired or AI-assisted.
 
 ## Code style
@@ -28,9 +27,7 @@ read `docs/ARCHITECTURE.md`.
 - Unit tests live next to source as `<file>.test.ts(x)` OR in `tests/unit/`.
 - Integration tests under `tests/integration/`.
 - E2E tests under `tests/e2e/`.
-- AI-agent tests under `tests/ai/`. Never run in CI; run them manually with
-  `RUN_AI_TESTS=1 npm run test:ai` or by giving an agent the skill plus one
-  fixture/case pair.
+- AI-agent tests under `tests/ai/`. Never run in CI; run them manually with `RUN_AI_TESTS=1 npm run test:ai` or by giving an agent the skill plus one fixture/case pair.
 - `tests/utils/flaky.ts` provides `flaky.flaky(...)` for tests that need a single logic retry. Use sparingly.
 
 ## Forward-compat markers

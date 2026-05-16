@@ -2,6 +2,28 @@
 
 All notable changes to Forgemark are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] — 2026-05-16
+
+### Added
+
+- File > Print... with Cmd+P, routed through a Forgemark pre-print sheet before the system print dialog opens.
+- Print-only document rendering that hides app chrome and prints rendered Markdown body content rather than raw Forgemark markers or YAML.
+- Print review appendix controls for including comments and suggested edits.
+- Edit > Find/Replace... with Cmd+F, plus editor-style shortcuts for replace mode, next/previous match, and using the current selection as the find text.
+- In-window find/replace bar for rendered document prose, with next/previous navigation, match counts, replace, replace all, and read-only-safe replace controls.
+
+### Changed
+
+- Simplified find/replace to literal, case-insensitive rendered-body search so it ignores the comments sidebar, source view, YAML, and raw markers.
+- Refreshed repository documentation so future agents can understand the project from the docs before diving into code.
+
+### Fixed
+
+- Print continuation now invokes the native Tauri print path instead of returning silently to the document.
+- Find/replace layout now stays compact in replace mode without controls overlapping the match count.
+- Text fixture line endings are normalized across platforms so Windows CI no longer mutates LF-sensitive round-trip fixtures.
+- E2E smoke tests now start with first-run onboarding dismissed, matching the assumptions of the shell interaction tests.
+
 ## [1.0.0] — 2026-05-08
 
 The first public release. Forgemark is a desktop app for collaborative review of markdown documents — by humans and AI agents working as peers. Comments, threaded replies, and suggested edits all live inside the `.md` file itself, so an AI agent reading the raw file sees the full review context with no special tooling.
