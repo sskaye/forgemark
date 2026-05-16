@@ -35,6 +35,8 @@ const SYNTHESIZE_AS_KEYDOWN: Record<string, KeyboardEventInit> = {
 const APP_LEVEL_IDS = new Set([
   "settings",
   "clean-export",
+  "print",
+  "find-replace",
   "close-file",
   "window-fill",
   "window-center",
@@ -91,9 +93,7 @@ export async function startMenuBridge(): Promise<UnlistenFn | null> {
 function dispatchOpenPath(path: string) {
   if (typeof window === "undefined") return;
   if (!path) return;
-  window.dispatchEvent(
-    new CustomEvent("forgemark:open-path", { detail: { path } }),
-  );
+  window.dispatchEvent(new CustomEvent("forgemark:open-path", { detail: { path } }));
 }
 
 export function route(id: string) {

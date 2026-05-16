@@ -133,6 +133,16 @@
   background: var(--fm-anchor-bg-resolved);
 }
 
+.fm-rendered-view .fm-search-match {
+  background: var(--fm-accent-soft);
+  border-radius: 2px;
+}
+
+.fm-rendered-view .fm-search-match-active {
+  background: var(--fm-accent-soft-strong);
+  box-shadow: inset 0 0 0 1px var(--fm-accent);
+}
+
 /* Tables */
 .fm-rendered-view .fm-prose table {
   border-collapse: collapse;

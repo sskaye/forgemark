@@ -10,7 +10,12 @@ import { TaskList } from "@tiptap/extension-task-list";
 import { TaskItem } from "@tiptap/extension-task-item";
 import { Markdown } from "tiptap-markdown";
 import { useEffect, useMemo, useRef } from "react";
+import { Extension } from "@tiptap/core";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { Decoration as PMDecoration, DecorationSet } from "@tiptap/pm/view";
 import { bodyFromAnchorSpans, bodyWithAnchorSpans } from "../format";
+import { findLiteralMatches } from "../services/findReplace";
 import { AnchorMark } from "./AnchorMark";
 import "./RenderedView.css";
 
@@ -35,6 +40,18 @@ export type RenderedViewHandle = {
   // updated body (with marker comments restored from the rendered span
   // wrappers). Used by the composer on submit.
   applyAnchor(from: number, to: number, id: number): string;
+  selectedText(): string | null;
+  search(query: string, matchCase: boolean, activeIndex: number): RenderedSearchMatch[];
+  activateSearchMatch(matches: RenderedSearchMatch[], activeIndex: number): void;
+  replaceSearchMatch(match: RenderedSearchMatch, replacement: string): boolean;
+  replaceAllSearchMatches(matches: RenderedSearchMatch[], replacement: string): number;
+  clearSearch(): void;
+};
+
+export type RenderedSearchMatch = {
+  from: number;
+  to: number;
+  text: string;
 };
 
 type Props = {
@@ -86,6 +103,7 @@ export function RenderedView({
       StarterKit.configure({ link: false }),
       Link.configure({ openOnClick: false }),
       AnchorMark,
+      SearchHighlightExtension,
       Image,
       Table.configure({ resizable: false }),
       TableRow,
@@ -278,6 +296,44 @@ export function RenderedView({
         // the AnchorMark. Convert back to canonical marker comments.
         return bodyFromAnchorSpans(md);
       },
+      selectedText: () => {
+        if (!editor) return null;
+        const { from, to, empty } = editor.state.selection;
+        if (empty) return null;
+        const text = editor.state.doc.textBetween(from, to, " ", " ");
+        return text.trim().length > 0 ? text : null;
+      },
+      search: (query: string, matchCase: boolean, activeIndex: number) => {
+        if (!editor) return [];
+        const matches = findDocumentMatches(editor.state.doc, query, matchCase);
+        updateSearchDecorations(editor, matches, activeIndex);
+        if (activeIndex >= 0) activateSearchMatch(editor, matches, activeIndex);
+        return matches;
+      },
+      activateSearchMatch: (matches: RenderedSearchMatch[], activeIndex: number) => {
+        if (!editor) return;
+        updateSearchDecorations(editor, matches, activeIndex);
+        activateSearchMatch(editor, matches, activeIndex);
+      },
+      replaceSearchMatch: (match: RenderedSearchMatch, replacement: string) => {
+        if (!editor || !editor.isEditable) return false;
+        const tr = editor.state.tr.insertText(replacement, match.from, match.to);
+        editor.view.dispatch(tr);
+        return true;
+      },
+      replaceAllSearchMatches: (matches: RenderedSearchMatch[], replacement: string) => {
+        if (!editor || !editor.isEditable || matches.length === 0) return 0;
+        let tr = editor.state.tr;
+        for (const match of [...matches].sort((a, b) => b.from - a.from)) {
+          tr = tr.insertText(replacement, match.from, match.to);
+        }
+        editor.view.dispatch(tr);
+        return matches.length;
+      },
+      clearSearch: () => {
+        if (!editor) return;
+        updateSearchDecorations(editor, [], -1);
+      },
     };
     return () => {
       if (handleRef.current) handleRef.current = null;
@@ -287,6 +343,118 @@ export function RenderedView({
   return (
     <EditorContent editor={editor} className="fm-rendered-view" data-testid="fm-rendered-view" />
   );
+}
+
+type SearchDecorationState = {
+  matches: RenderedSearchMatch[];
+  activeIndex: number;
+};
+
+const searchPluginKey = new PluginKey<SearchDecorationState>("forgemark-search");
+
+const SearchHighlightExtension = Extension.create({
+  name: "forgemarkSearchHighlight",
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin<SearchDecorationState>({
+        key: searchPluginKey,
+        state: {
+          init: () => ({ matches: [], activeIndex: -1 }),
+          apply: (tr, value) => {
+            const meta = tr.getMeta(searchPluginKey) as SearchDecorationState | undefined;
+            if (meta) return meta;
+            if (tr.docChanged) return { matches: [], activeIndex: -1 };
+            return value;
+          },
+        },
+        props: {
+          decorations(state) {
+            const value = searchPluginKey.getState(state);
+            if (!value || value.matches.length === 0) return null;
+            return DecorationSet.create(
+              state.doc,
+              value.matches.map((match, index) =>
+                PMDecoration.inline(match.from, match.to, {
+                  class:
+                    "fm-search-match" +
+                    (index === value.activeIndex ? " fm-search-match-active" : ""),
+                  "data-testid": index === value.activeIndex ? "fm-search-active" : undefined,
+                }),
+              ),
+            );
+          },
+        },
+      }),
+    ];
+  },
+});
+
+function updateSearchDecorations(
+  editor: NonNullable<ReturnType<typeof useEditor>>,
+  matches: RenderedSearchMatch[],
+  activeIndex: number,
+) {
+  editor.view.dispatch(editor.state.tr.setMeta(searchPluginKey, { matches, activeIndex }));
+}
+
+function activateSearchMatch(
+  editor: NonNullable<ReturnType<typeof useEditor>>,
+  matches: RenderedSearchMatch[],
+  activeIndex: number,
+) {
+  const match = matches[activeIndex];
+  if (!match) return;
+  editor.commands.setTextSelection({ from: match.from, to: match.to });
+  queueMicrotask(() => {
+    const active = editor.view.dom.querySelector<HTMLElement>(".fm-search-match-active");
+    if (active && typeof active.scrollIntoView === "function") {
+      active.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  });
+}
+
+function findDocumentMatches(
+  doc: ProseMirrorNode,
+  query: string,
+  matchCase: boolean,
+): RenderedSearchMatch[] {
+  const index = buildTextIndex(doc);
+  const textMatches = findLiteralMatches(index.text, query, matchCase);
+  const matches: RenderedSearchMatch[] = [];
+  for (const textMatch of textMatches) {
+    const start = index.positions[textMatch.from];
+    const endChar = index.positions[textMatch.to - 1];
+    if (start == null || endChar == null) continue;
+    const rangePositions = index.positions.slice(textMatch.from, textMatch.to);
+    if (rangePositions.some((pos) => pos == null)) continue;
+    matches.push({
+      from: start,
+      to: endChar + 1,
+      text: index.text.slice(textMatch.from, textMatch.to),
+    });
+  }
+  return matches;
+}
+
+function buildTextIndex(doc: ProseMirrorNode): { text: string; positions: Array<number | null> } {
+  let text = "";
+  const positions: Array<number | null> = [];
+  let previousEnd: number | null = null;
+  doc.descendants((node, pos) => {
+    if (!node.isText || !node.text) return true;
+    if (previousEnd != null && pos > previousEnd) {
+      text += "\n";
+      positions.push(null);
+    }
+    for (let i = 0; i < node.text.length; i++) {
+      text += node.text[i];
+      positions.push(pos + i);
+    }
+    previousEnd = pos + node.text.length;
+    return false;
+  });
+  return { text, positions };
 }
 
 // Walk the ProseMirror selection's nearest enclosing nodes to detect
