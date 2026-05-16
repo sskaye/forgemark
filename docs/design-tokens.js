@@ -1,7 +1,7 @@
-// tokens.js — Forgemark design tokens (SOURCE OF TRUTH)
+// design-tokens.js — Forgemark design token source snapshot
 // -----------------------------------------------------------------------------
-// This file is the canonical token source for production.
-// The README table is regenerated from these values — do not edit there.
+// This file is retained for the token contract test. Production consumes the
+// TypeScript translation in src/theme/tokens.ts; keep the values in sync.
 // -----------------------------------------------------------------------------
 // Light + dark themes. The Native type pairing is locked for v1; the Editorial
 // pairing is commented below (considered, not shipped) — kept for context only.
@@ -14,8 +14,7 @@ window.FM_TOKENS = (() => {
     '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro", "Helvetica Neue", Arial, sans-serif';
   const SYSTEM_DISPLAY =
     '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro", "Helvetica Neue", Arial, sans-serif';
-  const SYSTEM_MONO =
-    'ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace';
+  const SYSTEM_MONO = 'ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace';
 
   // Charter is shipped with macOS; iowan is on iOS. Fall back gracefully.
   const HUMANIST_SERIF =
@@ -62,8 +61,8 @@ window.FM_TOKENS = (() => {
   const LIGHT = {
     name: "light",
     // Window
-    windowBg: "#ECECEC",       // behind window
-    titlebarBg: "#E8E8E6",     // top chrome
+    windowBg: "#ECECEC", // behind window
+    titlebarBg: "#E8E8E6", // top chrome
     titlebarBorder: "rgba(0,0,0,0.10)",
     chromeText: "rgba(0,0,0,0.78)",
     chromeMuted: "rgba(0,0,0,0.50)",
@@ -86,8 +85,7 @@ window.FM_TOKENS = (() => {
     cardBorder: "rgba(0,0,0,0.08)",
     cardBorderFocused: "rgba(0,0,0,0.18)",
     cardShadow: "0 1px 0 rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.04)",
-    cardShadowFocused:
-      "0 1px 0 rgba(0,0,0,0.06), 0 6px 18px rgba(0,0,0,0.10)",
+    cardShadowFocused: "0 1px 0 rgba(0,0,0,0.06), 0 6px 18px rgba(0,0,0,0.10)",
     // Anchor (highlight) — yellow-ish, very subtle
     anchorBg: "rgba(255,200,72,0.22)",
     anchorBgHover: "rgba(255,200,72,0.38)",
@@ -142,8 +140,7 @@ window.FM_TOKENS = (() => {
     cardBorder: "rgba(255,255,255,0.08)",
     cardBorderFocused: "rgba(255,255,255,0.18)",
     cardShadow: "0 1px 0 rgba(0,0,0,0.4), 0 1px 3px rgba(0,0,0,0.4)",
-    cardShadowFocused:
-      "0 1px 0 rgba(0,0,0,0.5), 0 8px 22px rgba(0,0,0,0.55)",
+    cardShadowFocused: "0 1px 0 rgba(0,0,0,0.5), 0 8px 22px rgba(0,0,0,0.55)",
 
     anchorBg: "rgba(255,200,72,0.16)",
     anchorBgHover: "rgba(255,200,72,0.26)",

@@ -4,8 +4,8 @@ import { resolve } from "node:path";
 import { LIGHT, DARK } from "../../src/theme/tokens";
 
 // Contract test: src/theme/tokens.ts must match the values in
-// docs/design_handoff_v1_1/tokens.js byte-for-byte. Tokens.js is the
-// canonical source — the design phase ships it; we translate it.
+// docs/design-tokens.js byte-for-byte. That file is the retained source
+// snapshot from the design pass; production code translates it into TS.
 //
 // We re-derive the source values by extracting them with a small parser
 // rather than executing the file (which expects a browser `window`).
@@ -13,7 +13,7 @@ import { LIGHT, DARK } from "../../src/theme/tokens";
 // If this test fails, either the source moved (update src/theme/tokens.ts
 // to match) or src/theme/tokens.ts drifted (revert it).
 
-const SOURCE_PATH = resolve(__dirname, "..", "..", "docs", "design_handoff_v1_1", "tokens.js");
+const SOURCE_PATH = resolve(__dirname, "..", "..", "docs", "design-tokens.js");
 
 function extractObject(source: string, marker: string): Record<string, string> {
   const start = source.indexOf(marker);
