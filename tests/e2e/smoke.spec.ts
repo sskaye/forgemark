@@ -2,6 +2,12 @@ import { test, expect } from "@playwright/test";
 
 // Phase 1 E2E smoke. Lights up against the Vite dev server (`vite:dev`).
 // The Tauri-window E2E lights up later in the plan via tauri-driver.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("forgemark.firstRunDone", "true");
+  });
+});
+
 test("dev surface loads with the Forgemark shell", async ({ page }) => {
   const errors: string[] = [];
   page.on("console", (msg) => {
