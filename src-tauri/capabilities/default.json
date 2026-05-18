@@ -19,6 +19,7 @@
     "fs:allow-exists",
     "fs:allow-watch",
     "fs:allow-unwatch",
+    "opener:default",
     {
       "identifier": "fs:scope",
       "allow": [{ "path": "**" }]
