@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { TitleBar } from "./TitleBar";
 import { Sidebar } from "./Sidebar";
 import { EditorPane } from "./EditorPane";
@@ -45,6 +45,19 @@ export function AppShell() {
   const [printRequestId, setPrintRequestId] = useState(0);
   const [fontSize] = useFontSize();
   const { firstRunDone, markDone } = useFirstRun();
+
+  const requestViewModeChange = useCallback(
+    (viewMode: "rendered" | "source") => {
+      if (viewMode === state.viewMode) return;
+      window.dispatchEvent(
+        new CustomEvent("forgemark:capture-view-sync", {
+          detail: { from: state.viewMode, to: viewMode },
+        }),
+      );
+      setViewMode(viewMode);
+    },
+    [setViewMode, state.viewMode],
+  );
 
   // Apply font-size preference as a CSS custom property on the
   // document root so all prose surfaces inherit it.
@@ -178,7 +191,7 @@ export function AppShell() {
         fileName={state.fileName}
         modified={state.dirty}
         viewMode={state.viewMode}
-        onViewModeChange={setViewMode}
+        onViewModeChange={requestViewModeChange}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen((s) => !s)}
         onOpenSettings={() => setSettingsOpen(true)}

@@ -186,14 +186,27 @@ describe("Source view (Phase 8)", () => {
 
   it("the Rendered/Source segmented control flips view mode", async () => {
     renderApp(SAMPLE);
+    const capture = vi.fn();
+    window.addEventListener("forgemark:capture-view-sync", capture);
     const sourceTab = screen.getByRole("tab", { name: "Source" });
     fireEvent.click(sourceTab);
     expect(await screen.findByTestId("fm-source-view")).toBeInTheDocument();
     expect(screen.getByTestId("probe-view-mode").textContent).toBe("source");
+    expect(capture).toHaveBeenCalledTimes(1);
+    expect((capture.mock.calls[0]?.[0] as CustomEvent).detail).toEqual({
+      from: "rendered",
+      to: "source",
+    });
     const renderedTab = screen.getByRole("tab", { name: "Rendered" });
     fireEvent.click(renderedTab);
     await waitFor(() => {
       expect(screen.getByTestId("probe-view-mode").textContent).toBe("rendered");
     });
+    expect(capture).toHaveBeenCalledTimes(2);
+    expect((capture.mock.calls[1]?.[0] as CustomEvent).detail).toEqual({
+      from: "source",
+      to: "rendered",
+    });
+    window.removeEventListener("forgemark:capture-view-sync", capture);
   });
 });

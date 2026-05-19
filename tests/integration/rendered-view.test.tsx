@@ -1,8 +1,11 @@
-import { describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import { render, waitFor } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { RenderedView } from "../../src/components/RenderedView";
+
+vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn(() => Promise.resolve()) }));
 
 const fixture = readFileSync(resolve(__dirname, "..", "fixtures", "gfm-sample.md"), "utf-8");
 
@@ -20,6 +23,10 @@ function renderFixture(body: string = fixture) {
 }
 
 describe("RenderedView GFM rendering", () => {
+  beforeEach(() => {
+    vi.mocked(openUrl).mockClear();
+  });
+
   it("renders headings, lists, code blocks, links, and tables", async () => {
     const { container } = renderFixture();
     await waitFor(() => {
@@ -191,5 +198,49 @@ describe("RenderedView GFM rendering", () => {
     const allText = anchored.map((el) => el.textContent).join(" ");
     expect(allText).toMatch(/bold/);
     expect(allText).toMatch(/italic/);
+  });
+
+  it("opens supported external links through the system opener", async () => {
+    const onAnchorClick = vi.fn();
+    const body =
+      "Anchored <!-- fmc:1 -->[link](https://example.com/path?q=1)<!-- /fmc:1 --> text.\n";
+    const { container } = render(
+      <RenderedView
+        body={body}
+        onEdit={vi.fn()}
+        focusedCommentId={null}
+        hoveredCommentId={null}
+        onAnchorClick={onAnchorClick}
+        onAnchorHover={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(container.querySelector("a")).toBeTruthy());
+
+    container.querySelector("a")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    await waitFor(() =>
+      expect(openUrl).toHaveBeenCalledWith("https://example.com/path?q=1"),
+    );
+    expect(onAnchorClick).not.toHaveBeenCalled();
+  });
+
+  it("does not open unsupported links externally", async () => {
+    const { container } = render(
+      <RenderedView
+        body={"A [relative link](./local.md) and [fragment](#section).\n"}
+        onEdit={vi.fn()}
+        focusedCommentId={null}
+        hoveredCommentId={null}
+        onAnchorClick={vi.fn()}
+        onAnchorHover={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(container.querySelectorAll("a").length).toBe(2));
+
+    container
+      .querySelector("a")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(openUrl).not.toHaveBeenCalled();
   });
 });

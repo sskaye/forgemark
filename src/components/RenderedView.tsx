@@ -14,8 +14,18 @@ import { Extension } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration as PMDecoration, DecorationSet } from "@tiptap/pm/view";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { bodyFromAnchorSpans, bodyWithAnchorSpans } from "../format";
+import { normalizeExternalUrl } from "../services/externalLinks";
 import { findLiteralMatches } from "../services/findReplace";
+import {
+  buildNormalizedIndex,
+  findAnchorPosition,
+  makeAnchorFromIndex,
+  scrollPaneToRatio,
+  scrollRatio,
+  type ViewSyncAnchor,
+} from "../services/viewSync";
 import { AnchorMark } from "./AnchorMark";
 import "./RenderedView.css";
 
@@ -46,6 +56,8 @@ export type RenderedViewHandle = {
   replaceSearchMatch(match: RenderedSearchMatch, replacement: string): boolean;
   replaceAllSearchMatches(matches: RenderedSearchMatch[], replacement: string): number;
   clearSearch(): void;
+  captureViewportAnchor(pane: HTMLElement): ViewSyncAnchor | null;
+  scrollToViewportAnchor(anchor: ViewSyncAnchor): boolean;
 };
 
 export type RenderedSearchMatch = {
@@ -69,6 +81,8 @@ type Props = {
   hoveredCommentId: number | null;
   onAnchorClick: (id: number | null) => void;
   onAnchorHover: (id: number | null) => void;
+  onExternalLinkError?: (message: string) => void;
+  onOpenExternalLink?: (url: string) => Promise<void> | void;
   // Phase 5 composer trigger handle. The parent attaches this and calls
   // `current.captureSelection()` from the ⌘⌥M shortcut handler.
   handleRef?: React.MutableRefObject<RenderedViewHandle | null>;
@@ -91,6 +105,8 @@ export function RenderedView({
   hoveredCommentId,
   onAnchorClick,
   onAnchorHover,
+  onExternalLinkError,
+  onOpenExternalLink = openUrl,
   handleRef,
 }: Props) {
   const lastInitialRef = useRef("");
@@ -190,9 +206,9 @@ export function RenderedView({
     editor.setEditable(!readOnly);
   }, [editor, readOnly]);
 
-  // Click + hover delegation on anchor spans. Every span carries
-  // `data-anchor-id`; we walk up from the event target to find the nearest
-  // matching ancestor.
+  // Click + hover delegation on links and anchor spans. Links win over
+  // comment-anchor focus: clicking an anchored link should open the link,
+  // not just focus the comment card.
   useEffect(() => {
     if (!editor) return;
     const root = editor.view.dom;
@@ -205,6 +221,19 @@ export function RenderedView({
       return Number.isFinite(id) ? id : null;
     };
     const onClick = (e: Event) => {
+      const link = findExternalLink(e.target);
+      if (link) {
+        e.preventDefault();
+        e.stopPropagation();
+        const url = normalizeExternalUrl(link.getAttribute("href"));
+        if (url) {
+          void Promise.resolve(onOpenExternalLink(url)).catch((err: unknown) => {
+            const detail = err instanceof Error ? err.message : String(err);
+            onExternalLinkError?.(`Open link failed: ${detail}`);
+          });
+        }
+        return;
+      }
       const id = findAnchor(e.target);
       if (id !== null) {
         onAnchorClick(id);
@@ -228,7 +257,7 @@ export function RenderedView({
       root.removeEventListener("mouseover", onMouseOver);
       root.removeEventListener("mouseout", onMouseOut);
     };
-  }, [editor, onAnchorClick, onAnchorHover]);
+  }, [editor, onAnchorClick, onAnchorHover, onExternalLinkError, onOpenExternalLink]);
 
   // Apply focus / hover classes onto matching anchor spans. We do this
   // imperatively because Tiptap owns the DOM under the editor root; the
@@ -334,6 +363,46 @@ export function RenderedView({
         if (!editor) return;
         updateSearchDecorations(editor, [], -1);
       },
+      captureViewportAnchor: (pane: HTMLElement) => {
+        if (!editor) return null;
+        const paneRect = pane.getBoundingClientRect();
+        const rootRect = editor.view.dom.getBoundingClientRect();
+        let sourcePosition: number | null = null;
+        if (typeof document.elementFromPoint === "function") {
+          try {
+            sourcePosition =
+              editor.view.posAtCoords({
+                left: Math.max(rootRect.left + 8, paneRect.left + 24),
+                top: paneRect.top + 40,
+              })?.pos ?? null;
+          } catch {
+            sourcePosition = null;
+          }
+        }
+        const index = buildRenderedViewportIndex(editor.state.doc);
+        return makeAnchorFromIndex(index, sourcePosition, scrollRatio(pane));
+      },
+      scrollToViewportAnchor: (anchor: ViewSyncAnchor) => {
+        if (!editor) return false;
+        const pane = editor.view.dom.closest<HTMLElement>(".fm-editor-pane");
+        if (!pane) return false;
+        const index = buildRenderedViewportIndex(editor.state.doc);
+        const pos = findAnchorPosition(index, anchor);
+        if (pos == null) {
+          scrollPaneToRatio(pane, anchor.ratio);
+          return false;
+        }
+        queueMicrotask(() => {
+          try {
+            const coords = editor.view.coordsAtPos(pos);
+            const paneRect = pane.getBoundingClientRect();
+            pane.scrollTop += coords.top - paneRect.top - 40;
+          } catch {
+            scrollPaneToRatio(pane, anchor.ratio);
+          }
+        });
+        return true;
+      },
     };
     return () => {
       if (handleRef.current) handleRef.current = null;
@@ -343,6 +412,12 @@ export function RenderedView({
   return (
     <EditorContent editor={editor} className="fm-rendered-view" data-testid="fm-rendered-view" />
   );
+}
+
+function findExternalLink(target: EventTarget | null): HTMLElement | null {
+  if (!(target instanceof HTMLElement)) return null;
+  const link = target.closest("a[href]");
+  return link instanceof HTMLElement && link.tagName === "A" ? link : null;
 }
 
 type SearchDecorationState = {
@@ -455,6 +530,11 @@ function buildTextIndex(doc: ProseMirrorNode): { text: string; positions: Array<
     return false;
   });
   return { text, positions };
+}
+
+function buildRenderedViewportIndex(doc: ProseMirrorNode) {
+  const index = buildTextIndex(doc);
+  return buildNormalizedIndex(index.text, index.positions);
 }
 
 // Walk the ProseMirror selection's nearest enclosing nodes to detect

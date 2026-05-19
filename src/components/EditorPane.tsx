@@ -8,6 +8,7 @@ import { FindReplaceBar } from "./FindReplaceBar";
 import { LostAnchorBanner } from "./LostAnchorBanner";
 import { ContextMenu } from "./ContextMenu";
 import { nextCommentId, serializeForgemarkFile, type AnchorStatus } from "../format";
+import type { ViewSyncAnchor } from "../services/viewSync";
 import "./EditorPane.css";
 
 type Props = {
@@ -31,6 +32,8 @@ export function EditorPane({ anchorStatuses }: Props) {
   const [author] = useAuthorName();
   const handleRef = useRef<RenderedViewHandle | null>(null);
   const sourceRef = useRef<SourceViewHandle | null>(null);
+  const paneRef = useRef<HTMLElement | null>(null);
+  const pendingViewSyncRef = useRef<ViewSyncAnchor | null>(null);
   const [findState, setFindState] = useState({
     open: false,
     replaceVisible: false,
@@ -330,7 +333,42 @@ export function EditorPane({ anchorStatuses }: Props) {
     [state.viewMode, state.body, state.comments],
   );
 
-  const paneRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const onCapture = (e: Event) => {
+      const detail = (e as CustomEvent<{ from: "rendered" | "source"; to: "rendered" | "source" }>)
+        .detail;
+      if (!detail || detail.from !== state.viewMode || detail.from === detail.to) return;
+      const pane = paneRef.current;
+      if (!pane) return;
+      pendingViewSyncRef.current =
+        state.viewMode === "rendered"
+          ? (handleRef.current?.captureViewportAnchor(pane) ?? null)
+          : (sourceRef.current?.captureViewportAnchor(pane) ?? null);
+    };
+    window.addEventListener("forgemark:capture-view-sync", onCapture);
+    return () => window.removeEventListener("forgemark:capture-view-sync", onCapture);
+  }, [state.viewMode]);
+
+  useEffect(() => {
+    const anchor = pendingViewSyncRef.current;
+    if (!anchor) return;
+    let raf1 = 0;
+    let raf2 = 0;
+    raf1 = window.requestAnimationFrame(() => {
+      raf2 = window.requestAnimationFrame(() => {
+        if (state.viewMode === "rendered") {
+          handleRef.current?.scrollToViewportAnchor(anchor);
+        } else {
+          sourceRef.current?.scrollToViewportAnchor(anchor);
+        }
+        pendingViewSyncRef.current = null;
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(raf1);
+      window.cancelAnimationFrame(raf2);
+    };
+  }, [state.viewMode]);
 
   // Card focus → bring the matching anchor span into view. Smooth
   // scroll with `block: nearest` so we only move when the anchor
@@ -413,6 +451,7 @@ export function EditorPane({ anchorStatuses }: Props) {
             hoveredCommentId={state.hoveredCommentId}
             onAnchorClick={(id) => dispatch({ type: "setFocusedComment", id })}
             onAnchorHover={(id) => dispatch({ type: "setHoveredComment", id })}
+            onExternalLinkError={(message) => dispatch({ type: "error", message })}
             handleRef={handleRef}
           />
         ) : (

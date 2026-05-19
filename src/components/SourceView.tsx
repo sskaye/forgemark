@@ -9,6 +9,14 @@ import {
 } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
 import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
+import {
+  buildSourceTextIndex,
+  findAnchorPosition,
+  makeAnchorFromIndex,
+  scrollPaneToRatio,
+  scrollRatio,
+  type ViewSyncAnchor,
+} from "../services/viewSync";
 import "./SourceView.css";
 
 // Phase 8 source view: CodeMirror 6 in read-only mode.
@@ -30,6 +38,8 @@ export type SourceViewHandle = {
   // view, with a brief flash to draw the eye. No-op if the marker
   // isn't present in the visible text.
   scrollToMarker: (id: number) => void;
+  captureViewportAnchor: (pane: HTMLElement) => ViewSyncAnchor | null;
+  scrollToViewportAnchor: (anchor: ViewSyncAnchor) => boolean;
 };
 
 type Props = {
@@ -182,6 +192,41 @@ export const SourceView = forwardRef<SourceViewHandle, Props>(function SourceVie
             host.removeAttribute("data-flash-marker");
           }
         }, 600);
+      },
+      captureViewportAnchor(pane: HTMLElement) {
+        const view = viewRef.current;
+        if (!view) return null;
+        const paneRect = pane.getBoundingClientRect();
+        const viewRect = view.dom.getBoundingClientRect();
+        let pos: number | null = null;
+        try {
+          pos = view.posAtCoords({
+            x: Math.max(viewRect.left + 8, paneRect.left + 24),
+            y: paneRect.top + 40,
+          });
+        } catch {
+          pos = null;
+        }
+        return makeAnchorFromIndex(
+          buildSourceTextIndex(view.state.doc.toString()),
+          pos,
+          scrollRatio(pane),
+        );
+      },
+      scrollToViewportAnchor(anchor: ViewSyncAnchor) {
+        const view = viewRef.current;
+        if (!view) return false;
+        const pane = view.dom.closest<HTMLElement>(".fm-editor-pane");
+        if (!pane) return false;
+        const pos = findAnchorPosition(buildSourceTextIndex(view.state.doc.toString()), anchor);
+        if (pos == null) {
+          scrollPaneToRatio(pane, anchor.ratio);
+          return false;
+        }
+        view.dispatch({
+          effects: EditorView.scrollIntoView(pos, { y: "start", yMargin: 40 }),
+        });
+        return true;
       },
     }),
     [],
