@@ -2,6 +2,17 @@
 
 All notable changes to Forgemark are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] — 2026-05-18
+
+### Added
+
+- Rendered Markdown links now open supported external destinations (`http`, `https`, `mailto`, and `tel`) in the user's default system browser or app.
+- Rendered and Source view switching now preserves the current reading area using a viewport-anchor match with a scroll-ratio fallback.
+
+### Changed
+
+- Link clicks inside anchored comment spans now prioritize opening the link instead of only focusing the associated comment card.
+
 ## [1.1.0] — 2026-05-16
 
 ### Added
