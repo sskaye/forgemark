@@ -35,6 +35,16 @@ Two structural elements:
    `<!-- fmc:N -->anchored text<!-- /fmc:N -->`
    where `N` is the integer comment id. Markers are HTML comments, so they are invisible in any rendered markdown view.
 
+   **Whole code block anchors** are a special case: markers cannot live _inside_ a fenced code block (the parser treats fence contents as code, not anchors). To anchor a comment to an entire code block, put the marker pair on **its own lines, immediately around the fence** (open marker on the line before the opening fence, close marker on the line after the closing fence):
+
+       <!-- fmc:N -->
+       ```python
+       print("hi")
+       ```
+       <!-- /fmc:N -->
+
+   Here `anchor_text` is the full text inside the fence (e.g. `print("hi")`). This is the only supported way to comment on a code block; never place markers between the backticks. Comments may also anchor a span that merely _includes_ inline code (`` `like this` ``) — the markers just sit outside the backticks as usual.
+
 2. **Trailing comments block** — a single HTML comment at the end of the file. Opens with `<!-- forgemark-comments` on its own line, closes with `-->` on its own line. Contains a YAML list of comment records.
 
 There is **at most one** trailing comments block per file. If a file has no comments, the block is absent — clean files stay clean.
@@ -68,24 +78,28 @@ When you add or modify a comment:
 
 2. **Pick the next integer id.** New comments get `max(existing_ids) + 1`, or `1` if there are no comments yet. IDs are unique within a file and never reused.
 
-3. **Wrap the anchored passage with paired markers** (skip for floating notes — see rule 9). Insert `<!-- fmc:N -->` and `<!-- /fmc:N -->` around the exact text being anchored. Do not split markers inside fenced code blocks or inline code spans — those regions are not parsed as anchors.
+3. **Wrap the anchored passage with paired markers** (skip for floating notes — see rule 11). Insert `<!-- fmc:N -->` and `<!-- /fmc:N -->` around the exact text being anchored. Never place markers _inside_ a fenced code block or between inline-code backticks — those regions are not parsed as anchors. To comment on a code block, anchor the **whole block** by putting the marker pair on its own lines around the fence (see "Whole code block anchors" above).
 
-4. **Use ISO 8601 in UTC for timestamps.** Format: `2026-05-07T14:32:00Z`.
+   Emit **exactly one** open and one close marker per id, and keep the pair spanning a single contiguous passage — do not split it into multiple pairs around inline formatting (`*emphasis*`, `[links](…)`). The markers are invisible HTML comments, so a single pair may safely enclose inline markdown syntax.
 
-5. **Escape HTML-comment-forbidden sequences in user-content fields** (`body`, `anchor_text`, `context_before`, `context_after`):
+4. **Anchors must not overlap or nest.** A new anchor's span may not partially overlap, coincide with, or sit inside another comment's anchored span — the format cannot represent overlapping anchors, and doing so corrupts the file. If you want to comment on text that's already anchored, add a **reply** to that comment instead (or anchor a different, non-overlapping span).
+
+5. **Use ISO 8601 in UTC for timestamps.** Format: `2026-05-07T14:32:00Z`.
+
+6. **Escape HTML-comment-forbidden sequences in user-content fields** (`body`, `anchor_text`, `context_before`, `context_after`):
    - Replace `-->` with `--\>`.
    - Replace `<!--` with `<!\--`.
      These are reversed automatically when the file is loaded back by the application.
 
-6. **Use any name for `author`.** Self-identification is by convention only. "Claude" is fine; so is your specific model identity if you prefer.
+7. **Use any name for `author`.** Self-identification is by convention only. "Claude" is fine; so is your specific model identity if you prefer.
 
-7. **Resolved threads stay in the file.** Setting `resolved: true` does NOT remove the comment — it just marks it. Don't delete a comment unless the user asked you to.
+8. **Resolved threads stay in the file.** Setting `resolved: true` does NOT remove the comment — it just marks it. Don't delete a comment unless the user asked you to.
 
-8. **Suggested-edit Accept and Reject are terminal.** Both remove the comment object AND its inline marker pair from the file. Don't leave a "resolved suggestion" behind.
+9. **Suggested-edit Accept and Reject are terminal.** Both remove the comment object AND its inline marker pair from the file. Don't leave a "resolved suggestion" behind.
 
-9. **Floating notes have no inline markers.** When a comment has `floating: true`, do not insert `<!-- fmc:N -->` markers in the body. The comment lives only in the YAML block, with `anchor_text` optional. You can also _author_ a floating note yourself when you want to leave a general comment that doesn't pin to a single passage — set `floating: true` and skip the markers.
+10. **Floating notes have no inline markers.** When a comment has `floating: true`, do not insert `<!-- fmc:N -->` markers in the body. The comment lives only in the YAML block, with `anchor_text` optional. You can also _author_ a floating note yourself when you want to leave a general comment that doesn't pin to a single passage — set `floating: true` and skip the markers.
 
-10. **Don't reformat the rest of the file.** Round-tripping should change only what the user asked for. Leave whitespace, formatting, and unmodified comment records alone.
+11. **Don't reformat the rest of the file.** Round-tripping should change only what the user asked for. Leave whitespace, formatting, and unmodified comment records alone.
 
 ## What to do when asked
 
@@ -104,8 +118,9 @@ The application's parser will reject files that violate any of these:
 
 - Comment ids are unique within the file.
 - Every YAML record with `floating !== true` has matching `<!-- fmc:N --> ... <!-- /fmc:N -->` markers in the body.
+- Each id appears as **exactly one** open/close marker pair — never duplicated, split, or nested with another id's pair. Anchors must not overlap.
 - Every marker pair in the body has a matching YAML record.
 - `anchor_text` is present for non-floating comments; absent or empty for floating notes is fine.
 - `body` is non-empty for plain comments; may be empty for comments that have a `suggested_edit`.
 
-If your output trips one of these, the user's app will surface a parse error. Re-check the structure before returning the file.
+If your output trips one of these, the app surfaces a parse error. (Recent versions fail soft — they recover the comments they can and flag damaged anchors for reattachment rather than hiding everything — but you should still emit a valid file.) Re-check the structure before returning the file.

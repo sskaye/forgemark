@@ -2,6 +2,21 @@
 
 All notable changes to Forgemark are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Subscript and superscript rendering: `<sub>`/`<sup>` now display correctly and round-trip losslessly instead of flattening to plain text.
+- Comments on whole fenced code blocks. Selecting inside a code block anchors the comment to the entire block, stored as a marker pair around the fence.
+- Overlap prompt: trying to comment on text that overlaps an existing comment now offers to reply to that comment instead of corrupting the file. Selecting code that can't be anchored now explains why instead of doing nothing.
+- Fail-soft recovery on open: a file with a damaged anchor now recovers the comments it can (re-attaching coalesced ones, flagging the rest for reattachment) instead of hiding every comment.
+
+### Fixed
+
+- The new-comment composer no longer renders off the bottom of the viewport at the end of a document; it clamps on-screen so Save/Cancel stay reachable.
+- Anchoring a span that contains inline formatting (`*emphasis*`, `[links]()`) no longer splatters into many duplicate markers that hid all comments; it now emits a single marker pair.
+- Creating a comment that overlaps an existing one no longer corrupts the markers (which previously hid every comment in the document).
+
 ## [1.2.0] — 2026-05-18
 
 ### Added

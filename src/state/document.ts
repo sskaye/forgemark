@@ -88,6 +88,7 @@ export type ExternalChange = {
 // replacing whatever is currently set.
 export type ComposerState =
   | NewComposerState
+  | OverlapPromptComposerState
   | ReplyComposerState
   | EditCommentComposerState
   | EditReplyComposerState;
@@ -105,6 +106,18 @@ export type NewComposerState = {
   // right-click context menu's "Suggest edit" path sets this to
   // "suggest" so the composer opens with the toggle pre-engaged.
   initialMode?: "comment" | "suggest";
+};
+
+// Shown instead of the new-comment composer when the user's selection
+// overlaps an existing comment's anchor. The file format can't represent
+// overlapping anchors, so we offer to attach the note as a reply to the
+// existing comment (targetCommentId) instead. Floats beside the selection
+// like the new-comment composer.
+export type OverlapPromptComposerState = {
+  mode: "overlapPrompt";
+  targetCommentId: number;
+  x: number;
+  y: number;
 };
 
 export type ReplyComposerState = {

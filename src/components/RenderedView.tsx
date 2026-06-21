@@ -1,6 +1,8 @@
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
+import Subscript from "@tiptap/extension-subscript";
+import Superscript from "@tiptap/extension-superscript";
 import Image from "@tiptap/extension-image";
 import { Table } from "@tiptap/extension-table";
 import { TableRow } from "@tiptap/extension-table-row";
@@ -27,7 +29,35 @@ import {
   type ViewSyncAnchor,
 } from "../services/viewSync";
 import { AnchorMark } from "./AnchorMark";
+import { CodeBlockAnchor } from "./CodeBlockAnchor";
 import "./RenderedView.css";
+
+// Subscript / superscript marks. StarterKit ships neither, so `<sub>` /
+// `<sup>` tags would otherwise be dropped to plain text on parse and lost
+// on the next save. Parsing is handled by `html: true` plus each mark's
+// built-in `parseHTML` tag matcher; we add an explicit markdown serialize
+// spec (mirroring how tiptap-markdown serializes Strike's `~~`) so the
+// HTML tags round-trip byte-for-byte.
+const SubscriptMark = Subscript.extend({
+  addStorage() {
+    return {
+      markdown: {
+        serialize: { open: "<sub>", close: "</sub>", expelEnclosingWhitespace: true },
+        parse: {},
+      },
+    };
+  },
+});
+const SuperscriptMark = Superscript.extend({
+  addStorage() {
+    return {
+      markdown: {
+        serialize: { open: "<sup>", close: "</sup>", expelEnclosingWhitespace: true },
+        parse: {},
+      },
+    };
+  },
+});
 
 // Captured selection metadata used by the new-comment composer. Phase 5.
 export type CapturedSelection = {
@@ -36,7 +66,21 @@ export type CapturedSelection = {
   text: string;
   contextBefore: string;
   contextAfter: string;
-  insideCode: boolean;
+  // How the selection should be anchored:
+  //   - "inline": a normal inline anchor (may include inline code).
+  //   - "block":  a whole fenced code block; from/to/text are expanded to
+  //               the entire block.
+  //   - "reject": can't be anchored (selection wholly inside inline code,
+  //               or crossing a code-block boundary). rejectReason carries
+  //               a user-facing message.
+  selectionKind: "inline" | "block" | "reject";
+  rejectReason?: string;
+  // The id of the existing comment whose anchor this selection overlaps,
+  // or null when the selection is free of any anchor. When set, the
+  // new-comment flow offers a reply instead of writing an (unrepresentable)
+  // overlapping marker pair. Ties broken toward the anchor that starts
+  // earliest in the document.
+  overlappingAnchorId: number | null;
   // Editor-local viewport coordinates of the selection's *end* — handy
   // for positioning the composer just below the highlighted text.
   rect: { left: number; bottom: number };
@@ -115,9 +159,14 @@ export function RenderedView({
   const editor = useEditor({
     extensions: [
       // StarterKit ships its own Link in v3; we use the standalone with
-      // openOnClick disabled so clicks are the host's to handle.
-      StarterKit.configure({ link: false }),
+      // openOnClick disabled so clicks are the host's to handle. Its
+      // codeBlock is disabled in favour of CodeBlockAnchor, which adds
+      // whole-block comment anchoring.
+      StarterKit.configure({ link: false, codeBlock: false }),
+      CodeBlockAnchor,
       Link.configure({ openOnClick: false }),
+      SubscriptMark,
+      SuperscriptMark,
       AnchorMark,
       SearchHighlightExtension,
       Image,
@@ -282,11 +331,25 @@ export function RenderedView({
       captureSelection: () => {
         if (!editor) return null;
         const { state, view } = editor;
-        const { from, to, empty } = state.selection;
+        const { from: selFrom, to: selTo, empty } = state.selection;
         if (empty) return null;
-        const text = state.doc.textBetween(from, to, " ", " ");
-        if (text.trim().length === 0) return null;
-        const insideCode = isSelectionInsideCode(editor);
+
+        const cls = classifyCodeSelection(state.doc, selFrom, selTo);
+        // For a whole-block anchor, expand the range and text to cover the
+        // entire code block (the comment is on the block, not a sub-span).
+        const from = cls.kind === "block" ? cls.from : selFrom;
+        const to = cls.kind === "block" ? cls.to : selTo;
+        const text =
+          cls.kind === "block" ? cls.text : state.doc.textBetween(from, to, " ", " ");
+        if (cls.kind !== "reject" && text.trim().length === 0) return null;
+
+        // Overlap: inline anchors are detected via the anchor mark; a block
+        // that already carries an anchorId is itself the overlap target.
+        const overlappingAnchorId =
+          cls.kind === "block" && cls.existingAnchorId != null
+            ? cls.existingAnchorId
+            : bestOverlappingAnchorId(state.doc, from, to);
+
         const beforeLen = Math.min(120, from);
         const afterLen = Math.min(120, state.doc.content.size - to);
         const contextBefore = state.doc.textBetween(Math.max(0, from - beforeLen), from, " ", " ");
@@ -303,26 +366,38 @@ export function RenderedView({
           text,
           contextBefore,
           contextAfter,
-          insideCode,
+          selectionKind: cls.kind,
+          rejectReason: cls.kind === "reject" ? cls.reason : undefined,
+          overlappingAnchorId,
           rect: { left: coords.left, bottom: coords.bottom },
         };
       },
       applyAnchor: (from: number, to: number, id: number) => {
         if (!editor) return body;
-        // Apply the AnchorMark to the captured range. We don't need the
-        // editor to be `editable: true` for chained commands — Tiptap
-        // runs them via dispatchTransaction directly.
-        editor
-          .chain()
-          .setTextSelection({ from, to })
-          .setMark("anchor", { anchorId: String(id) })
-          .run();
+        // Whole code blocks carry the anchor as a node attribute (so it
+        // round-trips as comment markers around the fence); everything else
+        // uses the inline AnchorMark. We don't need `editable: true` for
+        // chained commands — Tiptap runs them via dispatchTransaction.
+        const cls = classifyCodeSelection(editor.state.doc, from, to);
+        if (cls.kind === "block") {
+          editor
+            .chain()
+            .setTextSelection({ from: cls.from, to: cls.to })
+            .updateAttributes("codeBlock", { anchorId: String(id) })
+            .run();
+        } else {
+          editor
+            .chain()
+            .setTextSelection({ from, to })
+            .setMark("anchor", { anchorId: String(id) })
+            .run();
+        }
         const storage = editor.storage as unknown as {
           markdown?: { getMarkdown?: () => string };
         };
         const md = storage.markdown?.getMarkdown?.() ?? "";
-        // Tiptap-markdown emits `<span data-anchor-id="N">…</span>` for
-        // the AnchorMark. Convert back to canonical marker comments.
+        // Inline anchors serialize as `<span data-anchor-id>`; convert back
+        // to markers. Block anchors already serialize as markers.
         return bodyFromAnchorSpans(md);
       },
       selectedText: () => {
@@ -537,21 +612,116 @@ function buildRenderedViewportIndex(doc: ProseMirrorNode) {
   return buildNormalizedIndex(index.text, index.positions);
 }
 
-// Walk the ProseMirror selection's nearest enclosing nodes to detect
-// whether it lives inside a code block or an inline code mark. Used by
-// the composer trigger to refuse comments inside code regions (mirrors
-// the parser-level rule from Phase 3).
-function isSelectionInsideCode(editor: NonNullable<ReturnType<typeof useEditor>>): boolean {
-  const { state } = editor;
-  const { from, to } = state.selection;
-  let inside = false;
-  state.doc.nodesBetween(from, to, (node) => {
-    if (node.type.name === "codeBlock") inside = true;
-    // Inline code is a Mark applied to text nodes.
-    if (node.isText && node.marks.some((m) => m.type.name === "code")) {
-      inside = true;
+// Classify a selection for anchoring relative to code regions:
+//   - "block":  the selection lies within a single fenced code block →
+//               anchor the whole block (from/to/text expanded to it).
+//               existingAnchorId is the block's current anchor, if any.
+//   - "reject": the selection is wholly inside inline code, or it crosses
+//               a code-block boundary / spans multiple blocks — neither can
+//               be anchored cleanly. reason carries a user-facing message.
+//   - "inline": anything else (including a mix of prose and inline code) →
+//               a normal inline anchor.
+export type CodeSelectionClass =
+  | { kind: "inline" }
+  | { kind: "block"; from: number; to: number; text: string; existingAnchorId: number | null }
+  | { kind: "reject"; reason: string };
+
+export function classifyCodeSelection(
+  doc: ProseMirrorNode,
+  from: number,
+  to: number,
+): CodeSelectionClass {
+  const blocks: { start: number; end: number; node: ProseMirrorNode }[] = [];
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (node.type.name === "codeBlock") {
+      blocks.push({ start: pos, end: pos + node.nodeSize, node });
+      return false; // don't descend into the code text
     }
-    return !inside; // stop descending once we know
+    return true;
   });
-  return inside;
+
+  if (blocks.length > 1) {
+    return { kind: "reject", reason: "Select within a single code block, or outside it, to comment." };
+  }
+  if (blocks.length === 1) {
+    const b = blocks[0];
+    // The whole selection must sit within this block to anchor it cleanly;
+    // a selection that starts in prose and runs into the fence can't.
+    if (from >= b.start && to <= b.end) {
+      const rawId = b.node.attrs.anchorId;
+      const id = rawId == null ? null : Number(rawId);
+      return {
+        kind: "block",
+        from: b.start + 1,
+        to: b.end - 1,
+        // textContent can carry a trailing newline; drop it so anchor_text
+        // is the clean code text.
+        text: b.node.textContent.replace(/\n$/, ""),
+        existingAnchorId: id != null && Number.isFinite(id) ? id : null,
+      };
+    }
+    return { kind: "reject", reason: "Select within a single code block, or outside it, to comment." };
+  }
+
+  // No code block — but the selection may be inside inline code. We allow a
+  // mix of prose and inline code (markers sit outside the backticks), and
+  // only refuse a selection that is *entirely* inline code.
+  let hasText = false;
+  let allInlineCode = true;
+  doc.nodesBetween(from, to, (node) => {
+    if (node.isText && node.text && node.text.length > 0) {
+      hasText = true;
+      if (!node.marks.some((m) => m.type.name === "code")) allInlineCode = false;
+    }
+    return true;
+  });
+  if (hasText && allInlineCode) {
+    return {
+      kind: "reject",
+      reason: "Comments can't be added inside inline code. Select the surrounding text too.",
+    };
+  }
+  return { kind: "inline" };
+}
+
+// Find the existing anchor (comment id) whose highlighted span overlaps
+// the given range [from, to). When several overlap, the one sharing the
+// most characters wins; ties go to the anchor that starts earliest in the
+// document. Returns null when the range touches no anchor.
+//
+// Exported for unit testing — the file format cannot represent overlapping
+// or nested anchors, so this is the gate that diverts an overlapping
+// new-comment into a reply (see OverlapPrompt).
+export function bestOverlappingAnchorId(
+  doc: ProseMirrorNode,
+  from: number,
+  to: number,
+): number | null {
+  const overlap = new Map<number, { len: number; pos: number }>();
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isText) return true;
+    const mark = node.marks.find((m) => m.type.name === "anchor");
+    if (!mark) return true;
+    const id = Number(mark.attrs.anchorId);
+    if (!Number.isFinite(id)) return true;
+    const start = Math.max(from, pos);
+    const end = Math.min(to, pos + node.nodeSize);
+    const len = Math.max(0, end - start);
+    if (len === 0) return true;
+    const cur = overlap.get(id);
+    if (cur) cur.len += len;
+    else overlap.set(id, { len, pos: start });
+    return true;
+  });
+  let best: number | null = null;
+  let bestLen = 0;
+  let bestPos = Infinity;
+  for (const [id, { len, pos }] of overlap) {
+    if (len > bestLen || (len === bestLen && pos < bestPos)) {
+      best = id;
+      bestLen = len;
+      bestPos = pos;
+    }
+  }
+  return best;
 }
