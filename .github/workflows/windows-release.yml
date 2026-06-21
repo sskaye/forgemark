@@ -1,0 +1,73 @@
+name: Windows release
+
+# Builds the unsigned Windows installers (.msi via WiX, -setup.exe via NSIS)
+# on a windows-latest runner and attaches them to the matching GitHub
+# release. The macOS .dmg is still built + signed + notarized locally
+# (`npm run release`); this only fills in the Windows artifacts.
+#
+# Triggers:
+#   - automatically on any `v*` tag push (builds that tag);
+#   - manually via "Run workflow", passing an existing release tag (used to
+#     backfill a release that was tagged before this workflow existed).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to build and attach (e.g. v1.3.0)"
+        required: true
+        type: string
+
+# Required for `gh release create/upload` with the default GITHUB_TOKEN.
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Windows installers
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Tag push → the pushed tag; manual dispatch → the tag input.
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      # `tauri build` runs `npm run vite:build` (beforeBuildCommand) first,
+      # then bundles the .msi and the NSIS -setup.exe. Unsigned: no signing
+      # env vars are set, so the installers carry no Authenticode signature.
+      - name: Build Windows bundles
+        run: npm run build
+
+      - name: Attach installers to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          # Create the release if it doesn't exist yet (e.g. the Windows
+          # build wins the race against the local macOS publish step).
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --verify-tag \
+              --title "Forgemark ${TAG}" \
+              --notes "Automated release. See CHANGELOG.md for details."
+          fi
+          gh release upload "$TAG" \
+            src-tauri/target/release/bundle/msi/*.msi \
+            src-tauri/target/release/bundle/nsis/*-setup.exe \
+            --clobber

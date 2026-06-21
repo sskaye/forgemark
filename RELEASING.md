@@ -88,16 +88,32 @@ gh release create v<ver> \
 
 ## Windows
 
-Not yet automated. Set the Windows env vars and run `npm run build` on a Windows machine:
+Automated via GitHub Actions (`.github/workflows/windows-release.yml`) on a
+`windows-latest` runner. It runs on every `v*` tag push and attaches the
+**unsigned** `.msi` (WiX) and `-setup.exe` (NSIS) to that tag's GitHub release
+(creating the release if it doesn't exist yet). No Windows machine required.
+
+To backfill a release tagged before the workflow existed, run it manually:
 
 ```sh
-export WINDOWS_SIGNING_PFX_PATH="/path/to/cert.pfx"
-export WINDOWS_SIGNING_PFX_PASSWORD="..."
+gh workflow run windows-release.yml -f tag=v<ver>
 ```
 
-Use Azure Key Vault, an EV Code Signing certificate, or an HSM token — do **not** keep a `.pfx` in the repo. Output: `src-tauri/target/release/bundle/msi/Forgemark_<ver>_x64_en-US.msi`.
+Output assets: `Forgemark_<ver>_x64_en-US.msi` and `Forgemark_<ver>_x64-setup.exe`.
 
-A Windows-equivalent of `npm run release` is the natural next investment if Forgemark gets a regular Windows release cadence.
+### Code signing (not enabled)
+
+The Windows installers are currently **unsigned**, so users hit a SmartScreen
+"Windows protected your PC" prompt (→ **More info** → **Run anyway**). See the
+README's "Installing on Windows (unsigned)" note.
+
+To sign later without a hardware token, the modern path is **Azure Trusted
+Signing** (~$10/mo): add the `azure/trusted-signing-action` step to the workflow
+after the build and before the upload, or set `bundle.windows.signCommand` in
+`tauri.conf.json`. EV certs on a USB token give instant SmartScreen reputation
+but don't fit headless CI. The legacy `WINDOWS_SIGNING_PFX_PATH` /
+`WINDOWS_SIGNING_PFX_PASSWORD` env-var path only works if you already hold a
+`.pfx` — new OV/EV certs can no longer be issued as downloadable `.pfx` files.
 
 ## Auto-update
 
