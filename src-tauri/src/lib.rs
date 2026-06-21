@@ -14,7 +14,11 @@
 
 use std::sync::Mutex;
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-use tauri::{Emitter, Manager, RunEvent};
+use tauri::Emitter;
+// Manager (`.state()`) and RunEvent (`::Opened`) are only used by the
+// macOS file-open handler below, which doesn't compile on other platforms.
+#[cfg(target_os = "macos")]
+use tauri::{Manager, RunEvent};
 
 // Queue of file paths that arrived before the webview was ready to
 // receive them. macOS fires RunEvent::Opened during cold-start (when
@@ -65,16 +69,24 @@ pub fn run() {
     // For cold-start launches the webview may not have its listener
     // attached yet, so we also stash the paths in PendingFiles for
     // the JS `take_pending_files` invoke to claim on mount.
-    app.run(|app, event| {
-        if let RunEvent::Opened { urls } = event {
-            let pending = app.state::<PendingFiles>();
-            let mut guard = pending.0.lock().unwrap_or_else(|e| e.into_inner());
-            for url in urls {
-                if let Ok(path) = url.to_file_path() {
-                    let path_str = path.to_string_lossy().to_string();
-                    // Best-effort live emit (no-op if no listener).
-                    let _ = app.emit("forgemark:open-path", path_str.clone());
-                    guard.push(path_str);
+    app.run(|_app, _event| {
+        // RunEvent::Opened is macOS-only (Finder "Open With", file
+        // associations, drag-onto-dock). Compile it out on other platforms
+        // so the Windows/Linux build doesn't reference a variant that
+        // doesn't exist there. File-open on Windows arrives via argv/
+        // single-instance instead, handled separately.
+        #[cfg(target_os = "macos")]
+        {
+            if let RunEvent::Opened { urls } = _event {
+                let pending = _app.state::<PendingFiles>();
+                let mut guard = pending.0.lock().unwrap_or_else(|e| e.into_inner());
+                for url in urls {
+                    if let Ok(path) = url.to_file_path() {
+                        let path_str = path.to_string_lossy().to_string();
+                        // Best-effort live emit (no-op if no listener).
+                        let _ = _app.emit("forgemark:open-path", path_str.clone());
+                        guard.push(path_str);
+                    }
                 }
             }
         }

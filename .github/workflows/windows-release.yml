@@ -16,8 +16,13 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing release tag to build and attach (e.g. v1.3.0)"
+        description: "Release tag to attach the installers to (e.g. v1.3.0)"
         required: true
+        type: string
+      ref:
+        description: "Git ref to build (default: the tag itself). Set to 'main' to backfill a release whose tagged code predates a Windows build fix."
+        required: false
+        default: ""
         type: string
 
 # Required for `gh release create/upload` with the default GITHUB_TOKEN.
@@ -31,8 +36,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Tag push → the pushed tag; manual dispatch → the tag input.
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          # Tag push → the pushed tag. Manual dispatch → the `ref` input if
+          # given (e.g. main), else the tag input.
+          ref: ${{ github.event.inputs.ref || github.event.inputs.tag || github.ref }}
 
       - uses: actions/setup-node@v4
         with:
