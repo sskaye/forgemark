@@ -2,7 +2,7 @@
 
 A desktop application for collaborative review of markdown documents — by humans **and** AI agents working as peers. Comments, threaded replies, and suggested edits all live inside the markdown file itself, so an AI agent reading the raw file sees the full review context with no special tooling.
 
-> **Status:** v1.1.0 — see [CHANGELOG](CHANGELOG.md) for what shipped.
+> **Status:** v1.3.0 — see [CHANGELOG](CHANGELOG.md) for what shipped.
 
 ## What it is
 
@@ -14,7 +14,17 @@ For contributors and agents, the current code map is in [`docs/ARCHITECTURE.md`]
 
 ## Install
 
-Pre-built binaries: see the [Releases page](https://github.com/sskaye/forgemark/releases) for signed `.dmg` (macOS 11+) and `.msi` (Windows 10+). On first launch you get a welcome screen — pick a name and click **Open sample →** to land in a pre-annotated review document.
+Pre-built binaries: see the [Releases page](https://github.com/sskaye/forgemark/releases) for a signed, notarized `.dmg` (macOS 11+) and an `.msi` / `.exe` (Windows 10+). On first launch you get a welcome screen — pick a name and click **Open sample →** to land in a pre-annotated review document.
+
+### Installing on Windows (unsigned)
+
+The Windows installers are **not code-signed** yet, so Windows SmartScreen will warn before it runs. Nothing is blocked — to install:
+
+1. If your browser flags the download, choose **Keep**.
+2. Run the `.msi` (or `-setup.exe`). On the blue **"Windows protected your PC"** screen, click **More info**, then **Run anyway**.
+3. The UAC prompt will show **Publisher: Unknown** — that's expected for an unsigned build.
+
+(macOS builds are signed + notarized, so they open with no prompt.)
 
 To build from source, see [Build](#build).
 
