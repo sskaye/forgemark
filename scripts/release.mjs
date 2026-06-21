@@ -117,7 +117,12 @@ if (profile) {
   );
 }
 
-step("Stapling DMG");
+step("Stapling app and DMG");
+// Staple both artifacts. The .app must be stapled explicitly: when
+// notarizing via APPLE_KEYCHAIN_PROFILE, Tauri's own notarize/staple step
+// is skipped, and stapling the DMG does not staple the .app inside it.
+// Without this, the `stapler validate "${APP}"` verification below fails.
+run(`xcrun stapler staple "${APP}"`);
 run(`xcrun stapler staple "${DMG}"`);
 
 step("Verifying signatures, staples, and Gatekeeper assessment");
