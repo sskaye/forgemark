@@ -14,6 +14,8 @@
 import { parse as parseYAML } from "yaml";
 import { unescapeContent } from "./escape";
 import { findMarkers, pairMarkers } from "./markers";
+import { coalesceAnchorMarkers } from "./markers-display";
+import { removeMarkersFromBody } from "./compose";
 import {
   BLOCK_OPEN,
   COMMENT_KEY_ORDER,
@@ -92,6 +94,80 @@ export function parseForgemarkFile(input: string, opts: ParseOptions = {}): Pars
   const comments = parseCommentsYAML(block.yaml);
   validateAgainstBody(block.body, comments, opts);
   return { body: block.body, comments };
+}
+
+// Fail-soft loader. Where parseForgemarkFile throws (and the caller would
+// blank ALL comments), this best-effort variant recovers as much as it can
+// so one damaged anchor doesn't hide everyone's comments:
+//
+//   - splattered runs of same-id pairs are coalesced back to one pair
+//     (those comments re-attach cleanly);
+//   - markers that are duplicated (split/overlap), unmatched, or have no
+//     YAML record are stripped from the body;
+//   - comments left without a valid marker pair are kept as records but
+//     surface as orphans (the existing Reattach flow), not dropped.
+//
+// Never throws on marker corruption. Returns the recovered file plus a flag
+// and human-readable notes describing what was repaired. Only a genuinely
+// unreadable YAML block falls back to zero comments.
+export type RecoveryResult = {
+  file: ParsedFile;
+  recovered: boolean;
+  problems: string[];
+};
+
+export function recoverForgemarkFile(input: string): RecoveryResult {
+  const block = locateBlock(input);
+  if (!block) {
+    return { file: { body: input, comments: [] }, recovered: false, problems: [] };
+  }
+  let comments: Comment[];
+  try {
+    comments = parseCommentsYAML(block.yaml);
+  } catch {
+    // YAML itself is unreadable — nothing to anchor. Fall back to plain
+    // markdown with the trailing block left in the body untouched.
+    return {
+      file: { body: input, comments: [] },
+      recovered: false,
+      problems: ["The comments block could not be read."],
+    };
+  }
+
+  // 1. Coalesce splattered same-id runs back into single pairs.
+  let body = coalesceAnchorMarkers(block.body);
+  const problems: string[] = [];
+
+  const { pairs, unmatched } = pairMarkers(findMarkers(body));
+  const pairCount = new Map<number, number>();
+  for (const p of pairs) pairCount.set(p.id, (pairCount.get(p.id) ?? 0) + 1);
+  const recordIds = new Set(comments.map((c) => c.id));
+
+  // 2. Identify ids whose markers can't form a clean 1:1 pair.
+  const stripIds = new Set<number>();
+  for (const [id, count] of pairCount) {
+    if (count > 1) {
+      stripIds.add(id);
+      problems.push(`Comment ${id} had ${count} overlapping/split anchors — detached for reattachment.`);
+    } else if (!recordIds.has(id)) {
+      stripIds.add(id);
+      problems.push(`Anchor ${id} had no matching comment — removed.`);
+    }
+  }
+  for (const m of unmatched) {
+    stripIds.add(m.id);
+  }
+  if (unmatched.length > 0) {
+    problems.push(`${unmatched.length} unmatched anchor marker(s) removed.`);
+  }
+
+  // 3. Strip every problematic id's markers, leaving clean 1:1 pairs.
+  for (const id of stripIds) {
+    body = removeMarkersFromBody(body, id);
+  }
+
+  const recovered = body !== block.body || problems.length > 0;
+  return { file: { body, comments }, recovered, problems };
 }
 
 function parseCommentsYAML(yaml: string): Comment[] {

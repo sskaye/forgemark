@@ -1,0 +1,78 @@
+.fm-overlap-prompt {
+  position: fixed;
+  width: 280px;
+  max-width: calc(100vw - 24px);
+  background: var(--fm-card-bg);
+  border: 0.5px solid var(--fm-card-border-focused);
+  border-radius: 8px;
+  box-shadow:
+    0 14px 36px rgba(0, 0, 0, 0.16),
+    0 1px 4px rgba(0, 0, 0, 0.1);
+  padding: 12px 14px;
+  z-index: 1000;
+  font-family: var(--fm-ui);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+[data-theme="dark"] .fm-overlap-prompt {
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.45),
+    0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.fm-overlap-prompt-message {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--fm-prose-ink);
+}
+
+.fm-overlap-prompt-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.fm-overlap-prompt-cancel {
+  font-family: var(--fm-ui);
+  font-size: 12.5px;
+  color: var(--fm-chrome-muted);
+  background: transparent;
+  border: 0.5px solid var(--fm-divider-strong);
+  border-radius: 6px;
+  padding: 5px 12px;
+  cursor: default;
+}
+
+.fm-overlap-prompt-cancel:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--fm-chrome-text);
+}
+
+[data-theme="dark"] .fm-overlap-prompt-cancel:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.fm-overlap-prompt-reply {
+  font-family: var(--fm-ui);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--fm-accent-text);
+  background: var(--fm-accent);
+  border: 0.5px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+  padding: 5px 12px;
+  cursor: default;
+}
+
+.fm-overlap-prompt-reply:hover {
+  background: var(--fm-accent-hover);
+}
+
+.fm-overlap-prompt-cancel:focus-visible,
+.fm-overlap-prompt-reply:focus-visible {
+  outline: 0.5px solid var(--fm-accent);
+  outline-offset: 2px;
+}

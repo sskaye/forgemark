@@ -86,6 +86,18 @@
   font-size: inherit;
 }
 
+.fm-rendered-view .fm-prose sub,
+.fm-rendered-view .fm-prose sup {
+  font-size: 0.75em;
+  line-height: 0;
+}
+.fm-rendered-view .fm-prose sub {
+  vertical-align: sub;
+}
+.fm-rendered-view .fm-prose sup {
+  vertical-align: super;
+}
+
 .fm-rendered-view .fm-prose a {
   color: var(--fm-accent);
   text-decoration: none;
@@ -130,6 +142,25 @@
 }
 
 .fm-rendered-view [data-anchor-id].is-resolved {
+  background: var(--fm-anchor-bg-resolved);
+}
+
+/* Whole-block code anchors: keep the code legible (grey code background
+   stays) and mark the anchor with a left accent bar, tinting on hover /
+   focus. Needs higher specificity than the `pre` code-background rule. */
+.fm-rendered-view .fm-prose pre[data-anchor-id] {
+  border-left: 3px solid var(--fm-anchor-underline);
+  padding-left: 11px;
+  cursor: default;
+  transition: background-color 120ms ease-out;
+}
+.fm-rendered-view .fm-prose pre[data-anchor-id].is-hovered {
+  background: var(--fm-anchor-bg-hover);
+}
+.fm-rendered-view .fm-prose pre[data-anchor-id].is-focused {
+  background: var(--fm-anchor-bg-focus);
+}
+.fm-rendered-view .fm-prose pre[data-anchor-id].is-resolved {
   background: var(--fm-anchor-bg-resolved);
 }
 

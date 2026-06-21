@@ -4,6 +4,7 @@ import { useAuthorName } from "../state/preferences";
 import { RenderedView, type RenderedSearchMatch, type RenderedViewHandle } from "./RenderedView";
 import { SourceView, type SourceViewHandle } from "./SourceView";
 import { NewCommentComposer } from "./NewCommentComposer";
+import { OverlapPrompt } from "./OverlapPrompt";
 import { FindReplaceBar } from "./FindReplaceBar";
 import { LostAnchorBanner } from "./LostAnchorBanner";
 import { ContextMenu } from "./ContextMenu";
@@ -62,7 +63,30 @@ export function EditorPane({ anchorStatuses }: Props) {
       if (!handle) return;
       const captured = handle.captureSelection();
       if (!captured) return; // empty / collapsed selection
-      if (captured.insideCode) return; // selection inside fenced or inline code
+      if (captured.selectionKind === "reject") {
+        // Inline-code-only or a selection straddling a code-block boundary.
+        // Tell the user why instead of silently doing nothing.
+        dispatch({
+          type: "error",
+          message: captured.rejectReason ?? "This selection can't be commented on.",
+        });
+        return;
+      }
+      // The format can't represent overlapping anchors. If the selection
+      // intersects an existing comment, offer a reply instead of writing
+      // a second (corrupting) marker pair over the same text.
+      if (captured.overlappingAnchorId != null) {
+        dispatch({
+          type: "openComposer",
+          composer: {
+            mode: "overlapPrompt",
+            targetCommentId: captured.overlappingAnchorId,
+            x: captured.rect.left,
+            y: captured.rect.bottom + 6,
+          },
+        });
+        return;
+      }
       dispatch({
         type: "openComposer",
         composer: {
@@ -298,6 +322,16 @@ export function EditorPane({ anchorStatuses }: Props) {
 
   const cancelComposer = useCallback(() => dispatch({ type: "closeComposer" }), [dispatch]);
 
+  // Overlap prompt → "Reply": focus the overlapped comment and open its
+  // inline reply composer (the existing reply flow). This is how two
+  // people comment on the same passage without overlapping anchors.
+  const replyToOverlap = useCallback(() => {
+    const c = state.composer;
+    if (!c || c.mode !== "overlapPrompt") return;
+    dispatch({ type: "setFocusedComment", id: c.targetCommentId });
+    dispatch({ type: "openComposer", composer: { mode: "reply", commentId: c.targetCommentId } });
+  }, [state.composer, dispatch]);
+
   const replaceActiveMatch = useCallback(() => {
     const match = findState.matches[findState.activeIndex];
     if (!match) return;
@@ -467,6 +501,14 @@ export function EditorPane({ anchorStatuses }: Props) {
           onSubmitSuggestion={submitSuggestion}
           onCancel={cancelComposer}
           initialMode={state.composer.initialMode}
+        />
+      )}
+      {state.composer?.mode === "overlapPrompt" && state.viewMode === "rendered" && (
+        <OverlapPrompt
+          x={state.composer.x}
+          y={state.composer.y}
+          onReply={replyToOverlap}
+          onCancel={cancelComposer}
         />
       )}
       {contextMenu && (

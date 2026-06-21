@@ -79,9 +79,36 @@ Saving:
 Adding a comment or suggestion:
 
 1. `EditorPane` captures the Tiptap selection through `RenderedViewHandle`.
-2. `RenderedView.applyAnchor` applies an anchor mark to the selection.
-3. Markdown emitted by Tiptap is converted back to `<!-- fmc:N -->` markers.
-4. The reducer adds a new `Comment` record and focuses its card.
+   `classifyCodeSelection` decides how it can be anchored:
+   - **inline** — a normal span (may include inline code);
+   - **block** — the selection is inside a fenced code block, so the anchor is
+     snapped to the whole block (`CodeBlockAnchor`, below);
+   - **reject** — wholly inside inline code or straddling a code-block
+     boundary; the user gets a message instead of a silent no-op.
+2. If the selection overlaps an existing anchor (`bestOverlappingAnchorId`, or a
+   code block that already carries one), `OverlapPrompt` offers to attach the
+   note as a **reply** instead — the format cannot represent overlapping
+   anchors, so they are prevented at creation time.
+3. `RenderedView.applyAnchor` applies the anchor: an inline `AnchorMark` for
+   spans, or a `codeBlock` node `anchorId` attribute for whole blocks.
+4. Markdown emitted by Tiptap is converted back to `<!-- fmc:N -->` markers
+   (`bodyFromAnchorSpans`). `coalesceAnchorMarkers` collapses any same-id run
+   Tiptap emits across inline formatting down to a single pair, so a comment
+   spanning `*emphasis*`/`[links]()` stays one marker pair.
+5. The reducer adds a new `Comment` record and focuses its card.
+
+**Whole code block anchors.** Markers can't live inside a fence, so a code-block
+comment is stored as a marker pair on its own lines _around_ the fence
+(`<!-- fmc:N -->` / `<!-- /fmc:N -->`). To survive the markdown ⇄ editor
+round-trip the anchor rides on the `codeBlock` node: `CodeBlockAnchor`
+(`src/components/CodeBlockAnchor.ts`) adds an `anchorId` attribute, serializes
+it to the marker form, and reads it back via the fence info string that
+`blockAnchorsToInfoString` injects on display. The `data-anchor-id` on the
+`<pre>` reuses the same click/hover/focus wiring as inline anchors.
+
+**Subscript / superscript.** `RenderedView` registers Subscript/Superscript
+marks with an explicit markdown serialize spec, so `<sub>`/`<sup>` render and
+round-trip losslessly instead of flattening to plain text.
 
 Accepting or rejecting a suggestion:
 
@@ -99,6 +126,15 @@ Lost anchors:
 - `classifyAnchors` marks comments as attached, orphaned, or floating.
 - `ReattachModal` can insert a fresh marker pair, convert the comment to a
   floating note, or discard it.
+
+Fail-soft recovery:
+
+- Strict `parseForgemarkFile` still throws on a corrupt marker layout (the
+  round-trip guarantee is unchanged), but on file open `recoverForgemarkFile`
+  salvages what it can instead of blanking every comment: it coalesces
+  splattered runs, strips markers that are duplicated/unmatched/recordless, and
+  keeps the remaining records as reattachable orphans. So a single damaged
+  anchor no longer hides all comments.
 
 External file changes:
 

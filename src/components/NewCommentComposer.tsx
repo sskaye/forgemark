@@ -65,6 +65,34 @@ export function NewCommentComposer({
     autosize(replacementRef.current);
   }, [replacement]);
 
+  // Keep the panel fully on-screen. It's `position: fixed` anchored just
+  // below the selection (EditorPane sets x/y), so a selection near the
+  // bottom of the viewport would push the footer — Save/Cancel — off
+  // screen and out of reach. After mount (and whenever the panel resizes
+  // via the Suggest toggle or textarea autosize) we measure and nudge it
+  // back into view with a translate, mirroring ContextMenu's edge-flip.
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) return;
+    const apply = () => {
+      // Reset before measuring so the clamp is computed from the true
+      // anchored position, not a previously-applied offset.
+      node.style.transform = "";
+      const rect = node.getBoundingClientRect();
+      const { dx, dy } = clampToViewport(rect, window.innerWidth, window.innerHeight);
+      if (dx !== 0 || dy !== 0) node.style.transform = `translate(${dx}px, ${dy}px)`;
+    };
+    apply();
+    const RO = window.ResizeObserver;
+    const ro = RO ? new RO(() => apply()) : null;
+    ro?.observe(node);
+    window.addEventListener("resize", apply);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", apply);
+    };
+  }, [x, y]);
+
   // Click-outside cancels.
   useEffect(() => {
     const onDocMouseDown = (e: MouseEvent) => {
@@ -187,6 +215,26 @@ export function NewCommentComposer({
       </div>
     </div>
   );
+}
+
+// Compute the translate offset needed to bring a fixed-position panel
+// fully within the viewport. Horizontal and vertical are clamped
+// independently: first pull the overflowing edge in, then guard the
+// opposite edge so we never push the panel's top/left off-screen (which
+// would hide the header / the very controls we're trying to reveal).
+export function clampToViewport(
+  rect: { top: number; left: number; right: number; bottom: number },
+  viewportWidth: number,
+  viewportHeight: number,
+  margin = 8,
+): { dx: number; dy: number } {
+  let dx = 0;
+  let dy = 0;
+  if (rect.right > viewportWidth - margin) dx = viewportWidth - margin - rect.right;
+  if (rect.left + dx < margin) dx = margin - rect.left;
+  if (rect.bottom > viewportHeight - margin) dy = viewportHeight - margin - rect.bottom;
+  if (rect.top + dy < margin) dy = margin - rect.top;
+  return { dx, dy };
 }
 
 function autosize(el: HTMLTextAreaElement | null) {

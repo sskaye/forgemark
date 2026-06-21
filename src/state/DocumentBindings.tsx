@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useDocument } from "./DocumentProvider";
 import { openMarkdownFile, saveMarkdownFile, readMarkdownFile } from "../services/fileIO";
-import { parseForgemarkFile, serializeForgemarkFile, ForgemarkParseError } from "../format";
+import {
+  parseForgemarkFile,
+  recoverForgemarkFile,
+  serializeForgemarkFile,
+  ForgemarkParseError,
+  type RecoveryResult,
+} from "../format";
 import { fingerprint, type FileFingerprint } from "../services/conflict";
 import { watchMarkdownFile, type FileWatcher } from "../services/fileWatcher";
 import { useRecentFiles, useDefaultView } from "./preferences";
@@ -15,6 +21,18 @@ const defaultLogger: Logger = (msg, err) => {
 function errorMessage(prefix: string, err: unknown): string {
   if (err instanceof Error) return prefix + ": " + err.message;
   return prefix + ": " + String(err);
+}
+
+// Message shown when strict parse failed but fail-soft recovery ran. When
+// recovery salvaged comments we tell the user what to expect; otherwise we
+// fall back to the original "loaded as plain markdown" surfacing.
+function recoveryMessage(err: unknown, recovery: RecoveryResult): string {
+  if (recovery.recovered && recovery.file.comments.length > 0) {
+    return `Some comment anchors were damaged. Recovered ${recovery.file.comments.length} comment(s); any showing a lost anchor can be reattached.`;
+  }
+  return err instanceof ForgemarkParseError
+    ? `Comments block couldn't be parsed (${err.kind}); loaded as plain markdown.`
+    : errorMessage("Couldn't parse comment block", err);
 }
 
 // Phase 2 ergonomic bindings — live until Phase 11 wires the native menu
@@ -78,12 +96,11 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
         try {
           parsed = parseForgemarkFile(opened.text, { tolerant: true });
         } catch (err) {
-          const msg =
-            err instanceof ForgemarkParseError
-              ? `Comments block couldn't be parsed (${err.kind}); loaded as plain markdown.`
-              : `Couldn't parse comment block: ${(err as Error).message}`;
-          dispatch({ type: "error", message: msg });
-          parsed = { body: opened.text, comments: [] };
+          // Fail soft: recover as many comments as possible instead of
+          // blanking every comment on a single damaged anchor.
+          const recovery = recoverForgemarkFile(opened.text);
+          parsed = recovery.file;
+          dispatch({ type: "error", message: recoveryMessage(err, recovery) });
         }
         dispatch({
           type: "load",
@@ -186,16 +203,12 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
             // missing-marker case).
             parsed = parseForgemarkFile(opened.text, { tolerant: true });
           } catch (err) {
-            // Helpful "couldn't parse the comment block" surfacing — the
-            // caller still gets the body, just without comments. We treat
-            // a malformed comment block as a soft failure: surface an
-            // error banner and load the file as plain markdown.
-            const msg =
-              err instanceof ForgemarkParseError
-                ? `Comments block couldn't be parsed (${err.kind}); loaded as plain markdown.`
-                : `Couldn't parse comment block: ${(err as Error).message}`;
-            dispatch({ type: "error", message: msg });
-            parsed = { body: opened.text, comments: [] };
+            // Fail soft: recover as many comments as possible (coalescing
+            // splattered anchors, detaching unrecoverable ones for
+            // reattachment) instead of dropping every comment.
+            const recovery = recoverForgemarkFile(opened.text);
+            parsed = recovery.file;
+            dispatch({ type: "error", message: recoveryMessage(err, recovery) });
           }
           dispatch({
             type: "load",
