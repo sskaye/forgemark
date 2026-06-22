@@ -486,6 +486,7 @@ export function EditorPane({ anchorStatuses }: Props) {
             onAnchorClick={(id) => dispatch({ type: "setFocusedComment", id })}
             onAnchorHover={(id) => dispatch({ type: "setHoveredComment", id })}
             onExternalLinkError={(message) => dispatch({ type: "error", message })}
+            documentPath={state.filePath}
             handleRef={handleRef}
           />
         ) : (

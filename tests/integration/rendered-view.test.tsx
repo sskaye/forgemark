@@ -6,10 +6,19 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { RenderedView } from "../../src/components/RenderedView";
 
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn(() => Promise.resolve()) }));
+const coreMocks = vi.hoisted(() => ({
+  convertFileSrc: vi.fn((path: string) => `asset://${path.replace(/\\/g, "/")}`),
+}));
+vi.mock("@tauri-apps/api/core", () => ({
+  convertFileSrc: coreMocks.convertFileSrc,
+}));
 
 const fixture = readFileSync(resolve(__dirname, "..", "fixtures", "gfm-sample.md"), "utf-8");
 
-function renderFixture(body: string = fixture) {
+function renderFixture(
+  body: string = fixture,
+  props: Partial<React.ComponentProps<typeof RenderedView>> = {},
+) {
   return render(
     <RenderedView
       body={body}
@@ -18,6 +27,7 @@ function renderFixture(body: string = fixture) {
       hoveredCommentId={null}
       onAnchorClick={vi.fn()}
       onAnchorHover={vi.fn()}
+      {...props}
     />,
   );
 }
@@ -25,6 +35,12 @@ function renderFixture(body: string = fixture) {
 describe("RenderedView GFM rendering", () => {
   beforeEach(() => {
     vi.mocked(openUrl).mockClear();
+    coreMocks.convertFileSrc.mockClear();
+    (
+      window as typeof window & {
+        __TAURI_INTERNALS__?: { convertFileSrc?: (path: string, protocol?: string) => string };
+      }
+    ).__TAURI_INTERNALS__ = { convertFileSrc: coreMocks.convertFileSrc };
   });
 
   it("renders headings, lists, code blocks, links, and tables", async () => {
@@ -67,6 +83,48 @@ describe("RenderedView GFM rendering", () => {
 
     // Blockquote
     expect(container.querySelectorAll("blockquote").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("renders GitHub callouts, highlighted code, and LaTeX equations", async () => {
+    const { container } = renderFixture(`> [!NOTE]
+> Remember **this** before publishing.
+
+Inline math $E = mc^2$ stays in prose.
+
+$$
+a^2 + b^2 = c^2
+$$
+
+\`\`\`ts
+const total: number = 1 + 2;
+\`\`\`
+`);
+
+    await waitFor(() => {
+      expect(container.querySelector(".fm-callout-note")).toBeTruthy();
+    });
+
+    const callout = container.querySelector(".fm-callout-note");
+    expect(callout?.textContent).toContain("Remember this");
+    expect(callout?.textContent).not.toContain("[!NOTE]");
+    expect(container.querySelector(".fm-math-inline .katex")).toBeTruthy();
+    expect(container.querySelector(".fm-math-block .katex-display")).toBeTruthy();
+    expect(container.querySelector(".hljs-keyword")?.textContent).toBe("const");
+  });
+
+  it("resolves relative figure sources against the opened markdown file", async () => {
+    const { container } = renderFixture("![diagram](figures/flow.svg)\n", {
+      documentPath: "C:\\docs\\paper.md",
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector("img")).toBeTruthy();
+    });
+
+    expect(coreMocks.convertFileSrc).toHaveBeenCalledWith("C:\\docs\\figures\\flow.svg");
+    expect(container.querySelector("img")?.getAttribute("src")).toBe(
+      "asset://C:/docs/figures/flow.svg",
+    );
   });
 
   it("calls onEdit when typing inserts content", async () => {
@@ -218,9 +276,7 @@ describe("RenderedView GFM rendering", () => {
 
     container.querySelector("a")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
-    await waitFor(() =>
-      expect(openUrl).toHaveBeenCalledWith("https://example.com/path?q=1"),
-    );
+    await waitFor(() => expect(openUrl).toHaveBeenCalledWith("https://example.com/path?q=1"));
     expect(onAnchorClick).not.toHaveBeenCalled();
   });
 

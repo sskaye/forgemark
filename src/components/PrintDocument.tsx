@@ -1,18 +1,8 @@
 import { useEffect, useMemo } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Link from "@tiptap/extension-link";
-import Image from "@tiptap/extension-image";
-import { Table } from "@tiptap/extension-table";
-import { TableRow } from "@tiptap/extension-table-row";
-import { TableHeader } from "@tiptap/extension-table-header";
-import { TableCell } from "@tiptap/extension-table-cell";
-import { TaskList } from "@tiptap/extension-task-list";
-import { TaskItem } from "@tiptap/extension-task-item";
-import { Markdown } from "tiptap-markdown";
 import { bodyWithAnchorSpans } from "../format";
 import type { Comment, Reply } from "../format/types";
-import { AnchorMark } from "./AnchorMark";
+import { createMarkdownExtensions } from "./markdownRendering";
 import type { PrintOptions } from "./PrintOptionsModal";
 import "./PrintDocument.css";
 
@@ -20,31 +10,14 @@ type Props = {
   body: string;
   comments: Comment[];
   fileName: string;
+  filePath?: string | null;
   options: PrintOptions | null;
 };
 
-export function PrintDocument({ body, comments, fileName, options }: Props) {
+export function PrintDocument({ body, comments, fileName, filePath = null, options }: Props) {
   const initialMarkdown = useMemo(() => bodyWithAnchorSpans(body), [body]);
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ link: false }),
-      Link.configure({ openOnClick: false }),
-      AnchorMark,
-      Image,
-      Table.configure({ resizable: false }),
-      TableRow,
-      TableHeader,
-      TableCell,
-      TaskList,
-      TaskItem.configure({ nested: true }),
-      Markdown.configure({
-        html: true,
-        tightLists: true,
-        bulletListMarker: "-",
-        linkify: true,
-        breaks: false,
-      }),
-    ],
+    extensions: createMarkdownExtensions({ documentPath: filePath }),
     content: initialMarkdown,
     editable: false,
     editorProps: {

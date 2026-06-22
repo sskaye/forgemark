@@ -254,6 +254,7 @@ export function AppShell() {
           body={state.body}
           comments={state.comments}
           fileName={state.fileName}
+          filePath={state.filePath}
           options={printOptions}
         />
       )}
