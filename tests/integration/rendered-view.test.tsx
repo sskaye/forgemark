@@ -112,6 +112,51 @@ const total: number = 1 + 2;
     expect(container.querySelector(".hljs-keyword")?.textContent).toBe("const");
   });
 
+  it("renders Obsidian-style callouts with arbitrary types", async () => {
+    const { container } = renderFixture(`> [!Takeaway]
+> Smelters charge 0.85-1.22 $/kg.
+`);
+
+    await waitFor(() => {
+      expect(container.querySelector(".fm-callout")).toBeTruthy();
+    });
+
+    const callout = container.querySelector(".fm-callout");
+    // Unknown (Obsidian) types fall back to the generic class, not one of
+    // the five GitHub themes.
+    expect(callout?.classList.contains("fm-callout-generic")).toBe(true);
+    expect(callout?.getAttribute("data-callout-label")).toBe("Takeaway");
+    expect(callout?.textContent).toContain("Smelters charge");
+    expect(callout?.textContent).not.toContain("[!Takeaway]");
+  });
+
+  it("renders Obsidian image embeds (![[file]]) resolved by basename", async () => {
+    const { container } = renderFixture("![[Zn_production_workflow.svg]]\n", {
+      documentPath: "C:\\docs\\paper.md",
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector("img")).toBeTruthy();
+    });
+
+    expect(coreMocks.convertFileSrc).toHaveBeenCalledWith("C:\\docs\\Zn_production_workflow.svg");
+    expect(container.querySelector("img")?.getAttribute("src")).toBe(
+      "asset://C:/docs/Zn_production_workflow.svg",
+    );
+  });
+
+  it("resolves a vault-relative embed by its basename against the document folder", async () => {
+    const { container } = renderFixture("![[20 Projects/Zn Cost/Zn waterfall breakdown.svg]]\n", {
+      documentPath: "C:\\docs\\paper.md",
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector("img")).toBeTruthy();
+    });
+
+    expect(coreMocks.convertFileSrc).toHaveBeenCalledWith("C:\\docs\\Zn waterfall breakdown.svg");
+  });
+
   it("resolves relative figure sources against the opened markdown file", async () => {
     const { container } = renderFixture("![diagram](figures/flow.svg)\n", {
       documentPath: "C:\\docs\\paper.md",

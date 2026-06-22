@@ -44,6 +44,7 @@ type MarkdownToken = {
   markup?: string;
   map?: [number, number];
   block?: boolean;
+  meta?: Record<string, string>;
 };
 
 type MarkdownInlineState = {
@@ -68,6 +69,7 @@ type MarkdownItLike = {
   inline: {
     ruler: {
       after(name: string, ruleName: string, rule: MarkdownInlineRule): void;
+      before(name: string, ruleName: string, rule: MarkdownInlineRule): void;
     };
   };
   block: {
@@ -84,6 +86,7 @@ type MarkdownItLike = {
     rules: Record<string, ((tokens: MarkdownToken[], idx: number) => string) | undefined>;
   };
   __forgemarkMath?: boolean;
+  __forgemarkWiki?: boolean;
 };
 
 type MarkdownInlineRule = (state: MarkdownInlineState, silent: boolean) => boolean;
@@ -94,20 +97,29 @@ type MarkdownBlockRule = (
   silent: boolean,
 ) => boolean;
 
-const CALLOUT_RE = /^\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*(?:\r?\n)?/i;
+// GitHub recognizes five callout types; Obsidian allows arbitrary ones
+// (e.g. [!Takeaway], [!Executive Summary]). Match any non-empty type plus
+// an optional fold marker (+/-) so Obsidian vault notes render too — the
+// five known types get themed styling, the rest fall back to a neutral
+// "generic" callout that still shows their label.
+const CALLOUT_RE = /^\s*\[!([^\]\r\n]+)\][-+]?[ \t]*(?:\r?\n)?/;
 // Markdown image syntax `![alt](src "optional title")`, anchored to the end
 // of the just-typed text so it fires the moment the closing `)` is typed.
 const IMAGE_INPUT_RE = /(?:^|\s)(!\[(.+|:?)\]\((\S+)(?:\s+["'](.+?)["'])?\))$/;
 const URL_SCHEME_RE = /^[a-z][a-z\d+.-]*:/i;
 const WINDOWS_ABSOLUTE_RE = /^[a-z]:[\\/]/i;
 
-const CALLOUT_LABELS: Record<string, string> = {
+const KNOWN_CALLOUT_TYPES = new Set(["note", "tip", "important", "warning", "caution"]);
+const KNOWN_CALLOUT_LABELS: Record<string, string> = {
   note: "Note",
   tip: "Tip",
   important: "Important",
   warning: "Warning",
   caution: "Caution",
 };
+// Obsidian image/embed wikilink targets we render: only image files (note
+// and PDF embeds are left untouched). Matched against the target path.
+const WIKI_IMAGE_EXT_RE = /\.(svg|png|jpe?g|gif|webp|bmp|avif)$/i;
 
 // Subscript / superscript marks. StarterKit ships neither, so `<sub>` /
 // `<sup>` tags would otherwise be dropped to plain text on parse and lost
@@ -142,12 +154,13 @@ const GithubCallout = Blockquote.extend({
         default: null,
         parseHTML: (el: HTMLElement) => el.getAttribute("data-callout-type"),
         renderHTML: (attrs: { calloutType: string | null }) => {
-          const type = normalizeCalloutType(attrs.calloutType);
-          if (!type) return {};
+          const raw = attrs.calloutType;
+          const key = calloutClassKey(raw);
+          if (!key || !raw) return {};
           return {
-            class: `fm-callout fm-callout-${type}`,
-            "data-callout-type": type,
-            "data-callout-label": CALLOUT_LABELS[type],
+            class: `fm-callout fm-callout-${key}`,
+            "data-callout-type": raw,
+            "data-callout-label": calloutLabel(raw),
           };
         },
       },
@@ -158,13 +171,16 @@ const GithubCallout = Blockquote.extend({
     return {
       markdown: {
         serialize(state: SerializerState, node: { attrs: { calloutType: string | null } }) {
-          const type = normalizeCalloutType(node.attrs.calloutType);
-          if (!type) {
+          const raw = node.attrs.calloutType;
+          if (!raw) {
             state.wrapBlock("> ", null, node, () => state.renderContent(node));
             return;
           }
+          // Preserve the type verbatim so Obsidian types (e.g. "Takeaway",
+          // "Executive Summary") round-trip exactly rather than being
+          // upper-cased or dropped.
           state.wrapBlock("> ", null, node, () => {
-            state.write(`[!${type.toUpperCase()}]`);
+            state.write(`[!${raw}]`);
             state.ensureNewLine();
             state.renderContent(node);
           });
@@ -191,6 +207,28 @@ const MarkdownImage = Image.extend<ImageOptions & { documentPath: string | null 
     };
   },
 
+  // Obsidian embeds (`![[file.svg]]`) are parsed into image nodes that
+  // remember they were wikilinks so they serialize back to `![[...]]`
+  // instead of standard `![](...)`. wikitarget keeps the author's original
+  // target (folder/fragment and all) for an exact round-trip.
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      wikilink: {
+        default: false,
+        parseHTML: (el: HTMLElement) => el.getAttribute("data-wikilink") === "true",
+        renderHTML: (attrs: { wikilink?: boolean }) =>
+          attrs.wikilink ? { "data-wikilink": "true" } : {},
+      },
+      wikitarget: {
+        default: null,
+        parseHTML: (el: HTMLElement) => el.getAttribute("data-wikitarget"),
+        renderHTML: (attrs: { wikitarget?: string | null }) =>
+          attrs.wikitarget ? { "data-wikitarget": attrs.wikitarget } : {},
+      },
+    };
+  },
+
   renderHTML({ HTMLAttributes }) {
     const src = HTMLAttributes.src;
     const renderedSrc =
@@ -199,6 +237,41 @@ const MarkdownImage = Image.extend<ImageOptions & { documentPath: string | null 
       "img",
       mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, { src: renderedSrc }),
     ];
+  },
+
+  addStorage() {
+    return {
+      markdown: {
+        serialize(
+          state: SerializerState,
+          node: {
+            attrs: {
+              wikilink?: boolean;
+              wikitarget?: string | null;
+              src?: string | null;
+              alt?: string | null;
+              title?: string | null;
+            };
+          },
+        ) {
+          const { wikilink, wikitarget, src, alt, title } = node.attrs;
+          if (wikilink && wikitarget) {
+            state.write(`![[${wikitarget}]]`);
+            return;
+          }
+          // Standard image syntax (mirrors tiptap-markdown's default, which
+          // this override replaces for the image node).
+          const altText = typeof alt === "string" ? alt : "";
+          const titlePart = title ? ` "${String(title).replace(/"/g, '\\"')}"` : "";
+          state.write(`![${altText}](${src ?? ""}${titlePart})`);
+        },
+        parse: {
+          setup(markdownit: MarkdownItLike) {
+            installWikiEmbeds(markdownit);
+          },
+        },
+      },
+    };
   },
 
   // Without an input rule, typing `![alt](path)` in the rendered editor
@@ -436,6 +509,60 @@ function renderKatex(tex: string, displayMode: boolean): string {
   }
 }
 
+// Obsidian image embeds: `![[target]]`, `![[target|alias]]`,
+// `![[target|width]]`. We render them as <img> HTML (picked up by the
+// MarkdownImage node via html:true), resolving by basename — mirroring
+// Obsidian's filename-based vault resolution — relative to the document.
+function installWikiEmbeds(markdownit: MarkdownItLike) {
+  if (markdownit.__forgemarkWiki) return;
+  markdownit.__forgemarkWiki = true;
+  markdownit.inline.ruler.before("image", "forgemark_wikiembed", wikiEmbedRule);
+  markdownit.renderer.rules.forgemark_wikiembed = (tokens, idx) => {
+    const meta = tokens[idx].meta ?? {};
+    return (
+      `<img data-wikilink="true"` +
+      ` data-wikitarget="${escapeHtmlAttribute(meta.target ?? "")}"` +
+      ` src="${escapeHtmlAttribute(meta.src ?? "")}"` +
+      ` alt="${escapeHtmlAttribute(meta.alt ?? "")}">`
+    );
+  };
+}
+
+function wikiEmbedRule(state: MarkdownInlineState, silent: boolean): boolean {
+  const start = state.pos;
+  if (
+    state.src.charCodeAt(start) !== 0x21 /* ! */ ||
+    state.src.charCodeAt(start + 1) !== 0x5b /* [ */ ||
+    state.src.charCodeAt(start + 2) !== 0x5b /* [ */
+  ) {
+    return false;
+  }
+  const close = state.src.indexOf("]]", start + 3);
+  if (close < 0) return false;
+  const inner = state.src.slice(start + 3, close);
+  if (inner.length === 0 || inner.includes("[")) return false;
+
+  // `target|alias|width` — strip a `#heading` fragment from the target.
+  // Only image targets are handled; note/PDF embeds are left to fall
+  // through (so they aren't silently swallowed).
+  const parts = inner.split("|");
+  const target = parts[0].trim();
+  const pathOnly = target.split("#")[0].trim();
+  if (!WIKI_IMAGE_EXT_RE.test(pathOnly)) return false;
+
+  if (!silent) {
+    const alias = parts
+      .slice(1)
+      .map((p) => p.trim())
+      .find((p) => p.length > 0 && !/^\d+$/.test(p));
+    const base = pathOnly.split(/[\\/]/).pop() ?? pathOnly;
+    const token = state.push("forgemark_wikiembed", "img", 0);
+    token.meta = { target, src: base, alt: alias ?? base };
+  }
+  state.pos = close + 2;
+  return true;
+}
+
 function installMathMarkdown(markdownit: MarkdownItLike) {
   if (markdownit.__forgemarkMath) return;
   markdownit.__forgemarkMath = true;
@@ -549,8 +676,8 @@ function normalizeGithubCalloutDOM(root: HTMLElement) {
     }
     const match = CALLOUT_RE.exec(firstText.textContent);
     if (!match) return;
-    const type = normalizeCalloutType(match[1]);
-    if (!type) return;
+    const rawType = match[1].trim();
+    if (rawType.length === 0) return;
     firstText.textContent = firstText.textContent.slice(match[0].length);
     if (firstText.textContent.length === 0) firstText.parentNode?.removeChild(firstText);
     if (isEmptyElement(firstBlock)) firstBlock.remove();
@@ -559,7 +686,7 @@ function normalizeGithubCalloutDOM(root: HTMLElement) {
       paragraph.append(document.createElement("br"));
       blockquote.append(paragraph);
     }
-    blockquote.setAttribute("data-callout-type", type);
+    blockquote.setAttribute("data-callout-type", rawType);
   });
 }
 
@@ -569,10 +696,20 @@ function isEmptyElement(element: Element): boolean {
   );
 }
 
-function normalizeCalloutType(type: string | null | undefined): string | null {
-  if (!type) return null;
-  const normalized = type.toLowerCase();
-  return Object.prototype.hasOwnProperty.call(CALLOUT_LABELS, normalized) ? normalized : null;
+// The CSS class suffix for a callout type: one of the five themed types,
+// or "generic" for any other (Obsidian) type. Null only for an empty type.
+function calloutClassKey(rawType: string | null | undefined): string | null {
+  if (!rawType) return null;
+  const normalized = rawType.trim().toLowerCase();
+  if (normalized.length === 0) return null;
+  return KNOWN_CALLOUT_TYPES.has(normalized) ? normalized : "generic";
+}
+
+// The human label shown in the callout header: the canonical label for a
+// known type, otherwise the author's own type text (e.g. "Takeaway").
+function calloutLabel(rawType: string): string {
+  const normalized = rawType.trim().toLowerCase();
+  return KNOWN_CALLOUT_LABELS[normalized] ?? rawType.trim();
 }
 
 function splitAssetSuffix(src: string): { pathPart: string; suffix: string } {
