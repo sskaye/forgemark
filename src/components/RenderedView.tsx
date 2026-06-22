@@ -1,16 +1,4 @@
 import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Link from "@tiptap/extension-link";
-import Subscript from "@tiptap/extension-subscript";
-import Superscript from "@tiptap/extension-superscript";
-import Image from "@tiptap/extension-image";
-import { Table } from "@tiptap/extension-table";
-import { TableRow } from "@tiptap/extension-table-row";
-import { TableHeader } from "@tiptap/extension-table-header";
-import { TableCell } from "@tiptap/extension-table-cell";
-import { TaskList } from "@tiptap/extension-task-list";
-import { TaskItem } from "@tiptap/extension-task-item";
-import { Markdown } from "tiptap-markdown";
 import { useEffect, useMemo, useRef } from "react";
 import { Extension } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
@@ -28,36 +16,8 @@ import {
   scrollRatio,
   type ViewSyncAnchor,
 } from "../services/viewSync";
-import { AnchorMark } from "./AnchorMark";
-import { CodeBlockAnchor } from "./CodeBlockAnchor";
+import { createMarkdownExtensions } from "./markdownRendering";
 import "./RenderedView.css";
-
-// Subscript / superscript marks. StarterKit ships neither, so `<sub>` /
-// `<sup>` tags would otherwise be dropped to plain text on parse and lost
-// on the next save. Parsing is handled by `html: true` plus each mark's
-// built-in `parseHTML` tag matcher; we add an explicit markdown serialize
-// spec (mirroring how tiptap-markdown serializes Strike's `~~`) so the
-// HTML tags round-trip byte-for-byte.
-const SubscriptMark = Subscript.extend({
-  addStorage() {
-    return {
-      markdown: {
-        serialize: { open: "<sub>", close: "</sub>", expelEnclosingWhitespace: true },
-        parse: {},
-      },
-    };
-  },
-});
-const SuperscriptMark = Superscript.extend({
-  addStorage() {
-    return {
-      markdown: {
-        serialize: { open: "<sup>", close: "</sup>", expelEnclosingWhitespace: true },
-        parse: {},
-      },
-    };
-  },
-});
 
 // Captured selection metadata used by the new-comment composer. Phase 5.
 export type CapturedSelection = {
@@ -127,6 +87,7 @@ type Props = {
   onAnchorHover: (id: number | null) => void;
   onExternalLinkError?: (message: string) => void;
   onOpenExternalLink?: (url: string) => Promise<void> | void;
+  documentPath?: string | null;
   // Phase 5 composer trigger handle. The parent attaches this and calls
   // `current.captureSelection()` from the ⌘⌥M shortcut handler.
   handleRef?: React.MutableRefObject<RenderedViewHandle | null>;
@@ -151,46 +112,17 @@ export function RenderedView({
   onAnchorHover,
   onExternalLinkError,
   onOpenExternalLink = openUrl,
+  documentPath = null,
   handleRef,
 }: Props) {
   const lastInitialRef = useRef("");
   const initialMarkdown = useMemo(() => bodyWithAnchorSpans(body), [body]);
 
   const editor = useEditor({
-    extensions: [
-      // StarterKit ships its own Link in v3; we use the standalone with
-      // openOnClick disabled so clicks are the host's to handle. Its
-      // codeBlock is disabled in favour of CodeBlockAnchor, which adds
-      // whole-block comment anchoring.
-      StarterKit.configure({ link: false, codeBlock: false }),
-      CodeBlockAnchor,
-      Link.configure({ openOnClick: false }),
-      SubscriptMark,
-      SuperscriptMark,
-      AnchorMark,
-      SearchHighlightExtension,
-      Image,
-      Table.configure({ resizable: false }),
-      TableRow,
-      TableHeader,
-      TableCell,
-      TaskList,
-      TaskItem.configure({ nested: true }),
-      Markdown.configure({
-        // html: true is what allows the anchor `<span>` wrappers we inject
-        // to survive the markdown→ProseMirror round-trip. Markdown bodies
-        // we receive are from our own format layer; arbitrary user-typed
-        // HTML still flows through, which is acceptable inside the local
-        // Tauri webview.
-        html: true,
-        tightLists: true,
-        bulletListMarker: "-",
-        linkify: true,
-        breaks: false,
-        transformPastedText: true,
-        transformCopiedText: true,
-      }),
-    ],
+    extensions: createMarkdownExtensions({
+      documentPath,
+      extraExtensions: [SearchHighlightExtension],
+    }),
     content: initialMarkdown,
     editable: !readOnly,
     editorProps: {
@@ -339,8 +271,7 @@ export function RenderedView({
         // entire code block (the comment is on the block, not a sub-span).
         const from = cls.kind === "block" ? cls.from : selFrom;
         const to = cls.kind === "block" ? cls.to : selTo;
-        const text =
-          cls.kind === "block" ? cls.text : state.doc.textBetween(from, to, " ", " ");
+        const text = cls.kind === "block" ? cls.text : state.doc.textBetween(from, to, " ", " ");
         if (cls.kind !== "reject" && text.trim().length === 0) return null;
 
         // Overlap: inline anchors are detected via the anchor mark; a block
@@ -641,7 +572,10 @@ export function classifyCodeSelection(
   });
 
   if (blocks.length > 1) {
-    return { kind: "reject", reason: "Select within a single code block, or outside it, to comment." };
+    return {
+      kind: "reject",
+      reason: "Select within a single code block, or outside it, to comment.",
+    };
   }
   if (blocks.length === 1) {
     const b = blocks[0];
@@ -660,7 +594,10 @@ export function classifyCodeSelection(
         existingAnchorId: id != null && Number.isFinite(id) ? id : null,
       };
     }
-    return { kind: "reject", reason: "Select within a single code block, or outside it, to comment." };
+    return {
+      kind: "reject",
+      reason: "Select within a single code block, or outside it, to comment.",
+    };
   }
 
   // No code block — but the selection may be inside inline code. We allow a

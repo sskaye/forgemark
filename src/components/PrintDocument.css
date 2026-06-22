@@ -31,6 +31,61 @@
   background: rgba(255, 200, 72, 0.24);
 }
 
+.fm-print-prose img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.fm-print-prose pre {
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  background: #f6f8fa;
+  overflow-x: auto;
+}
+
+.fm-print-prose .hljs-comment,
+.fm-print-prose .hljs-quote {
+  color: #6a737d;
+}
+
+.fm-print-prose .hljs-keyword,
+.fm-print-prose .hljs-selector-tag,
+.fm-print-prose .hljs-subst {
+  color: #d73a49;
+}
+
+.fm-print-prose .hljs-literal,
+.fm-print-prose .hljs-number,
+.fm-print-prose .hljs-variable {
+  color: #005cc5;
+}
+
+.fm-print-prose .hljs-string {
+  color: #032f62;
+}
+
+.fm-print-prose blockquote.fm-callout {
+  padding: 8px 12px;
+  border-left: 3px solid #0969da;
+  background: #f6f8fa;
+  color: #111;
+}
+
+.fm-print-prose blockquote.fm-callout::before {
+  content: attr(data-callout-label);
+  display: block;
+  margin-bottom: 4px;
+  font-family: var(--fm-ui);
+  font-weight: 700;
+}
+
+.fm-print-prose .fm-math-block {
+  display: block;
+  margin: 1em 0;
+  overflow-x: auto;
+}
+
 .fm-print-review {
   break-before: page;
   margin-top: 32px;

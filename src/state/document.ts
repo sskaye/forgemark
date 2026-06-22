@@ -181,6 +181,10 @@ export type DocumentAction =
       readOnly: boolean;
     }
   | { type: "edit"; body: string }
+  // Source-view editing: the user edited the raw file text directly, so
+  // both the body and the parsed comments may have changed. EditorPane
+  // re-parses the edited source via parseForgemarkFile before dispatching.
+  | { type: "editSource"; body: string; comments: Comment[] }
   | { type: "saved"; text: string; body: string }
   | { type: "setViewMode"; viewMode: "rendered" | "source" }
   | { type: "newUntitled" }
@@ -264,6 +268,22 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
       return {
         ...state,
         body: action.body,
+        dirty: true,
+      };
+    case "editSource":
+      // No-op guard: toggling into Source and back (or any edit that
+      // re-serializes to the same file) shouldn't mark the document
+      // dirty. Comments are few, so the JSON compare is cheap.
+      if (
+        action.body === state.body &&
+        JSON.stringify(action.comments) === JSON.stringify(state.comments)
+      ) {
+        return state;
+      }
+      return {
+        ...state,
+        body: action.body,
+        comments: action.comments,
         dirty: true,
       };
     case "saved":

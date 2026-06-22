@@ -86,6 +86,79 @@
   font-size: inherit;
 }
 
+.fm-rendered-view .fm-prose .hljs-comment,
+.fm-rendered-view .fm-prose .hljs-quote {
+  color: #6a737d;
+}
+
+.fm-rendered-view .fm-prose .hljs-keyword,
+.fm-rendered-view .fm-prose .hljs-selector-tag,
+.fm-rendered-view .fm-prose .hljs-subst {
+  color: #d73a49;
+}
+
+.fm-rendered-view .fm-prose .hljs-literal,
+.fm-rendered-view .fm-prose .hljs-number,
+.fm-rendered-view .fm-prose .hljs-tag .hljs-attr,
+.fm-rendered-view .fm-prose .hljs-template-variable,
+.fm-rendered-view .fm-prose .hljs-variable {
+  color: #005cc5;
+}
+
+.fm-rendered-view .fm-prose .hljs-doctag,
+.fm-rendered-view .fm-prose .hljs-string {
+  color: #032f62;
+}
+
+.fm-rendered-view .fm-prose .hljs-section,
+.fm-rendered-view .fm-prose .hljs-selector-id,
+.fm-rendered-view .fm-prose .hljs-title {
+  color: #6f42c1;
+  font-weight: 600;
+}
+
+.fm-rendered-view .fm-prose .hljs-built_in,
+.fm-rendered-view .fm-prose .hljs-class .hljs-title,
+.fm-rendered-view .fm-prose .hljs-type {
+  color: #e36209;
+}
+
+:root[data-theme="dark"] .fm-rendered-view .fm-prose .hljs-comment,
+:root[data-theme="dark"] .fm-rendered-view .fm-prose .hljs-quote {
+  color: #8b949e;
+}
+
+:root[data-theme="dark"] .fm-rendered-view .fm-prose .hljs-keyword,
+:root[data-theme="dark"] .fm-rendered-view .fm-prose .hljs-selector-tag,
+:root[data-theme="dark"] .fm-rendered-view .fm-prose .hljs-subst {
+  color: #ff7b72;
+}
+
+:root[data-theme="dark"] .fm-rendered-view .fm-prose .hljs-literal,
+:root[data-theme="dark"] .fm-rendered-view .fm-prose .hljs-number,
+:root[data-theme="dark"] .fm-rendered-view .fm-prose .hljs-tag .hljs-attr,
+:root[data-theme="dark"] .fm-rendered-view .fm-prose .hljs-template-variable,
+:root[data-theme="dark"] .fm-rendered-view .fm-prose .hljs-variable {
+  color: #79c0ff;
+}
+
+:root[data-theme="dark"] .fm-rendered-view .fm-prose .hljs-doctag,
+:root[data-theme="dark"] .fm-rendered-view .fm-prose .hljs-string {
+  color: #a5d6ff;
+}
+
+:root[data-theme="dark"] .fm-rendered-view .fm-prose .hljs-section,
+:root[data-theme="dark"] .fm-rendered-view .fm-prose .hljs-selector-id,
+:root[data-theme="dark"] .fm-rendered-view .fm-prose .hljs-title {
+  color: #d2a8ff;
+}
+
+:root[data-theme="dark"] .fm-rendered-view .fm-prose .hljs-built_in,
+:root[data-theme="dark"] .fm-rendered-view .fm-prose .hljs-class .hljs-title,
+:root[data-theme="dark"] .fm-rendered-view .fm-prose .hljs-type {
+  color: #ffa657;
+}
+
 .fm-rendered-view .fm-prose sub,
 .fm-rendered-view .fm-prose sup {
   font-size: 0.75em;
@@ -109,6 +182,7 @@
 }
 
 .fm-rendered-view .fm-prose img {
+  display: block;
   max-width: 100%;
   height: auto;
   border-radius: 4px;
@@ -119,6 +193,106 @@
   border: none;
   border-top: 0.5px solid var(--fm-rule);
   margin: 1.5em 0;
+}
+
+.fm-rendered-view .fm-prose blockquote.fm-callout {
+  position: relative;
+  margin: 1em 0;
+  padding: 10px 14px 10px 16px;
+  border-left: 3px solid var(--fm-accent);
+  border-radius: 6px;
+  color: var(--fm-prose-ink);
+  background: var(--fm-accent-soft);
+}
+
+.fm-rendered-view .fm-prose blockquote.fm-callout::before {
+  content: attr(data-callout-label);
+  display: block;
+  margin-bottom: 0.35em;
+  font-family: var(--fm-ui);
+  font-size: 0.82em;
+  font-weight: 700;
+  color: var(--fm-accent);
+}
+
+.fm-rendered-view .fm-prose blockquote.fm-callout > :last-child {
+  margin-bottom: 0;
+}
+
+.fm-rendered-view .fm-prose .fm-callout-tip {
+  border-left-color: var(--fm-success);
+  background: var(--fm-suggest-bg);
+}
+
+.fm-rendered-view .fm-prose .fm-callout-tip::before {
+  color: var(--fm-success);
+}
+
+.fm-rendered-view .fm-prose .fm-callout-important {
+  border-left-color: #8250df;
+  background: rgba(130, 80, 223, 0.1);
+}
+
+.fm-rendered-view .fm-prose .fm-callout-important::before {
+  color: #8250df;
+}
+
+.fm-rendered-view .fm-prose .fm-callout-warning {
+  border-left-color: #9a6700;
+  background: rgba(154, 103, 0, 0.12);
+}
+
+.fm-rendered-view .fm-prose .fm-callout-warning::before {
+  color: #9a6700;
+}
+
+.fm-rendered-view .fm-prose .fm-callout-caution {
+  border-left-color: var(--fm-danger);
+  background: rgba(215, 0, 21, 0.08);
+}
+
+.fm-rendered-view .fm-prose .fm-callout-caution::before {
+  color: var(--fm-danger);
+}
+
+:root[data-theme="dark"] .fm-rendered-view .fm-prose .fm-callout-important {
+  border-left-color: #d2a8ff;
+  background: rgba(210, 168, 255, 0.12);
+}
+
+:root[data-theme="dark"] .fm-rendered-view .fm-prose .fm-callout-important::before {
+  color: #d2a8ff;
+}
+
+:root[data-theme="dark"] .fm-rendered-view .fm-prose .fm-callout-warning {
+  border-left-color: #d29922;
+  background: rgba(210, 153, 34, 0.13);
+}
+
+:root[data-theme="dark"] .fm-rendered-view .fm-prose .fm-callout-warning::before {
+  color: #d29922;
+}
+
+.fm-rendered-view .fm-prose .fm-math-inline {
+  display: inline-block;
+  vertical-align: baseline;
+  max-width: 100%;
+}
+
+.fm-rendered-view .fm-prose .fm-math-block {
+  display: block;
+  margin: 1em 0;
+  padding: 8px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* A clicked equation is selected as a whole (atom) node; show that it's
+   selected so it's clear a Backspace/Delete will remove it. */
+.fm-rendered-view .fm-prose .fm-math.ProseMirror-selectednode {
+  outline: 2px solid var(--fm-accent);
+  outline-offset: 2px;
+  border-radius: 3px;
 }
 
 /* Anchor highlights (Phase 4). Defaults are quiet; hover and focus

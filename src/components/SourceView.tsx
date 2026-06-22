@@ -19,7 +19,7 @@ import {
 } from "../services/viewSync";
 import "./SourceView.css";
 
-// Phase 8 source view: CodeMirror 6 in read-only mode.
+// Phase 8 source view: CodeMirror 6.
 //
 // Why a real editor and not just `<pre>`: we want markdown syntax
 // highlighting on the outer markdown layer (headings, emphasis, lists,
@@ -29,9 +29,12 @@ import "./SourceView.css";
 // otherwise be reinventing both. Per-language highlighting *inside*
 // fenced code is out of scope for v1.
 //
-// The view is read-only — comments are added from Rendered view only.
-// The "read-only review" chip in EditorPane communicates this; the
-// editable=false attribute and EditorState.readOnly facet enforce it.
+// Editing: when `editable` is set, the user can edit the raw file text
+// directly (body + the trailing comments block). Edits flow out through
+// `onChange`; the parent re-parses them into body + comments. When the
+// file is read-only the view stays non-editable and EditorPane shows the
+// "read-only review" chip. Commenting is still a Rendered-view-only
+// action regardless.
 
 export type SourceViewHandle = {
   // Scroll the source view so the opening marker `<!-- fmc:N -->` is in
@@ -44,6 +47,13 @@ export type SourceViewHandle = {
 
 type Props = {
   text: string;
+  // When true the document is editable and keystrokes flow out via
+  // onChange. Defaults to false so the view stays a read-only review
+  // surface unless the parent opts in.
+  editable?: boolean;
+  // Fires with the full editor text after a user edit (never for
+  // programmatic text replacements driven by the `text` prop).
+  onChange?: (text: string) => void;
 };
 
 // Match `<!-- fmc:N -->` or `<!-- /fmc:N -->` for any non-negative integer N.
@@ -100,11 +110,16 @@ const decorationPlugin = ViewPlugin.fromClass(
   { decorations: (v) => v.decorations },
 );
 
-// The base extensions are stable across re-renders; only the doc text
-// changes via a Compartment-less transaction (we replace via dispatch).
-const baseExtensions = [
-  EditorState.readOnly.of(true),
-  EditorView.editable.of(false),
+// Editability is the one facet that flips at runtime (a file can become
+// read-only, or the user can be allowed to edit source). Keep it in a
+// Compartment so we can reconfigure it without tearing down the view.
+function editableExtensions(editable: boolean) {
+  return [EditorState.readOnly.of(!editable), EditorView.editable.of(editable)];
+}
+
+// The base extensions are stable across re-renders; only the doc text and
+// the editable compartment change. Editing edits flow out via onChange.
+const staticExtensions = [
   markdown(),
   syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
   decorationPlugin,
@@ -119,7 +134,7 @@ const baseExtensions = [
       },
       ".cm-content": {
         padding: "0",
-        caretColor: "transparent",
+        caretColor: "var(--fm-prose-ink)",
       },
       ".cm-line": { padding: "0" },
       ".cm-scroller": { fontFamily: "var(--fm-mono)" },
@@ -130,12 +145,19 @@ const baseExtensions = [
   ),
 ];
 
-export const SourceView = forwardRef<SourceViewHandle, Props>(function SourceView({ text }, ref) {
+export const SourceView = forwardRef<SourceViewHandle, Props>(function SourceView(
+  { text, editable = false, onChange },
+  ref,
+) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
-  // We keep one Compartment around purely to enable surgical reconfigures
-  // in the future (e.g. theme swap). For now it's unused but stable.
-  const themeCompartment = useRef(new Compartment());
+  const editableCompartment = useRef(new Compartment());
+  // Keep the latest onChange without re-mounting the editor.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  // True while we replace the doc from the `text` prop, so the update
+  // listener doesn't echo programmatic replacements back out as edits.
+  const applyingExternalRef = useRef(false);
 
   // Mount once.
   useEffect(() => {
@@ -143,7 +165,15 @@ export const SourceView = forwardRef<SourceViewHandle, Props>(function SourceVie
     if (!host) return;
     const state = EditorState.create({
       doc: text,
-      extensions: [...baseExtensions, themeCompartment.current.of([])],
+      extensions: [
+        editableCompartment.current.of(editableExtensions(editable)),
+        ...staticExtensions,
+        EditorView.updateListener.of((update) => {
+          if (!update.docChanged) return;
+          if (applyingExternalRef.current) return;
+          onChangeRef.current?.(update.state.doc.toString());
+        }),
+      ],
     });
     const view = new EditorView({ state, parent: host });
     viewRef.current = view;
@@ -151,21 +181,38 @@ export const SourceView = forwardRef<SourceViewHandle, Props>(function SourceVie
       view.destroy();
       viewRef.current = null;
     };
-    // Only on mount — text updates flow through the second effect.
+    // Only on mount — text + editable updates flow through the effects below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Replace the doc when the source text changes (e.g. user toggles
-  // back to Rendered, edits, then toggles to Source). CodeMirror's
-  // changes API is the right shape: replace 0..length with new text.
+  // Flip the editable facet when the prop changes (e.g. a file becomes
+  // read-only) without remounting.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: editableCompartment.current.reconfigure(editableExtensions(editable)),
+    });
+  }, [editable]);
+
+  // Replace the doc when the source text changes from the outside (file
+  // open / external reload / toggling back from Rendered after edits).
+  // We skip while the editor is focused so a user's own keystrokes —
+  // which round-trip back through `text` — don't yank their cursor.
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
     const current = view.state.doc.toString();
     if (current === text) return;
-    view.dispatch({
-      changes: { from: 0, to: view.state.doc.length, insert: text },
-    });
+    if (view.hasFocus) return;
+    applyingExternalRef.current = true;
+    try {
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: text },
+      });
+    } finally {
+      applyingExternalRef.current = false;
+    }
   }, [text]);
 
   useImperativeHandle(

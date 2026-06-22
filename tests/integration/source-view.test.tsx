@@ -19,7 +19,11 @@ beforeEach(() => {
   window.localStorage.setItem("forgemark.author", "Maya");
 });
 
-function HarnessProbe({ initial }: { initial: { body: string; comments: Comment[] } }) {
+function HarnessProbe({
+  initial,
+}: {
+  initial: { body: string; comments: Comment[]; readOnly?: boolean };
+}) {
   const { state, dispatch } = useDocument();
   const loaded = useRef(false);
   if (!loaded.current) {
@@ -31,7 +35,7 @@ function HarnessProbe({ initial }: { initial: { body: string; comments: Comment[
       text: initial.body,
       body: initial.body,
       comments: initial.comments,
-      readOnly: false,
+      readOnly: initial.readOnly ?? false,
     });
   }
   return (
@@ -68,7 +72,7 @@ function HarnessProbe({ initial }: { initial: { body: string; comments: Comment[
   );
 }
 
-function renderApp(initial: { body: string; comments: Comment[] }) {
+function renderApp(initial: { body: string; comments: Comment[]; readOnly?: boolean }) {
   return render(
     <ThemeProvider initialPreference="light">
       <DocumentProvider>
@@ -102,17 +106,43 @@ describe("Source view (Phase 8)", () => {
     expect(screen.queryByTestId("fm-rendered-view")).not.toBeInTheDocument();
   });
 
-  it('shows the "Source view · read-only review" chip with a hover tooltip', async () => {
+  it("shows the editable chip when the file is writable, hidden in Rendered view", async () => {
     renderApp(SAMPLE);
     fireEvent.click(screen.getByTestId("probe-set-source"));
     const chip = await screen.findByTestId("fm-source-chip");
-    expect(chip).toHaveTextContent(/Source view.*read-only review/i);
+    expect(chip).toHaveTextContent(/Source view.*editable/i);
     expect(chip).toHaveAttribute("title");
     expect(chip.getAttribute("title")).toMatch(/Rendered/i);
     // Chip is hidden in Rendered view.
     fireEvent.click(screen.getByTestId("probe-set-rendered"));
     await waitFor(() => {
       expect(screen.queryByTestId("fm-source-chip")).not.toBeInTheDocument();
+    });
+  });
+
+  it('shows the "read-only review" chip when the file is read-only', async () => {
+    renderApp({ ...SAMPLE, readOnly: true });
+    fireEvent.click(screen.getByTestId("probe-set-source"));
+    const chip = await screen.findByTestId("fm-source-chip");
+    expect(chip).toHaveTextContent(/Source view.*read-only review/i);
+  });
+
+  it("the source editor is editable for a writable file and locked when read-only", async () => {
+    const { unmount } = renderApp(SAMPLE);
+    fireEvent.click(screen.getByTestId("probe-set-source"));
+    const host = await screen.findByTestId("fm-source-view");
+    await waitFor(() => {
+      expect(host.querySelector(".cm-content")?.getAttribute("contenteditable")).toBe("true");
+    });
+    unmount();
+
+    renderApp({ ...SAMPLE, readOnly: true });
+    fireEvent.click(screen.getByTestId("probe-set-source"));
+    const lockedHost = await screen.findByTestId("fm-source-view");
+    await waitFor(() => {
+      expect(lockedHost.querySelector(".cm-content")?.getAttribute("contenteditable")).toBe(
+        "false",
+      );
     });
   });
 

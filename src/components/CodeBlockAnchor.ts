@@ -1,4 +1,5 @@
-import CodeBlock from "@tiptap/extension-code-block";
+import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
+import { common, createLowlight } from "lowlight";
 
 // CodeBlock with whole-block comment anchoring. The file format can't
 // place markers *inside* a fenced block (they'd be read as code), so a
@@ -59,8 +60,9 @@ interface CodeBlockNode {
 }
 
 const FMC_INFO_RE = /(?:^|\s)fmc=(\d+)(?:\s|$)/;
+const defaultLowlight = createLowlight(common);
 
-export const CodeBlockAnchor = CodeBlock.extend({
+export const CodeBlockAnchor = CodeBlockLowlight.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
@@ -110,4 +112,4 @@ export const CodeBlockAnchor = CodeBlock.extend({
       },
     };
   },
-});
+}).configure({ lowlight: defaultLowlight });
