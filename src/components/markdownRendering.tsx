@@ -1,4 +1,5 @@
-import { Node, mergeAttributes, type Extensions } from "@tiptap/core";
+import { Node, mergeAttributes, nodeInputRule, type Editor, type Extensions } from "@tiptap/core";
+import { NodeSelection } from "@tiptap/pm/state";
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Blockquote from "@tiptap/extension-blockquote";
@@ -94,6 +95,9 @@ type MarkdownBlockRule = (
 ) => boolean;
 
 const CALLOUT_RE = /^\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*(?:\r?\n)?/i;
+// Markdown image syntax `![alt](src "optional title")`, anchored to the end
+// of the just-typed text so it fires the moment the closing `)` is typed.
+const IMAGE_INPUT_RE = /(?:^|\s)(!\[(.+|:?)\]\((\S+)(?:\s+["'](.+?)["'])?\))$/;
 const URL_SCHEME_RE = /^[a-z][a-z\d+.-]*:/i;
 const WINDOWS_ABSOLUTE_RE = /^[a-z]:[\\/]/i;
 
@@ -196,7 +200,37 @@ const MarkdownImage = Image.extend<ImageOptions & { documentPath: string | null 
       mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, { src: renderedSrc }),
     ];
   },
+
+  // Without an input rule, typing `![alt](path)` in the rendered editor
+  // stays as literal text (tiptap-markdown only converts image syntax on
+  // paste / initial load), so figures never appear until the next reload.
+  // This converts the markdown image syntax to an image node as it's typed.
+  addInputRules() {
+    return [
+      nodeInputRule({
+        find: IMAGE_INPUT_RE,
+        type: this.type,
+        getAttributes: (match) => {
+          const [, , alt, src, title] = match;
+          return { src, alt, title };
+        },
+      }),
+    ];
+  },
 });
+
+// Math nodes are atoms: clicking one selects it as a NodeSelection.
+// Backspace/Delete then need to remove it — the default keymap doesn't
+// reliably delete a selected inline atom, leaving users (per bug report)
+// unable to remove an equation. This handler deletes the node whenever
+// it's the current selection.
+function deleteSelectedMath(editor: Editor, name: string): boolean {
+  const { selection } = editor.state;
+  if (selection instanceof NodeSelection && selection.node.type.name === name) {
+    return editor.commands.deleteSelection();
+  }
+  return false;
+}
 
 const InlineMath = Node.create({
   name: "inlineMath",
@@ -204,6 +238,13 @@ const InlineMath = Node.create({
   inline: true,
   atom: true,
   selectable: true,
+
+  addKeyboardShortcuts() {
+    return {
+      Backspace: () => deleteSelectedMath(this.editor, this.name),
+      Delete: () => deleteSelectedMath(this.editor, this.name),
+    };
+  },
 
   addAttributes() {
     return {
@@ -248,6 +289,13 @@ const BlockMath = Node.create({
   group: "block",
   atom: true,
   selectable: true,
+
+  addKeyboardShortcuts() {
+    return {
+      Backspace: () => deleteSelectedMath(this.editor, this.name),
+      Delete: () => deleteSelectedMath(this.editor, this.name),
+    };
+  },
 
   addAttributes() {
     return {

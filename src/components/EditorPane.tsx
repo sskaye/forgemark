@@ -8,7 +8,12 @@ import { OverlapPrompt } from "./OverlapPrompt";
 import { FindReplaceBar } from "./FindReplaceBar";
 import { LostAnchorBanner } from "./LostAnchorBanner";
 import { ContextMenu } from "./ContextMenu";
-import { nextCommentId, serializeForgemarkFile, type AnchorStatus } from "../format";
+import {
+  nextCommentId,
+  parseForgemarkFile,
+  serializeForgemarkFile,
+  type AnchorStatus,
+} from "../format";
 import type { ViewSyncAnchor } from "../services/viewSync";
 import "./EditorPane.css";
 
@@ -25,9 +30,11 @@ type Props = {
 // anchor mark and returns the new body, which is dispatched along with
 // the new Comment.
 //
-// Phase 8: source view is now CodeMirror-based with a "read-only review"
-// chip overlay. Card-click focus changes scroll the source view to the
-// matching marker via the SourceView imperative handle.
+// Phase 8: source view is CodeMirror-based. It's editable when the file
+// is writable (edits round-trip through parseForgemarkFile back into the
+// body + comments); read-only files keep the "read-only review" chip.
+// Card-click focus changes scroll the source view to the matching marker
+// via the SourceView imperative handle.
 export function EditorPane({ anchorStatuses }: Props) {
   const { state, dispatch, setViewMode } = useDocument();
   const [author] = useAuthorName();
@@ -55,7 +62,7 @@ export function EditorPane({ anchorStatuses }: Props) {
   // composer at the current selection. Selections inside fenced code
   // blocks or inline code spans are refused, mirroring the
   // parser-level rule from Phase 3. In Source view the trigger is a
-  // no-op — Source is read-only review.
+  // no-op — commenting only happens in Rendered view.
   const openComposer = useCallback(
     (initialMode: "comment" | "suggest" = "comment") => {
       if (state.viewMode !== "rendered") return;
@@ -367,6 +374,19 @@ export function EditorPane({ anchorStatuses }: Props) {
     [state.viewMode, state.body, state.comments],
   );
 
+  // Source editing is allowed unless the file is read-only. Edits are the
+  // raw file text, so we re-parse the whole thing (body + trailing
+  // comments block) back into the document model. Tolerant parsing keeps
+  // an in-progress edit (e.g. a half-typed marker) from blowing up.
+  const sourceEditable = !state.readOnly;
+  const onSourceChange = useCallback(
+    (text: string) => {
+      const parsed = parseForgemarkFile(text, { tolerant: true });
+      dispatch({ type: "editSource", body: parsed.body, comments: parsed.comments });
+    },
+    [dispatch],
+  );
+
   useEffect(() => {
     const onCapture = (e: Event) => {
       const detail = (e as CustomEvent<{ from: "rendered" | "source"; to: "rendered" | "source" }>)
@@ -461,11 +481,17 @@ export function EditorPane({ anchorStatuses }: Props) {
         <aside
           className="fm-source-chip"
           data-testid="fm-source-chip"
-          title="You can read here, but commenting only works in Rendered view."
-          aria-label="Source view, read-only review"
+          title={
+            sourceEditable
+              ? "Editing the raw file. Commenting still works only in Rendered view."
+              : "You can read here, but commenting only works in Rendered view."
+          }
+          aria-label={sourceEditable ? "Source view, editable" : "Source view, read-only review"}
         >
           <span className="fm-source-chip-dot" aria-hidden="true" />
-          <span>Source view · read-only review</span>
+          <span>
+            {sourceEditable ? "Source view · editable" : "Source view · read-only review"}
+          </span>
         </aside>
       )}
       <div className="fm-document">
@@ -490,7 +516,12 @@ export function EditorPane({ anchorStatuses }: Props) {
             handleRef={handleRef}
           />
         ) : (
-          <SourceView ref={sourceRef} text={sourceText} />
+          <SourceView
+            ref={sourceRef}
+            text={sourceText}
+            editable={sourceEditable}
+            onChange={sourceEditable ? onSourceChange : undefined}
+          />
         )}
       </div>
       {state.composer?.mode === "new" && state.viewMode === "rendered" && (

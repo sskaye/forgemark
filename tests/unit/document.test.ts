@@ -57,6 +57,37 @@ describe("document reducer", () => {
     expect(edited.body).toBe("alpha bravo");
   });
 
+  it("editSource updates body and comments together and marks dirty", () => {
+    const loaded = reduceDocument(INITIAL_STATE, baseLoad);
+    const comment = {
+      id: 1,
+      author: "Maya",
+      timestamp: "2026-05-07T09:00:00Z",
+      resolved: false,
+      anchor_text: "alpha",
+      body: "note\n",
+    };
+    const edited = reduceDocument(loaded, {
+      type: "editSource",
+      body: "alpha edited",
+      comments: [comment],
+    });
+    expect(edited.dirty).toBe(true);
+    expect(edited.body).toBe("alpha edited");
+    expect(edited.comments).toEqual([comment]);
+  });
+
+  it("editSource is a no-op when body and comments are unchanged", () => {
+    const loaded = reduceDocument(INITIAL_STATE, baseLoad);
+    const next = reduceDocument(loaded, {
+      type: "editSource",
+      body: loaded.body,
+      comments: loaded.comments,
+    });
+    expect(next).toBe(loaded);
+    expect(next.dirty).toBe(false);
+  });
+
   it("edit back to the original body still marks dirty (the user did edit)", () => {
     // After Phase 4, edits go through the format serializer on save, so
     // matching `originalText` no longer means "no change to write" — the
