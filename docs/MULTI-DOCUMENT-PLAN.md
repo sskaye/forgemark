@@ -230,7 +230,30 @@ assuming, since it is the main thing keeping this change small.
 `document.test.ts` tests the pure reducer directly and is unaffected
 regardless.
 
-### Phase 2 — Per-document side effects
+### Phase 2 — Per-document side effects — **implemented**
+
+`DocumentBindings` now takes an optional `docId` (omitted still means
+"the active document", so the four tests that render it bare are
+unaffected). `AppShell` mounts one instance per entry in
+`workspace.order`.
+
+The two halves are in tension and each is now pinned by a test that fails
+without it:
+
+- **Per-document:** auto-save, the baseline fingerprint, and the file
+  watcher run for _every_ open document. Revert to a single bindings
+  instance and edits to a background tab are never written to disk.
+- **App-wide:** the `window` listeners (shortcuts, `forgemark:menu`,
+  `forgemark:open-path`, quit) are gated on `isActive`. Remove the gate
+  and ⌘S saves twice while ⌘N wipes the background document too.
+
+`beforeunload` now consults `anyDirty(workspace)` rather than the active
+document alone.
+
+Still no tab chrome — nothing calls `openTab` outside tests yet, so the
+app remains single-document from the outside.
+
+#### Original notes
 
 `DocumentBindings` is headless (renders no DOM), so render one per open
 document, scoped to its `docId`. Its watcher effect is already keyed on

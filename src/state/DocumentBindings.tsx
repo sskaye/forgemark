@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef } from "react";
-import { useDocument } from "./DocumentProvider";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useWorkspace } from "./DocumentProvider";
 import type { PendingIntent } from "./document";
+import { anyDirty, type DocId } from "./workspace";
 import { invoke } from "@tauri-apps/api/core";
 import { openMarkdownFile, saveMarkdownFile, readMarkdownFile } from "../services/fileIO";
 import {
@@ -48,8 +49,28 @@ function recoveryMessage(err: unknown, recovery: RecoveryResult): string {
 // Auto-save: when a file path is set and the document is dirty, schedules
 // a save 500ms after the last edit. Untitled buffers never auto-save —
 // the user must ⌘S to choose a destination.
-export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }) {
-  const { state, dispatch, setViewMode } = useDocument();
+export function DocumentBindings({
+  docId,
+  logger = defaultLogger,
+}: {
+  // Which open document these bindings serve. Omitted means "the active
+  // one", which is how every pre-tabs caller uses it.
+  docId?: DocId;
+  logger?: Logger;
+}) {
+  const { workspace, dispatchTo } = useWorkspace();
+  const id = docId ?? workspace.activeId;
+  const state = workspace.docs[id];
+  // Window-level listeners (shortcuts, menu commands, quit) are app-wide
+  // singletons — only the active document's instance may own them, or N
+  // open documents would each save, each open, each prompt.
+  const isActive = id === workspace.activeId;
+
+  const dispatch = useMemo(() => dispatchTo(id), [dispatchTo, id]);
+  const setViewMode = useCallback(
+    (viewMode: "rendered" | "source") => dispatch({ type: "setViewMode", viewMode }),
+    [dispatch],
+  );
   const { recordOpened, remove: removeRecent } = useRecentFiles();
   const [defaultView] = useDefaultView();
   // Hold the default view in a ref so the load handler reads the
@@ -64,6 +85,10 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
   // Stable refs to read latest state in event handlers without re-binding.
   const stateRef = useRef(state);
   stateRef.current = state;
+  // Unsaved work is an app-wide question, not a per-document one: closing
+  // the window has to consider background tabs too.
+  const workspaceRef = useRef(workspace);
+  workspaceRef.current = workspace;
 
   // guardDiscard is declared further down (it needs performSave), but the
   // open-path listener above has to reach it. A ref keeps that listener
@@ -186,6 +211,7 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
   // Listen for `forgemark:open-path` custom events from non-keyboard
   // surfaces (Open Recent menu, future native menu bar).
   useEffect(() => {
+    if (!isActive) return;
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<{ path: string }>).detail;
       // Open Recent / Finder discard the current buffer just like ⌘O
@@ -194,7 +220,7 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
     };
     window.addEventListener("forgemark:open-path", handler);
     return () => window.removeEventListener("forgemark:open-path", handler);
-  }, []);
+  }, [isActive]);
 
   // Save handler — shared by ⌘S and the pending-save effect (which
   // fires when the save-conflict modal's Overwrite is clicked).
@@ -259,10 +285,11 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
   // gets the same unsaved-work guard as ⌘N/⌘O instead of relying on
   // beforeunload, which Tauri doesn't reliably honour.
   useEffect(() => {
+    if (!isActive) return;
     const onCloseRequested = () => void guardDiscardRef.current({ kind: "quit" });
     window.addEventListener("forgemark:close-requested", onCloseRequested);
     return () => window.removeEventListener("forgemark:close-requested", onCloseRequested);
-  }, []);
+  }, [isActive]);
 
   // ⌘N and ⌘O throw away the current buffer. Before this guard they did
   // it silently, which was survivable only because auto-save had usually
@@ -327,16 +354,18 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
   // (TextEdit / Pages convention), so it discards the buffer and has to
   // clear the same guard as ⌘N.
   useEffect(() => {
+    if (!isActive) return;
     const onMenu = (e: Event) => {
       if ((e as CustomEvent<string>).detail !== "close-file") return;
       void guardDiscardRef.current({ kind: "newUntitled" });
     };
     window.addEventListener("forgemark:menu", onMenu);
     return () => window.removeEventListener("forgemark:menu", onMenu);
-  }, []);
+  }, [isActive]);
 
   // ── Keyboard shortcuts ──
   useEffect(() => {
+    if (!isActive) return;
     const onKey = async (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
@@ -366,7 +395,7 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [dispatch, guardDiscard, performSave]);
+  }, [dispatch, guardDiscard, performSave, isActive]);
 
   // ── Auto-save (500ms quiet period after last edit) ──
   // Phase 10: skip auto-save while there's an externalChange pending.
@@ -420,15 +449,16 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
   // and route through guardDiscard, which is the path that can actually
   // offer to save.
   useEffect(() => {
+    if (!isActive) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (!state.dirty) return;
+      if (!anyDirty(workspaceRef.current)) return;
       e.preventDefault();
       // Modern browsers ignore the string but require an assignment.
       e.returnValue = "You have unsaved changes.";
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [state.dirty]);
+  }, [isActive]);
 
   // Phase 10: watch the open file for external changes. The watcher
   // wrapper compares against baselineRef so writes we just did don't

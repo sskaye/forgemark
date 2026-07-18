@@ -13,7 +13,7 @@ import { CleanExportModal } from "./CleanExportModal";
 import { PrintDocument } from "./PrintDocument";
 import { PrintOptionsModal, type PrintOptions } from "./PrintOptionsModal";
 import { FirstRunWelcome } from "./FirstRunWelcome";
-import { useDocument } from "../state/DocumentProvider";
+import { useDocument, useWorkspace } from "../state/DocumentProvider";
 import { DocumentBindings } from "../state/DocumentBindings";
 import {
   classifyAnchors,
@@ -37,6 +37,7 @@ import SAMPLE_TEXT from "../../assets/sample-onboarding.md?raw";
 // EditorPane and Sidebar.
 export function AppShell() {
   const { state, dispatch, setViewMode } = useDocument();
+  const { workspace } = useWorkspace();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [cleanExportOpen, setCleanExportOpen] = useState(false);
@@ -171,7 +172,15 @@ export function AppShell() {
 
   return (
     <div className="fm-app-shell" data-testid="fm-app-shell">
-      <DocumentBindings />
+      {/* One headless bindings instance per OPEN document — not per
+          visible one. Bindings own auto-save and the external-change
+          watcher, so a background document whose bindings weren't
+          mounted would silently stop saving and stop noticing that its
+          file changed on disk. Window-level listeners inside are gated
+          on isActive so they stay single. */}
+      {workspace.order.map((id) => (
+        <DocumentBindings key={id} docId={id} />
+      ))}
       <TitleBar
         fileName={state.fileName}
         modified={state.dirty}
