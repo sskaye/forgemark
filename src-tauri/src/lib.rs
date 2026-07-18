@@ -89,6 +89,17 @@ pub fn run() {
             app.set_menu(menu)?;
             app.on_menu_event(|app, event| {
                 let id = event.id().0.clone();
+                // Quit is a custom item (see build_menu) so it lands here
+                // rather than terminating the process behind our back.
+                // Send it down the same road as a window close.
+                if id == "quit" {
+                    if app.state::<ExitApproved>().0.load(Ordering::SeqCst) {
+                        app.exit(0);
+                    } else {
+                        let _ = app.emit("forgemark:close-requested", ());
+                    }
+                    return;
+                }
                 let _ = app.emit("forgemark:menu", id);
             });
             Ok(())
@@ -104,10 +115,14 @@ pub fn run() {
     // attached yet, so we also stash the paths in PendingFiles for
     // the JS `take_pending_files` invoke to claim on mount.
     app.run(|_app, _event| {
-        // ⌘Q / Quit menu item. The window-close handler above never sees
-        // this path, so without it quitting would still discard unsaved
-        // work — the same bug in a different doorway. Route it to the
-        // same frontend prompt and the same `approve_exit`.
+        // Backstop for exit requests that reach neither the window-close
+        // handler nor the Quit menu item — e.g. Dock > Quit, or a system
+        // logout. Verified against ⌘Q and the red close button; the other
+        // routes are covered by construction rather than by testing.
+        //
+        // Note this can't intercept `app.exit(n)`: that arrives as
+        // ExitRequested with `code: Some(n)` and prevent_exit is ignored
+        // for it. Which is exactly what makes `approve_exit` work.
         if let tauri::RunEvent::ExitRequested { api, .. } = &_event {
             if !_app.state::<ExitApproved>().0.load(Ordering::SeqCst) {
                 api.prevent_exit();
@@ -146,6 +161,15 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .id("settings")
         .accelerator("CmdOrCtrl+,")
         .build(app)?;
+    // Deliberately NOT SubmenuBuilder::quit(). The predefined Quit item
+    // maps to NSApplication `terminate:` on macOS, which tears the
+    // process down without ever entering Tauri's event loop — so
+    // RunEvent::ExitRequested never fires and the unsaved-work guard
+    // never runs. A custom item routes ⌘Q through on_menu_event instead.
+    let quit = MenuItemBuilder::new("Quit Forgemark")
+        .id("quit")
+        .accelerator("CmdOrCtrl+Q")
+        .build(app)?;
     let app_submenu = SubmenuBuilder::new(app, "Forgemark")
         .about(None)
         .separator()
@@ -153,7 +177,7 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .separator()
         .hide()
         .separator()
-        .quit()
+        .item(&quit)
         .build()?;
 
     // File menu — every item maps to an existing keyboard shortcut.
