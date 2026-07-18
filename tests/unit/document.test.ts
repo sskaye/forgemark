@@ -96,7 +96,15 @@ describe("document reducer", () => {
   it("newUntitled resets to the initial state", () => {
     const loaded = reduceDocument(INITIAL_STATE, baseLoad);
     const fresh = reduceDocument(loaded, { type: "newUntitled" });
-    expect(fresh).toEqual(INITIAL_STATE);
+    // Every document field resets — except loadGeneration, which is an
+    // editor-remount counter rather than document content and has to
+    // keep climbing so the discarded buffer's undo stack dies with it.
+    // Structural equality is still asserted over everything else.
+    const { loadGeneration, ...rest } = fresh;
+    const { loadGeneration: initialGeneration, ...initialRest } = INITIAL_STATE;
+    expect(rest).toEqual(initialRest);
+    expect(loadGeneration).toBe(loaded.loadGeneration + 1);
+    expect(initialGeneration).toBe(0);
   });
 
   it("load preserves read-only state", () => {
@@ -117,5 +125,75 @@ describe("document reducer", () => {
     // Re-dispatching the same value is a no-op (same object reference).
     const same = reduceDocument(hovered, { type: "setHoveredComment", id: 12 });
     expect(same).toBe(hovered);
+  });
+});
+
+// `loadGeneration` is the key the rendered editor remounts on. Remounting
+// is what discards the Tiptap undo stack, so these assertions are really
+// about undo isolation: a bumped generation means "⌘Z must not reach the
+// previous content", a stable one means "the user keeps their history".
+describe("document reducer — loadGeneration (undo isolation)", () => {
+  it("bumps on load so undo can't reach the previous document", () => {
+    const first = reduceDocument(INITIAL_STATE, baseLoad);
+    expect(first.loadGeneration).toBe(INITIAL_STATE.loadGeneration + 1);
+
+    const second = reduceDocument(first, {
+      ...baseLoad,
+      filePath: "/tmp/b.md",
+      fileName: "b.md",
+      text: "beta",
+      body: "beta",
+    });
+    expect(second.loadGeneration).toBe(first.loadGeneration + 1);
+  });
+
+  it("does NOT bump when Save As rebinds the path", () => {
+    // Save As re-dispatches `load` only to pick up the new path — it's
+    // the same buffer the user has been editing, so their undo history
+    // has to survive.
+    const loaded = reduceDocument(INITIAL_STATE, baseLoad);
+    const renamed = reduceDocument(loaded, {
+      ...baseLoad,
+      filePath: "/tmp/renamed.md",
+      fileName: "renamed.md",
+      rebindOnly: true,
+    });
+    expect(renamed.filePath).toBe("/tmp/renamed.md");
+    expect(renamed.fileName).toBe("renamed.md");
+    expect(renamed.loadGeneration).toBe(loaded.loadGeneration);
+  });
+
+  it("bumps on reload-from-disk", () => {
+    // The disk bytes replace the buffer, so the undo stack describes
+    // text that no longer exists.
+    const loaded = reduceDocument(INITIAL_STATE, baseLoad);
+    const conflicted = reduceDocument(loaded, {
+      type: "externalChangeDetected",
+      text: "alpha from disk",
+      body: "alpha from disk",
+      comments: [],
+      fingerprint: { mtimeMs: 1, hash: "abc" },
+    });
+    const reloaded = reduceDocument(conflicted, { type: "applyExternalChange" });
+    expect(reloaded.body).toBe("alpha from disk");
+    expect(reloaded.loadGeneration).toBe(loaded.loadGeneration + 1);
+  });
+
+  it("bumps on newUntitled even from a never-loaded buffer", () => {
+    // Regression guard: newUntitled spreads INITIAL_STATE, whose
+    // generation is 0. A naive spread would leave 0 -> 0 here, the key
+    // wouldn't change, and the discarded buffer's undo stack would
+    // survive into the new document.
+    expect(INITIAL_STATE.loadGeneration).toBe(0);
+    const edited = reduceDocument(INITIAL_STATE, { type: "edit", body: "typed but never saved" });
+    const fresh = reduceDocument(edited, { type: "newUntitled" });
+    expect(fresh.body).toBe("");
+    expect(fresh.loadGeneration).toBe(edited.loadGeneration + 1);
+  });
+
+  it("does not bump on ordinary edits", () => {
+    const loaded = reduceDocument(INITIAL_STATE, baseLoad);
+    const typed = reduceDocument(loaded, { type: "edit", body: "alpha and more" });
+    expect(typed.loadGeneration).toBe(loaded.loadGeneration);
   });
 });

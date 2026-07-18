@@ -28,6 +28,14 @@ export type DocumentState = {
   body: string;
   comments: Comment[];
   dirty: boolean;
+  // Bumped whenever `body` is replaced by something other than a user
+  // keystroke — opening a file, or reloading it from disk. The rendered
+  // editor keys off this to force a genuine remount, which is what
+  // discards the Tiptap/ProseMirror undo stack. Without it the undo
+  // history outlives the content it belongs to and ⌘Z walks backwards
+  // into the *previous* document. Save As is deliberately excluded (see
+  // `rebindOnly` on the `load` action).
+  loadGeneration: number;
   viewMode: "rendered" | "source";
   readOnly: boolean;
   error: string | null;
@@ -153,6 +161,7 @@ export const INITIAL_STATE: DocumentState = {
   body: "",
   comments: [],
   dirty: false,
+  loadGeneration: 0,
   viewMode: "rendered",
   readOnly: false,
   error: null,
@@ -179,6 +188,11 @@ export type DocumentAction =
       body: string;
       comments: Comment[];
       readOnly: boolean;
+      // Save As re-dispatches `load` purely to rebind path/filename —
+      // the content is the same buffer the user has been editing, so
+      // their undo history must survive. Set this to keep
+      // `loadGeneration` (and therefore the editor instance) stable.
+      rebindOnly?: boolean;
     }
   | { type: "edit"; body: string }
   | { type: "saved"; text: string; body: string }
@@ -245,6 +259,7 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
         body: action.body,
         comments: action.comments,
         dirty: false,
+        loadGeneration: action.rebindOnly ? state.loadGeneration : state.loadGeneration + 1,
         viewMode: "rendered",
         readOnly: action.readOnly,
         error: null,
@@ -278,7 +293,16 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
     case "setViewMode":
       return { ...state, viewMode: action.viewMode };
     case "newUntitled":
-      return { ...INITIAL_STATE, filter: state.filter, sort: state.sort };
+      return {
+        ...INITIAL_STATE,
+        filter: state.filter,
+        sort: state.sort,
+        // Must keep climbing, not reset to INITIAL_STATE's 0 — otherwise
+        // ⌘N out of a never-loaded Untitled buffer (generation still 0)
+        // wouldn't change the key, and the discarded document's undo
+        // stack would survive into the new one.
+        loadGeneration: state.loadGeneration + 1,
+      };
     case "error":
       return { ...state, error: action.message };
     case "dismissError":
@@ -481,6 +505,9 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
         body: ec.body,
         comments: ec.comments,
         dirty: false,
+        // Disk content replaced the buffer — the undo stack describes
+        // text that no longer exists. Force a fresh editor.
+        loadGeneration: state.loadGeneration + 1,
         error: null,
         focusedCommentId: null,
         hoveredCommentId: null,

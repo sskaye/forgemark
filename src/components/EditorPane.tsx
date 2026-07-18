@@ -478,6 +478,9 @@ export function EditorPane({ anchorStatuses }: Props) {
         />
         {state.viewMode === "rendered" ? (
           <RenderedView
+            // Remount on every content-replacing load so the Tiptap undo
+            // stack can't outlive the document it belongs to.
+            key={state.loadGeneration}
             body={state.body}
             onEdit={(body) => dispatch({ type: "edit", body })}
             readOnly={editorReadOnly}

@@ -171,6 +171,9 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
             body: s.body,
             comments: s.comments,
             readOnly: false,
+            // Path/filename rebind only — same buffer, so don't discard
+            // the user's undo history.
+            rebindOnly: true,
           });
         }
         // Refresh baseline so the watcher doesn't fire on our own write.
