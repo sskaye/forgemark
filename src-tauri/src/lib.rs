@@ -12,13 +12,15 @@
 // items (text-size, sidebar) live in Settings; comment-card actions
 // (Reply, Resolve, Edit, Delete, Reattach) live on the card itself.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-use tauri::Emitter;
-// Manager (`.state()`) and RunEvent (`::Opened`) are only used by the
-// macOS file-open handler below, which doesn't compile on other platforms.
+use tauri::{Emitter, Manager as _};
+// RunEvent::Opened is macOS-only, so the bare-name import that the
+// file-open handler uses stays gated. (Manager is imported unconditionally
+// above — the quit guard needs `.state()` on every platform.)
 #[cfg(target_os = "macos")]
-use tauri::{Manager, RunEvent};
+use tauri::RunEvent;
 
 // Queue of file paths that arrived before the webview was ready to
 // receive them. macOS fires RunEvent::Opened during cold-start (when
@@ -39,6 +41,22 @@ fn print_current_webview(window: tauri::WebviewWindow) -> Result<(), String> {
     window.print().map_err(|err| err.to_string())
 }
 
+// Set once the frontend has dealt with unsaved work and the app is
+// genuinely allowed to go away. Both quit paths below consult it, so a
+// second close request after approval isn't intercepted again — without
+// it, `app.exit` would re-enter ExitRequested and the app could never
+// actually quit.
+#[derive(Default)]
+struct ExitApproved(AtomicBool);
+
+// The frontend calls this after the unsaved-work guard is satisfied
+// (nothing dirty, saved, or explicitly discarded).
+#[tauri::command]
+fn approve_exit(app: tauri::AppHandle) {
+    app.state::<ExitApproved>().0.store(true, Ordering::SeqCst);
+    app.exit(0);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
@@ -46,10 +64,26 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .manage(PendingFiles::default())
+        .manage(ExitApproved::default())
         .invoke_handler(tauri::generate_handler![
             take_pending_files,
-            print_current_webview
+            print_current_webview,
+            approve_exit
         ])
+        // Closing the window (red button / ⌘W) must not throw away
+        // unsaved work. Rust can't know whether there is any, so hand the
+        // decision to the frontend: block the close, ask, and let it call
+        // `approve_exit` once it's satisfied. ⌘Q takes the ExitRequested
+        // path in `app.run` below and lands in the same place.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.state::<ExitApproved>().0.load(Ordering::SeqCst) {
+                    return;
+                }
+                api.prevent_close();
+                let _ = window.emit("forgemark:close-requested", ());
+            }
+        })
         .setup(|app| {
             let menu = build_menu(app.handle())?;
             app.set_menu(menu)?;
@@ -70,6 +104,16 @@ pub fn run() {
     // attached yet, so we also stash the paths in PendingFiles for
     // the JS `take_pending_files` invoke to claim on mount.
     app.run(|_app, _event| {
+        // ⌘Q / Quit menu item. The window-close handler above never sees
+        // this path, so without it quitting would still discard unsaved
+        // work — the same bug in a different doorway. Route it to the
+        // same frontend prompt and the same `approve_exit`.
+        if let tauri::RunEvent::ExitRequested { api, .. } = &_event {
+            if !_app.state::<ExitApproved>().0.load(Ordering::SeqCst) {
+                api.prevent_exit();
+                let _ = _app.emit("forgemark:close-requested", ());
+            }
+        }
         // RunEvent::Opened is macOS-only (Finder "Open With", file
         // associations, drag-onto-dock). Compile it out on other platforms
         // so the Windows/Linux build doesn't reference a variant that

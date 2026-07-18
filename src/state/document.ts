@@ -80,7 +80,10 @@ export type DocumentState = {
 export type PendingIntent =
   | { kind: "newUntitled" }
   | { kind: "openDialog" }
-  | { kind: "openPath"; path: string };
+  | { kind: "openPath"; path: string }
+  // Window close or ⌘Q. Rust has blocked the exit and is waiting to be
+  // told it may proceed.
+  | { kind: "quit" };
 
 // Phase 10: the disk content that conflicts with the in-memory state.
 // Held verbatim so "Reload from disk" can replace the state, and parsed

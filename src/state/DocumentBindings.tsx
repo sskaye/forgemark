@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useDocument } from "./DocumentProvider";
 import type { PendingIntent } from "./document";
+import { invoke } from "@tauri-apps/api/core";
 import { openMarkdownFile, saveMarkdownFile, readMarkdownFile } from "../services/fileIO";
 import {
   parseForgemarkFile,
@@ -41,8 +42,8 @@ function recoveryMessage(err: unknown, recovery: RecoveryResult): string {
 //
 //   ⌘O / Ctrl+O — open file dialog
 //   ⌘S / Ctrl+S — save (dirty: write body; clean: write original bytes)
-//   ⌘N / Ctrl+N — new untitled buffer (discards current; warning prompt
-//                  is Phase 11's save-on-close work, deferred for now)
+//   ⌘N / Ctrl+N — new untitled buffer (goes through guardDiscard, so
+//                  unsaved work is saved or explicitly discarded first)
 //
 // Auto-save: when a file path is set and the document is dirty, schedules
 // a save 500ms after the last edit. Untitled buffers never auto-save —
@@ -241,10 +242,27 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
     async (intent: PendingIntent) => {
       if (intent.kind === "newUntitled") dispatch({ type: "newUntitled" });
       else if (intent.kind === "openDialog") await runOpenDialog();
-      else await openPath(intent.path);
+      else if (intent.kind === "openPath") await openPath(intent.path);
+      else {
+        // Rust is holding the window open waiting for this.
+        try {
+          await invoke("approve_exit");
+        } catch (err) {
+          logger("approve exit failed", err);
+        }
+      }
     },
-    [dispatch, openPath, runOpenDialog],
+    [dispatch, openPath, runOpenDialog, logger],
   );
+
+  // Rust intercepts window-close and ⌘Q and defers to us, so quitting
+  // gets the same unsaved-work guard as ⌘N/⌘O instead of relying on
+  // beforeunload, which Tauri doesn't reliably honour.
+  useEffect(() => {
+    const onCloseRequested = () => void guardDiscardRef.current({ kind: "quit" });
+    window.addEventListener("forgemark:close-requested", onCloseRequested);
+    return () => window.removeEventListener("forgemark:close-requested", onCloseRequested);
+  }, []);
 
   // ⌘N and ⌘O throw away the current buffer. Before this guard they did
   // it silently, which was survivable only because auto-save had usually
@@ -396,11 +414,11 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
     };
   }, [state.pendingSave, performSave, dispatch]);
 
-  // Phase 11 save-on-close: block window close while there's unsaved
-  // work. The browser shows its own confirmation dialog when
-  // beforeunload's returnValue is set; the native Tauri close event
-  // (which the OS surfaces as a "Do you want to save…" sheet) will be
-  // wired up alongside the menu bar in a Phase 11 follow-up.
+  // Fallback for the plain-browser dev surface (`npm run vite:dev`),
+  // where there's no Tauri runtime to intercept the close. In the real
+  // app the Rust CloseRequested/ExitRequested handlers get there first
+  // and route through guardDiscard, which is the path that can actually
+  // offer to save.
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       if (!state.dirty) return;

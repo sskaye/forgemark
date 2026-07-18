@@ -4,6 +4,7 @@ import { ThemeProvider } from "../../src/theme/ThemeProvider";
 import { DocumentProvider, useDocument } from "../../src/state/DocumentProvider";
 import { AppShell } from "../../src/components/AppShell";
 import { saveMarkdownFile, openMarkdownFile } from "../../src/services/fileIO";
+import { invoke } from "@tauri-apps/api/core";
 
 vi.mock("../../src/services/fileIO", () => ({
   openMarkdownFile: vi.fn(),
@@ -85,6 +86,7 @@ const body = () => screen.getByTestId("body").textContent;
 describe("unsaved-work guard", () => {
   beforeEach(() => {
     vi.mocked(saveMarkdownFile).mockReset().mockResolvedValue("/tmp/saved.md");
+    vi.mocked(invoke).mockClear();
     vi.mocked(openMarkdownFile)
       .mockReset()
       .mockResolvedValue(null as never);
@@ -155,6 +157,39 @@ describe("unsaved-work guard", () => {
     expect(screen.queryByTestId("fm-unsaved-save")).toBeNull();
     expect(screen.getByTestId("fm-unsaved-discard")).toBeTruthy();
     expect(vi.mocked(saveMarkdownFile)).not.toHaveBeenCalled();
+  });
+
+  it("quit waits for the prompt, then tells Rust it may exit", async () => {
+    // Rust blocks the close and emits forgemark:close-requested; nothing
+    // exits until the frontend invokes approve_exit.
+    mount();
+    fireEvent.click(screen.getByTestId("edit"));
+    await waitFor(() => expect(screen.getByTestId("dirty").textContent).toBe("dirty"));
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent("forgemark:close-requested"));
+    });
+
+    expect(await screen.findByTestId("fm-unsaved-modal")).toBeTruthy();
+    expect(vi.mocked(invoke)).not.toHaveBeenCalledWith("approve_exit");
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("fm-unsaved-discard"));
+    });
+    await waitFor(() => expect(vi.mocked(invoke)).toHaveBeenCalledWith("approve_exit"));
+  });
+
+  it("quit exits straight away when nothing is dirty", async () => {
+    mount();
+    fireEvent.click(screen.getByTestId("load-saved"));
+    await waitFor(() => expect(body()).toBe("on disk\n"));
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent("forgemark:close-requested"));
+    });
+
+    await waitFor(() => expect(vi.mocked(invoke)).toHaveBeenCalledWith("approve_exit"));
+    expect(screen.queryByTestId("fm-unsaved-modal")).toBeNull();
   });
 
   it("does not prompt when there is nothing to lose", async () => {

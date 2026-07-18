@@ -149,9 +149,27 @@ than falling through to a discard.
 `close-file` moved out of `AppShell` into `DocumentBindings` so it shares
 this guard instead of carrying its own two-button `ask()`.
 
-**Still outstanding:** the Tauri `CloseRequested` handler. Closing the
-native window still relies on `beforeunload`, which the code comment at
-`DocumentBindings.tsx:301-305` already flags as a stand-in.
+**Quit paths — also implemented.** Rust intercepts both doorways and
+defers the decision to the frontend, since only it knows whether there
+is unsaved work:
+
+- `WindowEvent::CloseRequested` (red button / ⌘W) → `api.prevent_close()`
+- `RunEvent::ExitRequested` (⌘Q / Quit menu) → `api.prevent_exit()`
+
+Both emit `forgemark:close-requested`; `menuBridge` re-dispatches it as a
+DOM event so the decision stays in `DocumentBindings` and is testable
+without a Tauri runtime. Once the guard is satisfied the frontend invokes
+`approve_exit`, which sets an `ExitApproved` flag and calls `app.exit(0)`.
+
+The flag matters: without it `app.exit` re-enters `ExitRequested`, gets
+prevented again, and the app can never actually quit.
+
+⌘Q had to be handled alongside window-close — it takes a different path
+in Tauri, so covering only `CloseRequested` would have left the same bug
+in the more common doorway.
+
+`beforeunload` is kept, now scoped to the plain-browser dev surface
+(`npm run vite:dev`) where there's no Tauri runtime to intercept.
 
 All of this matters more under tabs — closing a tab is casual and
 frequent, and untitled tabs will accumulate.
