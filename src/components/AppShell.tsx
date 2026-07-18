@@ -7,6 +7,7 @@ import { ReattachModal } from "./ReattachModal";
 import { FileConflictBanner } from "./FileConflictBanner";
 import { EditDuringOpenModal } from "./EditDuringOpenModal";
 import { SaveConflictModal } from "./SaveConflictModal";
+import { UnsavedChangesModal } from "./UnsavedChangesModal";
 import { SettingsModal } from "./SettingsModal";
 import { CleanExportModal } from "./CleanExportModal";
 import { PrintDocument } from "./PrintDocument";
@@ -25,7 +26,6 @@ import { useFontSize, useFirstRun } from "../state/preferences";
 import { saveMarkdownFile } from "../services/fileIO";
 import { applyWindowAction, isWindowAction } from "../services/windowActions";
 import { invoke } from "@tauri-apps/api/core";
-import { ask } from "@tauri-apps/plugin-dialog";
 import "./AppShell.css";
 // Bundled sample file — Vite's `?raw` import pulls in the markdown text
 // at build time so the first-run "Open sample" path doesn't need a
@@ -131,24 +131,9 @@ export function AppShell() {
         setPrintOptionsOpen(true);
         return;
       }
-      if (detail === "close-file") {
-        // File > Close — clear the document, keep the window open
-        // (TextEdit / Pages convention). Prompt before discarding
-        // unsaved work via Tauri's dialog plugin (window.confirm()
-        // is suppressed in the Tauri webview; ask() is the
-        // platform-appropriate equivalent).
-        if (state.dirty) {
-          const proceed = await ask("You have unsaved changes. Close without saving?", {
-            title: "Close document",
-            kind: "warning",
-            okLabel: "Discard changes",
-            cancelLabel: "Cancel",
-          });
-          if (!proceed) return;
-        }
-        dispatch({ type: "newUntitled" });
-        return;
-      }
+      // `close-file` is handled in DocumentBindings — it discards the
+      // buffer, so it goes through the same unsaved-work guard as ⌘N
+      // and ⌘O rather than carrying its own prompt.
       if (isWindowAction(detail)) {
         try {
           await applyWindowAction(detail);
@@ -243,6 +228,16 @@ export function AppShell() {
             dispatch({ type: "dismissExternalChange" });
             dispatch({ type: "requestSave" });
           }}
+        />
+      )}
+      {state.pendingIntent && state.intentResolution == null && (
+        <UnsavedChangesModal
+          fileName={state.fileName}
+          untitled={state.filePath == null}
+          conflictPending={state.externalChange != null}
+          onSave={() => dispatch({ type: "resolveIntent", resolution: "save" })}
+          onDiscard={() => dispatch({ type: "resolveIntent", resolution: "discard" })}
+          onCancel={() => dispatch({ type: "clearIntent" })}
         />
       )}
       <div className="fm-app-body">

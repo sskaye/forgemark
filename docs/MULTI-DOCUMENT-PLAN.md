@@ -128,9 +128,32 @@ runs:
 2. **Conflict pending** (`externalChange != null`) — autosave blocked
    indefinitely, so the document stays dirty as long as the banner is up.
 
-**Fix (scoped):** dirty guard on ⌘N and ⌘O covering those two cases; add
-a real "Save" option to the close dialog; wire a Tauri `CloseRequested`
-handler. This matters more under tabs — closing a tab is casual and
+**Fix — implemented.** `guardDiscard` in `DocumentBindings` now gates
+⌘N, ⌘O, Open Recent, and File > Close.
+
+The shape of it follows from the product being auto-save-first:
+prompting to save a document that auto-save would have written 500ms
+later is incoherent. So the rule is **save it for them when we can, ask
+only when we can't**:
+
+| Situation               | Behavior                                                                                                                       |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Clean, or read-only     | proceed immediately                                                                                                            |
+| Dirty, has a path       | save silently, then proceed — no prompt                                                                                        |
+| Dirty, Untitled         | prompt: Save As… / Don't Save / Cancel                                                                                         |
+| Dirty, conflict pending | prompt: Don't Save / Cancel (**no Save** — saving would clobber the disk copy; that decision belongs to the conflict surfaces) |
+
+Cancelling the Save As location dialog cancels the whole action rather
+than falling through to a discard.
+
+`close-file` moved out of `AppShell` into `DocumentBindings` so it shares
+this guard instead of carrying its own two-button `ask()`.
+
+**Still outstanding:** the Tauri `CloseRequested` handler. Closing the
+native window still relies on `beforeunload`, which the code comment at
+`DocumentBindings.tsx:301-305` already flags as a stand-in.
+
+All of this matters more under tabs — closing a tab is casual and
 frequent, and untitled tabs will accumulate.
 
 ---

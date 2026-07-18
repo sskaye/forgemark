@@ -66,7 +66,21 @@ export type DocumentState = {
   // file open.
   filter: FilterMode;
   sort: SortMode;
+  // An action that would discard unsaved work, parked while we ask the
+  // user what to do. Only set when the work *can't* just be saved for
+  // them — see `guardDiscard` in DocumentBindings.
+  pendingIntent: PendingIntent | null;
+  // The user's answer. Kept separate from `pendingIntent` so the
+  // executing effect knows both what to do and what was asked; cleared
+  // together via `clearIntent`.
+  intentResolution: "save" | "discard" | null;
 };
+
+// Something the user asked for that throws away the current buffer.
+export type PendingIntent =
+  | { kind: "newUntitled" }
+  | { kind: "openDialog" }
+  | { kind: "openPath"; path: string };
 
 // Phase 10: the disk content that conflicts with the in-memory state.
 // Held verbatim so "Reload from disk" can replace the state, and parsed
@@ -175,6 +189,8 @@ export const INITIAL_STATE: DocumentState = {
   pendingSave: false,
   filter: { kind: "all" },
   sort: "doc",
+  pendingIntent: null,
+  intentResolution: null,
 };
 
 export type DocumentAction =
@@ -246,7 +262,10 @@ export type DocumentAction =
   | { type: "requestSave" }
   | { type: "clearPendingSave" }
   | { type: "setFilter"; filter: FilterMode }
-  | { type: "setSort"; sort: SortMode };
+  | { type: "setSort"; sort: SortMode }
+  | { type: "requestIntent"; intent: PendingIntent }
+  | { type: "resolveIntent"; resolution: "save" | "discard" }
+  | { type: "clearIntent" };
 
 export function reduceDocument(state: DocumentState, action: DocumentAction): DocumentState {
   switch (action.type) {
@@ -271,6 +290,11 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
         saveConflictOpen: false,
         editDuringOpenDismissed: false,
         pendingSave: false,
+        // A load is the completion of whatever intent was parked (or a
+        // load from an unrelated surface). Either way nothing is waiting
+        // on the user any more.
+        pendingIntent: null,
+        intentResolution: null,
         // Filter / sort persist across loads — they're a viewing
         // preference, not a document property.
       };
@@ -292,6 +316,14 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
       };
     case "setViewMode":
       return { ...state, viewMode: action.viewMode };
+    case "requestIntent":
+      return { ...state, pendingIntent: action.intent, intentResolution: null };
+    case "resolveIntent":
+      if (!state.pendingIntent) return state;
+      return { ...state, intentResolution: action.resolution };
+    case "clearIntent":
+      if (!state.pendingIntent && !state.intentResolution) return state;
+      return { ...state, pendingIntent: null, intentResolution: null };
     case "newUntitled":
       return {
         ...INITIAL_STATE,

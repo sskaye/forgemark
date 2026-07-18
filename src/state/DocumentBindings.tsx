@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useDocument } from "./DocumentProvider";
+import type { PendingIntent } from "./document";
 import { openMarkdownFile, saveMarkdownFile, readMarkdownFile } from "../services/fileIO";
 import {
   parseForgemarkFile,
@@ -62,6 +63,11 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
   // Stable refs to read latest state in event handlers without re-binding.
   const stateRef = useRef(state);
   stateRef.current = state;
+
+  // guardDiscard is declared further down (it needs performSave), but the
+  // open-path listener above has to reach it. A ref keeps that listener
+  // bound once instead of re-subscribing on every render.
+  const guardDiscardRef = useRef<(intent: PendingIntent) => Promise<void>>(async () => {});
 
   // Phase 10: baseline fingerprint of the bytes we last read or wrote.
   // The watcher consults this to ignore re-fires triggered by our own
@@ -134,16 +140,60 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
     [dispatch, setViewMode, logger],
   );
 
+  // ⌘O's dialog branch, extracted so the discard guard can replay it
+  // after the user has decided what to do with unsaved work.
+  const runOpenDialog = useCallback(async () => {
+    try {
+      const opened = await openMarkdownFile();
+      if (!opened) return;
+      let parsed;
+      try {
+        // Phase 9: tolerant mode keeps comments that are missing
+        // their marker pair so the lost-anchor banner can surface
+        // them (instead of dropping all comments on a single
+        // missing-marker case).
+        parsed = parseForgemarkFile(opened.text, { tolerant: true });
+      } catch (err) {
+        // Fail soft: recover as many comments as possible (coalescing
+        // splattered anchors, detaching unrecoverable ones for
+        // reattachment) instead of dropping every comment.
+        const recovery = recoverForgemarkFile(opened.text);
+        parsed = recovery.file;
+        dispatch({ type: "error", message: recoveryMessage(err, recovery) });
+      }
+      dispatch({
+        type: "load",
+        filePath: opened.path,
+        fileName: opened.fileName,
+        text: opened.text,
+        body: parsed.body,
+        comments: parsed.comments,
+        readOnly: opened.readOnly,
+      });
+      recordOpenedRef.current(opened.path, opened.fileName);
+      // Phase 11 default-view preference: applied on the next
+      // opened document, per design handoff §9.
+      if (defaultViewRef.current !== "rendered") {
+        setViewMode(defaultViewRef.current);
+      }
+    } catch (err) {
+      logger("open failed", err);
+      dispatch({ type: "error", message: errorMessage("Open failed", err) });
+    }
+  }, [dispatch, logger, setViewMode]);
+
   // Listen for `forgemark:open-path` custom events from non-keyboard
   // surfaces (Open Recent menu, future native menu bar).
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<{ path: string }>).detail;
-      if (detail?.path) void openPath(detail.path);
+      // Open Recent / Finder discard the current buffer just like ⌘O
+      // does, so they go through the same guard.
+      if (detail?.path) void guardDiscardRef.current({ kind: "openPath", path: detail.path });
     };
     window.addEventListener("forgemark:open-path", handler);
     return () => window.removeEventListener("forgemark:open-path", handler);
-  }, [openPath]);
+  }, []);
 
   // Save handler — shared by ⌘S and the pending-save effect (which
   // fires when the save-conflict modal's Overwrite is clicked).
@@ -186,6 +236,87 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
     [dispatch, logger],
   );
 
+  // Carry out an intent once nothing is standing in its way.
+  const executeIntent = useCallback(
+    async (intent: PendingIntent) => {
+      if (intent.kind === "newUntitled") dispatch({ type: "newUntitled" });
+      else if (intent.kind === "openDialog") await runOpenDialog();
+      else await openPath(intent.path);
+    },
+    [dispatch, openPath, runOpenDialog],
+  );
+
+  // ⌘N and ⌘O throw away the current buffer. Before this guard they did
+  // it silently, which was survivable only because auto-save had usually
+  // just written the file — but auto-save is skipped for Untitled
+  // documents and while a conflict is pending, and in exactly those two
+  // cases the work was gone with no prompt.
+  //
+  // Forgemark is an auto-save-first app, so prompting to save something
+  // auto-save would have written 500ms later would be incoherent. The
+  // rule is therefore: if we *can* save it for the user, do that and
+  // carry on. Only ask when we can't.
+  const guardDiscard = useCallback(
+    async (intent: PendingIntent) => {
+      const s = stateRef.current;
+      if (!s.dirty || s.readOnly) {
+        await executeIntent(intent);
+        return;
+      }
+      // Untitled needs a destination from the user, and saving during an
+      // unresolved conflict would clobber the disk copy. Both have to ask.
+      const canSaveSilently = s.filePath != null && s.externalChange == null;
+      if (canSaveSilently) {
+        await performSave();
+        await executeIntent(intent);
+        return;
+      }
+      dispatch({ type: "requestIntent", intent });
+    },
+    [dispatch, executeIntent, performSave],
+  );
+  guardDiscardRef.current = guardDiscard;
+
+  // The user answered the unsaved-changes prompt. "save" routes through
+  // the normal save path (which prompts for a location when Untitled) and
+  // only proceeds if that succeeded — cancelling the save dialog must
+  // cancel the whole action rather than silently discarding.
+  useEffect(() => {
+    const resolution = state.intentResolution;
+    const intent = state.pendingIntent;
+    if (!resolution || !intent) return;
+    let cancelled = false;
+    (async () => {
+      if (resolution === "save") {
+        await performSave();
+        // performSave leaves `dirty` set if the user backed out of the
+        // location dialog or the write failed. Don't discard their work.
+        if (stateRef.current.dirty) {
+          if (!cancelled) dispatch({ type: "clearIntent" });
+          return;
+        }
+      }
+      if (cancelled) return;
+      await executeIntent(intent);
+      dispatch({ type: "clearIntent" });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [state.intentResolution, state.pendingIntent, dispatch, executeIntent, performSave]);
+
+  // File > Close. Clears the document but keeps the window open
+  // (TextEdit / Pages convention), so it discards the buffer and has to
+  // clear the same guard as ⌘N.
+  useEffect(() => {
+    const onMenu = (e: Event) => {
+      if ((e as CustomEvent<string>).detail !== "close-file") return;
+      void guardDiscardRef.current({ kind: "newUntitled" });
+    };
+    window.addEventListener("forgemark:menu", onMenu);
+    return () => window.removeEventListener("forgemark:menu", onMenu);
+  }, []);
+
   // ── Keyboard shortcuts ──
   useEffect(() => {
     const onKey = async (e: KeyboardEvent) => {
@@ -195,43 +326,7 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
       const s = stateRef.current;
       if (key === "o") {
         e.preventDefault();
-        try {
-          const opened = await openMarkdownFile();
-          if (!opened) return;
-          let parsed;
-          try {
-            // Phase 9: tolerant mode keeps comments that are missing
-            // their marker pair so the lost-anchor banner can surface
-            // them (instead of dropping all comments on a single
-            // missing-marker case).
-            parsed = parseForgemarkFile(opened.text, { tolerant: true });
-          } catch (err) {
-            // Fail soft: recover as many comments as possible (coalescing
-            // splattered anchors, detaching unrecoverable ones for
-            // reattachment) instead of dropping every comment.
-            const recovery = recoverForgemarkFile(opened.text);
-            parsed = recovery.file;
-            dispatch({ type: "error", message: recoveryMessage(err, recovery) });
-          }
-          dispatch({
-            type: "load",
-            filePath: opened.path,
-            fileName: opened.fileName,
-            text: opened.text,
-            body: parsed.body,
-            comments: parsed.comments,
-            readOnly: opened.readOnly,
-          });
-          recordOpenedRef.current(opened.path, opened.fileName);
-          // Phase 11 default-view preference: applied on the next
-          // opened document, per design handoff §9.
-          if (defaultViewRef.current !== "rendered") {
-            setViewMode(defaultViewRef.current);
-          }
-        } catch (err) {
-          logger("open failed", err);
-          dispatch({ type: "error", message: errorMessage("Open failed", err) });
-        }
+        await guardDiscard({ kind: "openDialog" });
       } else if (key === "s") {
         e.preventDefault();
         if (s.readOnly) return;
@@ -248,12 +343,12 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
         await performSave({ forcePrompt: e.shiftKey });
       } else if (key === "n") {
         e.preventDefault();
-        dispatch({ type: "newUntitled" });
+        await guardDiscard({ kind: "newUntitled" });
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [dispatch, logger, performSave, setViewMode]);
+  }, [dispatch, guardDiscard, performSave]);
 
   // ── Auto-save (500ms quiet period after last edit) ──
   // Phase 10: skip auto-save while there's an externalChange pending.
