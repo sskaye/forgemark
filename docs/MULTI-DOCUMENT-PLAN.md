@@ -178,7 +178,24 @@ frequent, and untitled tabs will accumulate.
 
 ## 4. Phased plan
 
-### Phase 1 — Workspace layer (load-bearing)
+### Phase 1 — Workspace layer (load-bearing) — **implemented**
+
+Landed as `src/state/workspace.ts` plus a rewritten `DocumentProvider`.
+`reduceDocument` is untouched, and all 386 pre-existing tests passed
+without modification — the compatibility goal held.
+
+Shipped shape (slightly beyond the sketch below): `nextDocId` is a
+counter rather than a random/time-based id, so reducer behavior stays
+deterministic; `activeDocument`, `anyDirty`, and `findByPath` are
+exported selectors; and `useWorkspace()` exposes `dispatchTo(docId)` for
+Phase 2, where background documents need to run their own auto-save and
+watcher.
+
+The §4a semantics are in the reducer already: path dedupe on `openTab`,
+`Untitled N` numbering with lowest-free reuse, and closing the last tab
+leaving a fresh Untitled one.
+
+Still single-document from the user's point of view — no tab chrome yet.
 
 Leave `reduceDocument` **completely untouched**. Add above it:
 
