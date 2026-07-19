@@ -252,7 +252,13 @@ export function AppShell() {
         />
       )}
       <div className="fm-app-body">
-        <EditorPane anchorStatuses={anchorStatuses} />
+        {/* Every open document keeps a mounted editor, so per-tab undo,
+            cursor, and scroll survive switching. Inactive panes are
+            hidden rather than unmounted; their window listeners are gated
+            on isActive so the shortcuts stay single. */}
+        {workspace.order.map((id) => (
+          <EditorPane key={id} docId={id} />
+        ))}
         {sidebarOpen && <Sidebar anchorStatuses={anchorStatuses} />}
       </div>
       {printOptions && (

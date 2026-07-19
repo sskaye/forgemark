@@ -321,7 +321,42 @@ none` — hostile to inline growth.
   Rendered/Source (`TitleBar.tsx:80`). Two tablists in one bar is an
   accessibility and visual ambiguity worth avoiding.
 
-### Phase 4 — Editor mounting policy
+### Phase 4 — Editor mounting policy — **implemented**
+
+`AppShell` renders one `EditorPane` per open document. Inactive panes
+stay mounted but are `hidden` + `display: none`, so per-tab undo history,
+cursor, and scroll survive a switch — the ProseMirror history plugin
+lives inside the editor instance, so unmounting discards it.
+
+`EditorPane` took a `docId` (omitted still means the active document) and
+now classifies its own anchors. Its window listeners — the ⌘F/⌘G/⌘E/⌘⌥M
+shortcuts, `forgemark:menu`, and `forgemark:capture-view-sync` — are
+gated on `isActive`. Both halves are pinned by tests: mounting only the
+active pane loses undo across a switch, and removing the gate opens two
+find bars.
+
+Scroll is tracked continuously via `onScroll` into a ref and restored on
+the way back in, rather than captured at the switch: `display: none`
+drops `scrollTop`, and reading it during the transition races the DOM
+update.
+
+**Memory question settled with measurement** (jsdom, so indicative):
+
+| Document  | Tabs | Mount time | Heap delta       |
+| --------- | ---- | ---------- | ---------------- |
+| 30k words | 1    | 53 ms      | ~0               |
+| 30k words | 4    | 189 ms     | +36 MB           |
+| 30k words | 8    | 382 ms     | GC ran, unusable |
+| 5k words  | 8    | 93 ms      | +13 MB           |
+
+Roughly linear: ~9 MB and ~48 ms per mounted 30k-word editor, ~1.6 MB
+each at a realistic 5k words. The cost is paid at **open** time, not at
+switch time, which is the point. Eight worst-case documents land around
+70 MB — acceptable for a desktop app, and the LRU dropped during review
+stays unnecessary. Heap figures are noisy (negative deltas mean GC ran);
+mount time is the trustworthy signal.
+
+#### Original notes
 
 The real tradeoff. `RenderedView` builds a ProseMirror schema with 16
 extensions and renders the whole document — **ProseMirror has no
@@ -497,9 +532,9 @@ New coverage needed:
 
 ## 7. Open questions
 
-- **Memory at realistic tab counts is unmeasured.** Profile mounted
-  TipTap instances against the 30k-word fixture before assuming
-  mount-all is fine; §4 commits to it on the argument that the cost is
-  unproven, which cuts both ways.
+- ~~Memory at realistic tab counts is unmeasured.~~ **Resolved in Phase
+  4** — measured at ~9 MB per mounted 30k-word editor, ~1.6 MB at a
+  realistic 5k words, paid at open time rather than per switch.
+  Mount-all stands; no LRU needed.
 - Does the tab strip need overflow handling (scroll vs. shrink-to-fit) in
   v1, or is a hard cap acceptable? Not a blocker for Phases 1-2.
