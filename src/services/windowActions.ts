@@ -31,7 +31,7 @@ type Geometry = { x: number; y: number; w: number; h: number };
 //
 // Module scope is right for this: it's a property of the window, and
 // Forgemark is single-window (tabs, not windows — see
-// docs/MULTI-DOCUMENT-PLAN.md §1). It is deliberately NOT per-document;
+// docs/ARCHITECTURE.md). It is deliberately NOT per-document;
 // resizing is not something a tab owns.
 let previousGeometry: Geometry | null = null;
 

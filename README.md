@@ -6,7 +6,7 @@ A desktop application for collaborative review of markdown documents — by huma
 
 ## What it is
 
-- **For humans:** a quiet, native macOS / Windows app that feels like Word commenting — select text, type a note, see threads in a sidebar, suggest edits.
+- **For humans:** a quiet, native macOS / Windows app that feels like Word commenting — select text, type a note, see threads in a sidebar, suggest edits. Open several documents at once in tabs; they reopen where you left them.
 - **For AI agents:** the same comments are plain markdown. Read existing comments, add new ones, address them — all by editing the file. The bundled [skill package](#ai-agents) teaches Claude / Codex / any other capable LLM the format in one read.
 - **Not** a Google Docs replacement, not a real-time co-editor, not a git client. Specifically a review tool.
 

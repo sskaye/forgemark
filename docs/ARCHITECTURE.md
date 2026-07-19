@@ -35,37 +35,136 @@ back to a single Markdown file.
 `src/App.tsx` wraps the UI in:
 
 - `ThemeProvider`, which applies CSS token variables.
-- `DocumentProvider`, which owns the document reducer.
-- `AppShell`, which composes the title bar, editor, sidebar, modals, conflict
-  surfaces, settings, and first-run welcome.
+- `DocumentProvider`, which owns the workspace of open documents.
+- `AppShell`, which composes the title bar, tab bar, editors, sidebar, modals,
+  conflict surfaces, settings, and first-run welcome.
 
 Most meaningful state changes go through `src/state/document.ts`. Most
 side effects live in `src/state/DocumentBindings.tsx`.
 
+## Multiple open documents
+
+Forgemark opens several documents at once as **tabs in one window**. Multiple
+windows were considered and rejected: Tauri capabilities are scoped to the
+`main` window, the `PendingFiles` queue drains destructively, and both the menu
+handler and `RunEvent::Opened` emit app-globally — each would need bespoke
+per-window routing, on top of a second copy of the whole React app.
+
+The shape is a thin layer over the single-document reducer:
+
+- `src/state/workspace.ts` holds `{ docs: Record<DocId, DocumentState>, order,
+activeId }`. `reduceWorkspace` routes document actions to one document and
+  handles the tab-level ones (`openTab`, `closeTab`, `activateTab`,
+  `reorderTab`).
+- **`reduceDocument` is untouched by any of this.** A document is still exactly
+  a `DocumentState`.
+- `useDocument()` returns the **active** document with the same shape it always
+  had, so components and tests that predate tabs need no changes.
+  `useWorkspace()` exposes the tab list and `dispatchTo(docId)`.
+
+Two rules govern anything mounted per document:
+
+1. **Per-document things mount for every OPEN document**, not every visible one.
+   `DocumentBindings` (auto-save, file watcher) and `EditorPane` (so undo,
+   cursor, and scroll survive a tab switch) are both mounted N times. A
+   background document whose bindings weren't mounted would silently stop
+   saving and stop noticing its file changed on disk.
+2. **`window`-level listeners are gated on `isActive`.** Shortcuts, menu
+   commands, `forgemark:capture-view-sync`, and the quit guard are app-wide
+   singletons; without the gate, N open documents each answer every keystroke.
+
+Inactive editor panes are hidden (`hidden` + `display: none`), never unmounted.
+Mounted editors cost roughly 9 MB and 48 ms each at 30,000 words, ~1.6 MB at a
+more typical 5,000 — paid at open time, not per switch.
+
+Two behaviors fall out of the format rather than taste:
+
+- **Opening an already-open file focuses its tab.** Two tabs on one path would
+  run two watchers and two auto-save loops against the same file, overwriting
+  each other and each tripping the other's external-change detection.
+- **Untitled buffers are numbered** (`Untitled 2`, lowest free index reused),
+  because without a path there is nothing else to tell them apart.
+
+Closing the last tab leaves a fresh Untitled one and keeps the window open
+(TextEdit / Pages convention).
+
+## Unsaved work
+
+Auto-save writes 500ms after the last edit, but skips Untitled buffers (no
+destination) and documents with a pending conflict (writing would clobber the
+disk copy). Those two gaps are where work can actually be lost, so
+`guardDiscard` in `DocumentBindings` gates the actions that destroy a buffer:
+closing a tab, and quitting.
+
+Forgemark is auto-save-first, so prompting to save something auto-save would
+have written moments later would be incoherent. The rule is **save it for them
+when we can, ask only when we can't**:
+
+| Situation               | Behavior                                     |
+| ----------------------- | -------------------------------------------- |
+| Clean, or read-only     | proceed                                      |
+| Dirty, has a path       | save silently, then proceed                  |
+| Dirty, Untitled         | Save As… / Don't Save / Cancel               |
+| Dirty, conflict pending | Don't Save / Cancel — **no Save**, see below |
+
+No Save during a conflict: writing then would clobber the disk copy, and that
+decision belongs to the conflict surfaces.
+
+⌘N and ⌘O open tabs and discard nothing, so they don't prompt.
+
+**Quitting.** Rust intercepts both doorways — `WindowEvent::CloseRequested`
+(red button / ⌘W) and `RunEvent::ExitRequested` — and blocks the exit, because
+only the frontend knows whether there's unsaved work. Note the App menu's Quit
+is a **custom** item: the predefined one maps to NSApplication `terminate:` on
+macOS and tears the process down without entering Tauri's event loop, so the
+guard would never run. The frontend walks the tabs, bringing each unsaved
+document forward in turn, then calls `approve_exit`, which sets a flag and exits
+(the flag matters — `app.exit` re-enters `ExitRequested`, and without it the app
+could never quit).
+
+## Session restore
+
+`src/state/session.ts` persists `{ paths, activeIndex }`; on launch the files
+reopen as tabs with the previously active one focused. Only documents **with a
+path** are remembered — persisting Untitled buffers would mean putting document
+content in localStorage, and the guard above already ensures they're saved or
+explicitly discarded first. Paths are stored rather than contents, so a file
+edited outside Forgemark comes back current.
+
+`AppShell` decides _whether_ to restore (it mounts once per launch);
+`DocumentBindings` does the opening (it has the file IO). That split is
+load-bearing: bindings mount once per _document_, so a guard there re-fires on
+every new tab.
+
 ## Core modules
 
-| Area            | Files                                                                                              | Notes                                                                                                                                                                                                    |
-| --------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Document model  | `src/state/document.ts`, `src/state/DocumentProvider.tsx`                                          | Pure reducer and context. Keeps file path, raw original text, body, comments, dirty state, composer state, lost-anchor state, conflict state, and sidebar controls.                                      |
-| Side effects    | `src/state/DocumentBindings.tsx`                                                                   | Opens/saves files, runs autosave, handles document shortcuts, watches external file changes, and consumes pending save requests.                                                                         |
-| Shell layout    | `src/components/AppShell.tsx`                                                                      | Assembles the app and hosts modals/banners. Recomputes anchor status from body/comments.                                                                                                                 |
-| Rendered editor | `src/components/EditorPane.tsx`, `src/components/RenderedView.tsx`, `src/components/AnchorMark.ts` | Rendered view converts Forgemark markers to Tiptap anchor spans and back. New comments and suggestions are created here because this layer has selection access.                                         |
-| Source view     | `src/components/SourceView.tsx`                                                                    | Read-only CodeMirror view of the exact serialized Markdown, with decorations for markers and the trailing comments block.                                                                                |
-| Sidebar         | `src/components/Sidebar.tsx`, `src/components/FMCard.tsx`, `src/components/InlineComposer.tsx`     | Thread lifecycle: reply, edit, resolve, delete, accept/reject suggestions, reattach orphaned comments, filter, and sort.                                                                                 |
-| Format layer    | `src/format/*`                                                                                     | Parser, deterministic YAML emitter, serializer, marker scanning/pairing, marker insertion/removal, lost-anchor candidate ranking, clean export, escaping. This is the domain core and is heavily tested. |
-| File services   | `src/services/fileIO.ts`, `src/services/fileWatcher.ts`, `src/services/conflict.ts`                | Tauri wrappers, parent-directory watcher for atomic saves, and fingerprint comparison for external-change detection.                                                                                     |
-| Preferences     | `src/state/preferences.ts`                                                                         | LocalStorage-backed author, theme, font size, default view, recent files, and first-run flag.                                                                                                            |
-| Native shell    | `src-tauri/src/lib.rs`, `src/state/menuBridge.ts`, `src/services/windowActions.ts`                 | Rust builds native menus and file-open events, then emits Tauri events. The frontend routes them into existing command paths.                                                                            |
-| Skill bundles   | `assets/forgemark-skill/*`, `scripts/build-skill.mjs`, `src/services/skillDownload.ts`             | AI-agent instructions are packaged as both `.skill` and `.zip`; Settings downloads them through the Tauri save dialog.                                                                                   |
+| Area            | Files                                                                                              | Notes                                                                                                                                                                                                                                 |
+| --------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Document model  | `src/state/document.ts`, `src/state/DocumentProvider.tsx`                                          | Pure reducer and context. Keeps file path, raw original text, body, comments, dirty state, composer state, lost-anchor state, conflict state, sidebar controls, and `loadGeneration` (see below).                                     |
+| Workspace       | `src/state/workspace.ts`                                                                           | The open documents: `docs`, tab `order`, `activeId`. Routes document actions to one document; owns tab open/close/activate/reorder, path dedupe, and Untitled numbering. Wraps `reduceDocument` untouched.                            |
+| Session         | `src/state/session.ts`                                                                             | Persists which files were open (paths, not contents) so a launch can reopen them.                                                                                                                                                     |
+| Side effects    | `src/state/DocumentBindings.tsx`                                                                   | Mounted once per OPEN document. Opens/saves files, runs autosave, watches external file changes, consumes pending save requests, and guards unsaved work. Window listeners inside are gated on `isActive`.                            |
+| Shell layout    | `src/components/AppShell.tsx`, `src/components/TabBar.tsx`                                         | Assembles the app and hosts modals/banners. Renders one `DocumentBindings` and one `EditorPane` per open document. The tab strip hides itself when only one document is open.                                                         |
+| Rendered editor | `src/components/EditorPane.tsx`, `src/components/RenderedView.tsx`, `src/components/AnchorMark.ts` | Rendered view converts Forgemark markers to Tiptap anchor spans and back. New comments and suggestions are created here because this layer has selection access. One pane per open document; inactive ones are hidden, not unmounted. |
+| Source view     | `src/components/SourceView.tsx`                                                                    | Read-only CodeMirror view of the exact serialized Markdown, with decorations for markers and the trailing comments block.                                                                                                             |
+| Sidebar         | `src/components/Sidebar.tsx`, `src/components/FMCard.tsx`, `src/components/InlineComposer.tsx`     | Thread lifecycle: reply, edit, resolve, delete, accept/reject suggestions, reattach orphaned comments, filter, and sort.                                                                                                              |
+| Format layer    | `src/format/*`                                                                                     | Parser, deterministic YAML emitter, serializer, marker scanning/pairing, marker insertion/removal, lost-anchor candidate ranking, clean export, escaping. This is the domain core and is heavily tested.                              |
+| File services   | `src/services/fileIO.ts`, `src/services/fileWatcher.ts`, `src/services/conflict.ts`                | Tauri wrappers, parent-directory watcher for atomic saves, and fingerprint comparison for external-change detection.                                                                                                                  |
+| Preferences     | `src/state/preferences.ts`                                                                         | LocalStorage-backed author, theme, font size, default view, recent files, and first-run flag.                                                                                                                                         |
+| Native shell    | `src-tauri/src/lib.rs`, `src/state/menuBridge.ts`, `src/services/windowActions.ts`                 | Rust builds native menus and file-open events, then emits Tauri events. The frontend routes them into existing command paths.                                                                                                         |
+| Skill bundles   | `assets/forgemark-skill/*`, `scripts/build-skill.mjs`, `src/services/skillDownload.ts`             | AI-agent instructions are packaged as both `.skill` and `.zip`; Settings downloads them through the Tauri save dialog.                                                                                                                |
 
 ## Important workflows
 
 Opening a file:
 
-1. `DocumentBindings` calls `openMarkdownFile` or `readMarkdownFile`.
+1. `DocumentBindings` calls `openMarkdownFiles` (⌘O, multi-select) or
+   `readMarkdownFile` (Open Recent, Finder, session restore).
 2. `parseForgemarkFile(..., { tolerant: true })` splits body/comments.
-3. A `load` action resets document state and records the original bytes.
-4. `AppShell` classifies anchors so orphaned comments can be surfaced.
+3. An `openTab` action puts it in a tab — focusing the existing tab if the file
+   is already open, or reusing the current one if it's an untouched Untitled
+   buffer.
+4. `EditorPane` classifies anchors so orphaned comments can be surfaced.
 
 Saving:
 
@@ -105,6 +204,15 @@ round-trip the anchor rides on the `codeBlock` node: `CodeBlockAnchor`
 it to the marker form, and reads it back via the fence info string that
 `blockAnchorsToInfoString` injects on display. The `data-anchor-id` on the
 `<pre>` reuses the same click/hover/focus wiring as inline anchors.
+
+**Undo isolation.** ProseMirror's history lives inside the Tiptap instance, not
+in `DocumentState`, so the only way to discard it is to remount the editor.
+`RenderedView` is keyed on `state.loadGeneration`, which is bumped whenever
+`body` is replaced by something other than a keystroke — `load`,
+`applyExternalChange`, `newUntitled` — but **not** by Save As, which
+re-dispatches `load` with `rebindOnly` purely to pick up the new path and must
+keep the user's history. Without this, ⌘Z walks backwards into content the
+document no longer has.
 
 **Subscript / superscript.** `RenderedView` registers Subscript/Superscript
 marks with an explicit markdown serialize spec, so `<sub>`/`<sup>` render and
@@ -148,19 +256,29 @@ External file changes:
 
 - `tests/unit/format/*`: parser, serializer, marker, escaping, compose,
   suggestions, round-trip, property, and reattach behavior.
-- `tests/unit/*`: reducer, preferences, file IO, conflict fingerprints,
-  tokens, clean export, menu bridge, smoke.
+- `tests/unit/*`: document reducer, workspace reducer, preferences, file IO,
+  conflict fingerprints, tokens, clean export, menu bridge, smoke.
 - `tests/integration/*`: AppShell, rendered/source views, composer, sidebar,
-  suggestions, lost anchors, file opening, settings, skill download, and file
-  conflicts.
+  suggestions, lost anchors, file opening, settings, skill download, file
+  conflicts, tabs, per-tab editors, background documents, the unsaved-work
+  guard, and session restore.
 - `tests/perf/end-to-end.test.ts`: large-document performance smoke.
 - `tests/e2e/smoke.spec.ts`: Playwright smoke against the dev surface.
 - `tests/ai/*`: optional live-agent fixtures and prompts. These are excluded
   from normal test runs unless `RUN_AI_TESTS=1`.
 
+**Typing tests.** `tests/utils/typing.ts` drives real keystrokes into the
+rendered editor. ProseMirror observes its contenteditable through a
+MutationObserver rather than listening for synthetic `keydown`, so the faithful
+simulation is to mutate the DOM and let the observer see it. Until this existed
+nothing in the suite typed anything, and a bug that discarded **every**
+keystroke in an empty Untitled document sat behind a fully green run. Reach for
+it when touching the editor, the ready gate, or anything that reacts to edits.
+
 Before changing the format layer, run `npm test`. For frontend layout changes,
 also run the relevant integration test and inspect the app in a browser or
-Tauri window.
+Tauri window — several bugs in the tabs work were reachable only by driving the
+real app, particularly anything crossing into Rust.
 
 ## Design tokens
 

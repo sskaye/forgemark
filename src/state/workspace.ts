@@ -1,15 +1,13 @@
 import { INITIAL_STATE, reduceDocument, type DocumentAction, type DocumentState } from "./document";
 
-// Phase 1 of multi-document support (see docs/MULTI-DOCUMENT-PLAN.md).
+// The open documents. See "Multiple open documents" in
+// docs/ARCHITECTURE.md for the reasoning.
 //
-// The workspace wraps `reduceDocument` without touching it: every open
-// document is still exactly a `DocumentState`, and document-level actions
-// are routed to one of them. That is what keeps this change small — the
-// reducer, the format layer, and every component that calls
-// `useDocument()` are unaffected.
-//
-// Tab *chrome* is not part of this phase. The app still shows one
-// document; this only establishes the state shape underneath it.
+// This wraps `reduceDocument` without touching it: every open document is
+// still exactly a `DocumentState`, and document-level actions are routed
+// to one of them. That is what keeps the surface small — the reducer, the
+// format layer, and every component calling `useDocument()` are
+// unaffected by there being more than one document.
 
 export type DocId = string;
 

@@ -2,6 +2,20 @@
 
 All notable changes to Forgemark are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Multiple documents open at once, as tabs in one window. Opening a file that's already open focuses its tab instead of duplicating it; ⌘O accepts several files at once; closing the last tab leaves an empty Untitled one.
+- Session restore: the files you had open reopen on next launch, with the same one focused. Paths are remembered rather than contents, so a file edited elsewhere comes back current. Unsaved Untitled buffers are not restored — they can't be silently lost, because quitting prompts for them.
+- Unsaved-work guard on the actions that discard a buffer (closing a tab, quitting). Documents that can be saved are saved silently; you're only asked when auto-save can't help — an Untitled buffer with no destination, or a file that changed on disk underneath you.
+
+### Fixed
+
+- Undo no longer reaches into the previous document. Opening a file left the editor's history intact, so ⌘Z after ⌘O could revert to content from the file you just closed — in an app whose whole premise is byte-faithful round-tripping. Save As still keeps your history, since only the path changes.
+- Typing into a new Untitled document did nothing at all. Every keystroke was discarded before reaching app state: the document never went dirty, never auto-saved, and ⌘S would have written an empty file over what was on screen. Typing into an already-saved file was unaffected, which is what made it easy to miss.
+- Quitting and closing the window now prompt about unsaved work instead of discarding it. ⌘Q previously bypassed the app entirely on macOS.
+
 ## [1.3.0] — 2026-06-21
 
 ### Added
