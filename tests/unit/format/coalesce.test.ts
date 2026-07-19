@@ -3,10 +3,7 @@
 // formatting, down to a single pair.
 
 import { describe, it, expect } from "vitest";
-import {
-  coalesceAnchorMarkers,
-  bodyFromAnchorSpans,
-} from "../../../src/format/markers-display";
+import { coalesceAnchorMarkers, bodyFromAnchorSpans } from "../../../src/format/markers-display";
 import { parseForgemarkFile } from "../../../src/format/parser";
 import { serializeForgemarkFile } from "../../../src/format/serializer";
 import type { Comment } from "../../../src/format/types";
@@ -43,16 +40,14 @@ describe("coalesceAnchorMarkers", () => {
 
   it("does NOT merge across a different comment's markers", () => {
     // Two distinct ids adjacent — must remain two separate pairs.
-    const body =
-      "<!-- fmc:1 -->one<!-- /fmc:1 --> <!-- fmc:2 -->two<!-- /fmc:2 -->";
+    const body = "<!-- fmc:1 -->one<!-- /fmc:1 --> <!-- fmc:2 -->two<!-- /fmc:2 -->";
     expect(coalesceAnchorMarkers(body)).toBe(body);
     expect(opens(body, 1)).toBe(1);
     expect(opens(body, 2)).toBe(1);
   });
 
   it("the coalesced body parses cleanly (no Duplicate marker pair)", () => {
-    const splattered =
-      "<!-- fmc:1 -->a<!-- /fmc:1 -->*<!-- fmc:1 -->b<!-- /fmc:1 -->* end.";
+    const splattered = "<!-- fmc:1 -->a<!-- /fmc:1 -->*<!-- fmc:1 -->b<!-- /fmc:1 -->* end.";
     const body = coalesceAnchorMarkers(splattered);
     const record: Comment = {
       id: 1,
@@ -69,8 +64,7 @@ describe("coalesceAnchorMarkers", () => {
   });
 
   it("bodyFromAnchorSpans applies the coalesce end-to-end", () => {
-    const spans =
-      '<span data-anchor-id="3">a</span>*<span data-anchor-id="3">b</span>*';
+    const spans = '<span data-anchor-id="3">a</span>*<span data-anchor-id="3">b</span>*';
     const out = bodyFromAnchorSpans(spans);
     expect(opens(out, 3)).toBe(1);
     expect(closes(out, 3)).toBe(1);

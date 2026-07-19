@@ -10,3 +10,12 @@ docs/design_handoff_v1_1/
 # Re-running Prettier on them risks breaking the gate. To regenerate,
 # run `npx tsx scripts/generate-fixtures.ts`.
 tests/ai/fixtures/
+
+# The skill bundle is byte-locked to the committed .skill/.zip artifacts:
+# skill-bundle.test.ts asserts the SKILL.md inside the bundle is identical
+# to this source. Reformatting would mean regenerating those binaries and
+# reflowing a spec that ships to third parties, for cosmetics.
+assets/forgemark-skill/
+
+# Local Claude Code settings — untracked, not ours to format.
+.claude/

@@ -11,7 +11,7 @@ Quick reference for engineers working in this repo. For the current code map, re
 ## Commit messages
 
 - One subject line ≤ 72 chars, imperative mood ("Add foo," not "Added foo").
-- Body wraps at 72; explain *why*, not *what*.
+- Body wraps at 72; explain _why_, not _what_.
 - Co-author trailer when work was paired or AI-assisted.
 
 ## Code style

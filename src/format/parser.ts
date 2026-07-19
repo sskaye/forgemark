@@ -148,7 +148,9 @@ export function recoverForgemarkFile(input: string): RecoveryResult {
   for (const [id, count] of pairCount) {
     if (count > 1) {
       stripIds.add(id);
-      problems.push(`Comment ${id} had ${count} overlapping/split anchors — detached for reattachment.`);
+      problems.push(
+        `Comment ${id} had ${count} overlapping/split anchors — detached for reattachment.`,
+      );
     } else if (!recordIds.has(id)) {
       stripIds.add(id);
       problems.push(`Anchor ${id} had no matching comment — removed.`);

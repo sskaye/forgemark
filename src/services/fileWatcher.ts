@@ -128,6 +128,8 @@ function eventTouchesFile(event: unknown, fileName: string): boolean {
   const paths = (event as { paths?: unknown }).paths;
   if (!Array.isArray(paths)) return true;
   return paths.some(
-    (p) => typeof p === "string" && (p === fileName || p.endsWith("/" + fileName) || p.endsWith("\\" + fileName)),
+    (p) =>
+      typeof p === "string" &&
+      (p === fileName || p.endsWith("/" + fileName) || p.endsWith("\\" + fileName)),
   );
 }

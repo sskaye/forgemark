@@ -24,8 +24,7 @@ function rec(id: number, anchor: string): Comment {
 
 describe("recoverForgemarkFile", () => {
   it("coalesces a splattered comment back to an attached anchor", () => {
-    const body =
-      "<!-- fmc:1 -->a<!-- /fmc:1 -->*<!-- fmc:1 -->b<!-- /fmc:1 -->* tail.";
+    const body = "<!-- fmc:1 -->a<!-- /fmc:1 -->*<!-- fmc:1 -->b<!-- /fmc:1 -->* tail.";
     const file = serializeForgemarkFile({ body, comments: [rec(1, "a*b* tail")] });
     // Precondition: strict parse rejects it.
     expect(() => parseForgemarkFile(file)).toThrow();
@@ -61,7 +60,9 @@ describe("recoverForgemarkFile", () => {
     expect(getAnchorStatus(recovered.body, byId.get(9)!).kind).toBe("attached");
     expect(getAnchorStatus(recovered.body, byId.get(1)!).kind).toBe("orphaned");
     // The recovered file parses strictly (tolerant for the orphan).
-    expect(() => parseForgemarkFile(serializeForgemarkFile(recovered), { tolerant: true })).not.toThrow();
+    expect(() =>
+      parseForgemarkFile(serializeForgemarkFile(recovered), { tolerant: true }),
+    ).not.toThrow();
   });
 
   it("strips markers that have no matching record", () => {

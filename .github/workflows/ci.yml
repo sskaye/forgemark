@@ -6,8 +6,11 @@ on:
   pull_request:
     branches: [main]
 
-# AI-agent tests are NEVER run in CI. See docs/implementation-plan.md §2 CI policy.
-# This workflow runs lint + unit + E2E + round-trip parity only.
+# AI-agent tests are NEVER run in CI (they need a live model and an API key);
+# `npm test` excludes tests/ai unless RUN_AI_TESTS=1. See CONVENTIONS.md.
+#
+# This workflow runs format + lint + typecheck + unit on macOS and Windows,
+# the Rust checks the desktop shell needs, and a Playwright smoke.
 
 jobs:
   lint-and-unit:
@@ -24,9 +27,46 @@ jobs:
           node-version: "20"
           cache: "npm"
       - run: npm ci
+      - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+
+  rust:
+    name: Rust shell (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      # Both platforms on purpose. The shell has genuinely
+      # platform-divergent code (RunEvent::Opened is macOS-only), and a
+      # Windows-only build break has slipped through before precisely
+      # because nothing in CI compiled the Rust.
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      # No Node here on purpose: `cargo check` doesn't need ../dist to
+      # exist (only a full `tauri build` would), and setting up npm on two
+      # runners to produce a frontend nothing reads costs minutes per run.
+      - name: Format
+        run: cargo fmt --check
+        working-directory: src-tauri
+      - name: Compile
+        run: cargo check --all-targets
+        working-directory: src-tauri
+      # -D warnings is deliberate but does mean a new rustc/clippy release
+      # can fail CI on code that hasn't changed. If that gets annoying,
+      # drop the flag rather than the job — the compile check above is the
+      # part that catches real breakage.
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+        working-directory: src-tauri
 
   e2e:
     name: E2E (macOS)
