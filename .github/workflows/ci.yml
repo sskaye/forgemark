@@ -27,6 +27,11 @@ jobs:
           node-version: "20"
           cache: "npm"
       - run: npm ci
+      # The version lives in four files that must agree; drift is silent
+      # and only bites mid-release. (Skill-bundle staleness is caught by
+      # skill-bundle.test.ts, which compares contents rather than bytes —
+      # zip metadata isn't stable enough to diff.)
+      - run: npm run version:check
       - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck

@@ -16,6 +16,8 @@
     "test:e2e": "playwright test",
     "test:ai": "RUN_AI_TESTS=1 vitest run tests/ai/",
     "build:skill": "node scripts/build-skill.mjs",
+    "version:set": "node scripts/set-version.mjs",
+    "version:check": "node scripts/set-version.mjs --check",
     "build:icons": "tauri icon assets/forgemark-icon.svg --output src-tauri/icons",
     "release": "node scripts/release.mjs",
     "verify-ai-output": "node scripts/verify-ai-output.mjs",
