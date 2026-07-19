@@ -34,14 +34,9 @@ rustup target add x86_64-apple-darwin   # one-time; aarch64 already added by tau
 The `npm run release` script captures every step of the macOS build/sign/notarize flow. Run it from a clean working tree.
 
 ```sh
-# Bump the version in FOUR places — all must agree, and there's no script:
-#   package.json
-#   src-tauri/tauri.conf.json
-#   src-tauri/Cargo.toml
-#   src-tauri/Cargo.lock   <- the `name = "forgemark"` entry. It's tracked,
-#                             and cargo rewrites it on the next build, so
-#                             skipping it leaves a stray diff mid-release.
-# Update CHANGELOG.md with the new release line.
+# Bump the version everywhere it's recorded (four files, all must agree):
+#   npm run version:set 1.5.0
+# Then update CHANGELOG.md with the new release line.
 
 export APPLE_KEYCHAIN_PROFILE=forgemark-notary
 export APPLE_SIGNING_IDENTITY="Developer ID Application: Your Name (XXXXXXXXXX)"
@@ -66,6 +61,17 @@ src-tauri/target/universal-apple-darwin/release/bundle/dmg/Forgemark_<ver>_unive
 
 If you don't have a Keychain profile set up, the script falls back to `APPLE_ID` / `APPLE_PASSWORD` / `APPLE_TEAM_ID` env vars.
 
+**A note on `assets/forgemark-skill.{skill,zip}`.** Step 2 rebuilds them, and
+zip metadata means the bytes can differ even when nothing in the source
+changed — so the working tree may look dirty after a release build. Check
+whether the _contents_ actually changed before committing:
+
+```sh
+npm test -- skill-bundle    # asserts every bundled file matches its source
+```
+
+If that passes, the diff is metadata noise and you can `git checkout -- assets/`.
+
 ## Smoke test
 
 On a fresh macOS user account (no Xcode, no Forgemark installed):
@@ -79,30 +85,28 @@ A Gatekeeper prompt on a fresh account means the staple didn't apply; rerun `xcr
 
 ## Tag and publish
 
-Create the release **before** pushing the tag. Pushing the tag starts
-`windows-release.yml`, which creates the release itself if it doesn't exist
-yet — so doing it the other way round is a race, and if the workflow wins,
-`gh release create` fails with "release already exists".
+One command does the whole thing. `--target` makes `gh` create the tag on the
+remote itself, which both publishes the release and starts
+`windows-release.yml` — so there is no separate `git push origin <tag>` step,
+and no race with the workflow over who creates the release.
 
 ```sh
-git tag -a v<ver> -m "Forgemark v<ver>"
-
-# Create the release off the local tag first, with the macOS artifact.
-gh release create v<ver> \
+gh release create v<ver> --target main \
   --title "Forgemark v<ver>" \
   --notes-file CHANGELOG.md \
   "src-tauri/target/universal-apple-darwin/release/bundle/dmg/Forgemark_<ver>_universal.dmg#Forgemark <ver> — universal macOS"
 
-# Then publish the tag; the Windows workflow attaches its installers to
-# the release that now exists.
-git push origin v<ver>
+git fetch origin --tags   # pull the tag gh just created back down
 ```
 
-If `gh release create` complains the tag doesn't exist on the remote yet, add
-`--target main` (it resolves the tag locally) or push the tag first and use
-`gh release upload` instead of `create`.
+The Windows installers appear on the release a few minutes later.
 
-(Tag signing requires GPG or SSH-based signing — drop `-s` if neither is set up.)
+**Don't** create the tag locally first and push it: `gh release create` refuses
+to run against a tag that exists only locally, and pushing the tag starts the
+Windows workflow, which creates the release itself if one doesn't exist — so
+you end up racing it. If you specifically want an _annotated_ tag, push it
+first and then use `gh release edit --notes-file` plus `gh release upload`
+instead of `create`.
 
 ## Windows
 

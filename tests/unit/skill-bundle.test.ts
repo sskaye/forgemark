@@ -73,4 +73,39 @@ describe("skill bundle — built artifacts", () => {
     const src = readFileSync(join(SRC, "SKILL.md"), "utf8");
     expect(inZip).toBe(src);
   });
+
+  // The committed .skill/.zip are build artifacts, so they can silently
+  // fall behind the source they're built from — a v1.4.0 release build
+  // found exactly that. This compares CONTENTS rather than bytes on
+  // purpose: zip metadata isn't stable enough to diff, so a byte
+  // comparison would flake, while stale content is the thing that
+  // actually reaches users through Settings → download.
+  it("every file in the bundle matches the source tree", async () => {
+    const zip = await JSZip.loadAsync(readFileSync(SKILL_PATH));
+
+    const sourceFiles: string[] = [];
+    const walk = (dir: string, prefix = "") => {
+      for (const name of readdirSync(dir).sort()) {
+        if (name === ".DS_Store") continue;
+        const full = join(dir, name);
+        if (statSync(full).isDirectory()) walk(full, `${prefix}${name}/`);
+        else sourceFiles.push(`${prefix}${name}`);
+      }
+    };
+    walk(SRC);
+
+    const inBundle = Object.keys(zip.files)
+      .filter((n) => !zip.files[n].dir)
+      .sort();
+    expect(inBundle).toEqual(sourceFiles);
+
+    for (const rel of sourceFiles) {
+      const bundled = Buffer.from(await zip.file(rel)!.async("uint8array"));
+      const source = readFileSync(join(SRC, ...rel.split("/")));
+      expect(
+        bundled.equals(source),
+        `${rel} differs from source — run \`npm run build:skill\` and commit`,
+      ).toBe(true);
+    }
+  });
 });
