@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TitleBar } from "./TitleBar";
 import { TabBar } from "./TabBar";
 import { Sidebar } from "./Sidebar";
@@ -24,6 +24,7 @@ import {
 } from "../format";
 import { contextSnippet, parseForgemarkFile } from "../format";
 import { useFontSize, useFirstRun } from "../state/preferences";
+import { readSession, writeSession, type SessionSnapshot } from "../state/session";
 import { saveMarkdownFile } from "../services/fileIO";
 import { applyWindowAction, isWindowAction } from "../services/windowActions";
 import { invoke } from "@tauri-apps/api/core";
@@ -164,6 +165,36 @@ export function AppShell() {
     state.reattachTarget != null ? state.comments.find((c) => c.id === state.reattachTarget) : null;
   const reattachTargetStatus =
     reattachTargetComment != null ? anchorStatuses.get(reattachTargetComment.id) : null;
+
+  // Read the stored session during the first render, before the persist
+  // effect below can overwrite it with the empty startup workspace.
+  const pendingSessionRef = useRef<SessionSnapshot | null | undefined>(undefined);
+  if (pendingSessionRef.current === undefined) pendingSessionRef.current = readSession();
+
+  // Ask, once per launch, for the previous session to be reopened.
+  // AppShell is the right home for the "once": it mounts once, whereas
+  // DocumentBindings mounts per document and would re-fire on every new
+  // tab. The opening itself lives there, next to the file IO.
+  useEffect(() => {
+    const session = pendingSessionRef.current;
+    if (!session) return;
+    pendingSessionRef.current = null;
+    window.dispatchEvent(new CustomEvent("forgemark:restore-session", { detail: session }));
+  }, []);
+
+  // Remember which files are open so the next launch can reopen them.
+  // Untitled buffers are skipped on purpose (see state/session.ts).
+  useEffect(() => {
+    const paths: string[] = [];
+    let activeIndex = -1;
+    for (const id of workspace.order) {
+      const path = workspace.docs[id].filePath;
+      if (path == null) continue;
+      if (id === workspace.activeId) activeIndex = paths.length;
+      paths.push(path);
+    }
+    writeSession({ paths, activeIndex });
+  }, [workspace]);
 
   // Reflect file state in the document title (browser tab and Tauri OS title).
   useEffect(() => {

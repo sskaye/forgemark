@@ -451,7 +451,39 @@ from before tabs.
   immediately after overwriting it at `:50-55`, and works only by
   accident of assignment order.
 
-### Phase 6 — Session restore (optional, ship last)
+### Phase 6 — Session restore — **implemented**
+
+`state/session.ts` stores `{ paths, activeIndex }` under
+`forgemark.session`.
+
+**Only documents with a path are remembered.** Persisting unsaved
+Untitled buffers would mean putting document _content_ into
+localStorage — size limits, a second copy of review data living outside
+the markdown, and staleness against the real file. The unsaved-work
+guard already forces those buffers to be saved or explicitly discarded
+before the app can quit, so nothing is lost by leaving them out.
+
+Paths are stored rather than contents, so a file edited outside Forgemark
+comes back current instead of stale.
+
+**Where the "once" lives matters.** The first attempt put restore in
+`DocumentBindings` behind a `restoredRef` — which re-fired on every new
+tab, because those bindings mount once per _document_. `AppShell` mounts
+once per _launch_, so it now decides whether to restore and emits
+`forgemark:restore-session`; `DocumentBindings` listens and does the
+opening, next to the file IO. It also reads the stored session during
+first render, before the persist effect can overwrite it with the empty
+startup workspace.
+
+Restores are sequential so tab order matches the previous session,
+missing files are skipped, and focus is matched by path rather than index
+(a skipped file would shift the positions).
+
+`tests/setup.ts` clears the session key between tests — jsdom shares
+localStorage across a file, so one test's open documents were being
+restored into the next test's app.
+
+#### Original notes
 
 Preferences persist recent files but **nothing records which documents
 were open** — reopening always lands on `INITIAL_STATE`. A

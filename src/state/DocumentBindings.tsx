@@ -314,6 +314,37 @@ export function DocumentBindings({
     [runQuit],
   );
 
+  // Session restore. AppShell decides *whether* to restore (it mounts
+  // once per launch; these bindings mount once per document, so a
+  // per-instance guard would re-fire every time a tab opened). It just
+  // asks, and this does the opening.
+  //
+  // Sequential rather than concurrent so tab order matches the previous
+  // session. `openTab` dedupes by path, so a file already opened by
+  // other means — Finder, the PendingFiles queue — doesn't double up,
+  // and files that have since moved take the usual open-failed path.
+  useEffect(() => {
+    if (!isActive) return;
+    const onRestore = (e: Event) => {
+      const detail = (e as CustomEvent<{ paths: string[]; activeIndex: number }>).detail;
+      if (!detail?.paths?.length) return;
+      void (async () => {
+        for (const path of detail.paths) {
+          await openPathRef.current(path);
+        }
+        // Focus whichever document was active. Paths that failed to open
+        // shift the positions, so match by path rather than by index.
+        const wantedPath = detail.paths[detail.activeIndex];
+        if (wantedPath == null) return;
+        const ws = workspaceRef.current;
+        const target = ws.order.find((docId) => ws.docs[docId].filePath === wantedPath);
+        if (target) workspaceDispatchRef.current({ type: "activateTab", docId: target });
+      })();
+    };
+    window.addEventListener("forgemark:restore-session", onRestore);
+    return () => window.removeEventListener("forgemark:restore-session", onRestore);
+  }, [isActive]);
+
   // Rust intercepts window-close and ⌘Q and defers to us, so quitting
   // gets the same unsaved-work guard as ⌘N/⌘O instead of relying on
   // beforeunload, which Tauri doesn't reliably honour.
