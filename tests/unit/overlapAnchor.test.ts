@@ -13,11 +13,7 @@ import { bodyWithAnchorSpans } from "../../src/format/markers-display";
 
 function makeEditor(body: string): Editor {
   return new Editor({
-    extensions: [
-      StarterKit,
-      AnchorMark,
-      Markdown.configure({ html: true }),
-    ],
+    extensions: [StarterKit, AnchorMark, Markdown.configure({ html: true })],
     content: bodyWithAnchorSpans(body),
   });
 }

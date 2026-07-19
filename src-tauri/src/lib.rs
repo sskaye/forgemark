@@ -181,9 +181,18 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .build()?;
 
     // File menu — every item maps to an existing keyboard shortcut.
-    let new = MenuItemBuilder::new("New").id("new").accelerator("CmdOrCtrl+N").build(app)?;
-    let open = MenuItemBuilder::new("Open…").id("open").accelerator("CmdOrCtrl+O").build(app)?;
-    let save = MenuItemBuilder::new("Save").id("save").accelerator("CmdOrCtrl+S").build(app)?;
+    let new = MenuItemBuilder::new("New")
+        .id("new")
+        .accelerator("CmdOrCtrl+N")
+        .build(app)?;
+    let open = MenuItemBuilder::new("Open…")
+        .id("open")
+        .accelerator("CmdOrCtrl+O")
+        .build(app)?;
+    let save = MenuItemBuilder::new("Save")
+        .id("save")
+        .accelerator("CmdOrCtrl+S")
+        .build(app)?;
     let save_as = MenuItemBuilder::new("Save As…")
         .id("save-as")
         .accelerator("CmdOrCtrl+Shift+S")

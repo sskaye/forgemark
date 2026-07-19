@@ -20,7 +20,11 @@ import { TaskItem } from "@tiptap/extension-task-item";
 import { Markdown } from "tiptap-markdown";
 import { AnchorMark } from "../../../src/components/AnchorMark";
 import { bodyFromAnchorSpans, bodyWithAnchorSpans } from "../../../src/format/markers-display";
-import { parseForgemarkFile, ForgemarkParseError, recoverForgemarkFile } from "../../../src/format/parser";
+import {
+  parseForgemarkFile,
+  ForgemarkParseError,
+  recoverForgemarkFile,
+} from "../../../src/format/parser";
 import { serializeForgemarkFile } from "../../../src/format/serializer";
 import { getAnchorStatus } from "../../../src/format/reattach";
 import type { Comment } from "../../../src/format/types";
@@ -147,12 +151,7 @@ describe("BUG 1 (report): overlapping / nested anchor creation corrupts markers"
     // Re-open an editor on the body that now contains comment 11's span,
     // and add comment 20 on an inner word ("and"), as the UI would.
     const editor2 = makeEditor(working);
-    const fullText = editor2.state.doc.textBetween(
-      1,
-      editor2.state.doc.content.size - 1,
-      " ",
-      " ",
-    );
+    const fullText = editor2.state.doc.textBetween(1, editor2.state.doc.content.size - 1, " ", " ");
     const andIdx = fullText.indexOf(" and ") + 1; // skip leading space
     const innerFrom = 1 + andIdx;
     const innerTo = innerFrom + "and".length;

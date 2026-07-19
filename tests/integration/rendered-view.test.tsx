@@ -218,9 +218,7 @@ describe("RenderedView GFM rendering", () => {
 
     container.querySelector("a")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
-    await waitFor(() =>
-      expect(openUrl).toHaveBeenCalledWith("https://example.com/path?q=1"),
-    );
+    await waitFor(() => expect(openUrl).toHaveBeenCalledWith("https://example.com/path?q=1"));
     expect(onAnchorClick).not.toHaveBeenCalled();
   });
 
