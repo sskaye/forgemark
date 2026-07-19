@@ -13,6 +13,8 @@ yarn-debug.log*
 yarn-error.log*
 
 # Editor / IDE
+# Claude Code writes local permissions here; it is per-machine, not shared.
+.claude/
 .vscode/*
 !.vscode/extensions.json
 .idea/
