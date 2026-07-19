@@ -38,7 +38,7 @@ import SAMPLE_TEXT from "../../assets/sample-onboarding.md?raw";
 // EditorPane and Sidebar.
 export function AppShell() {
   const { state, dispatch, setViewMode } = useDocument();
-  const { workspace, dispatch: workspaceDispatch } = useWorkspace();
+  const { workspace } = useWorkspace();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [cleanExportOpen, setCleanExportOpen] = useState(false);
@@ -133,10 +133,6 @@ export function AppShell() {
         setPrintOptionsOpen(true);
         return;
       }
-      if (detail === "next-tab" || detail === "prev-tab") {
-        workspaceDispatch({ type: "cycleTab", delta: detail === "next-tab" ? 1 : -1 });
-        return;
-      }
       // `close-file` is handled in DocumentBindings — it discards the
       // buffer, so it goes through the same unsaved-work guard as ⌘N
       // and ⌘O rather than carrying its own prompt.
@@ -154,7 +150,7 @@ export function AppShell() {
     };
     window.addEventListener("forgemark:menu", onCustom);
     return () => window.removeEventListener("forgemark:menu", onCustom);
-  }, [state.filePath, state.dirty, dispatch, workspaceDispatch]);
+  }, [state.filePath, state.dirty, dispatch]);
 
   // Anchor classification (Phase 9). Recomputed when body or comments
   // change. classifyAnchors does one marker scan + per-orphan candidate

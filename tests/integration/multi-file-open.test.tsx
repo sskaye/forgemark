@@ -40,53 +40,7 @@ function mount() {
   );
 }
 
-const click = async (id: string) => {
-  await act(async () => {
-    screen.getByTestId(id).click();
-  });
-};
-
-const menu = async (detail: string) => {
-  await act(async () => {
-    window.dispatchEvent(new CustomEvent("forgemark:menu", { detail }));
-  });
-};
-
 const active = () => screen.getByTestId("active-name").textContent;
-
-describe("tab navigation", () => {
-  it("cycles forward and back, wrapping at both ends", async () => {
-    mount();
-    await click("open-tab");
-    await click("open-tab");
-    expect(screen.getByTestId("names").textContent).toBe("Untitled,Untitled 2,Untitled 3");
-    expect(active()).toBe("Untitled 3");
-
-    // Forward from the last wraps to the first.
-    await menu("next-tab");
-    expect(active()).toBe("Untitled");
-
-    await menu("next-tab");
-    expect(active()).toBe("Untitled 2");
-
-    // Back from the first wraps to the last.
-    await menu("prev-tab");
-    expect(active()).toBe("Untitled");
-    await menu("prev-tab");
-    expect(active()).toBe("Untitled 3");
-  });
-
-  it("is a no-op with a single document", async () => {
-    mount();
-    expect(active()).toBe("Untitled");
-
-    await menu("next-tab");
-    await menu("prev-tab");
-
-    expect(active()).toBe("Untitled");
-    expect(screen.getByTestId("tab-count").textContent).toBe("1");
-  });
-});
 
 describe("opening several files at once", () => {
   beforeEach(() => {

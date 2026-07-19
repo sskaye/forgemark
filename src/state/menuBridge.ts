@@ -38,8 +38,6 @@ const APP_LEVEL_IDS = new Set([
   "print",
   "find-replace",
   "close-file",
-  "next-tab",
-  "prev-tab",
   "window-fill",
   "window-center",
   "window-left-half",

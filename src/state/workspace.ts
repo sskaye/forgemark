@@ -26,9 +26,6 @@ export type WorkspaceState = {
 
 export type WorkspaceAction =
   | { type: "openTab"; initial?: Partial<DocumentState> }
-  // Step through tabs. Wraps at either end, the way browser and editor
-  // tab cycling does.
-  | { type: "cycleTab"; delta: 1 | -1 }
   | { type: "closeTab"; docId: DocId }
   | { type: "activateTab"; docId: DocId }
   | { type: "reorderTab"; docId: DocId; toIndex: number }
@@ -168,13 +165,6 @@ export function reduceWorkspace(state: WorkspaceState, action: WorkspaceAction):
           ? order[Math.min(closedIndex, order.length - 1)]
           : state.activeId;
       return { ...state, docs, order, activeId };
-    }
-
-    case "cycleTab": {
-      if (state.order.length < 2) return state;
-      const from = state.order.indexOf(state.activeId);
-      const to = (from + action.delta + state.order.length) % state.order.length;
-      return { ...state, activeId: state.order[to] };
     }
 
     case "activateTab": {

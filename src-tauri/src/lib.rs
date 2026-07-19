@@ -335,25 +335,12 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .accelerator("Ctrl+Alt+C")
         .build(app)?;
 
-    // Tab navigation. The open documents themselves are listed in the
-    // app's own tab strip rather than here: a native list would have to
-    // be rebuilt from Rust every time a tab opens, closes, or is renamed,
-    // and it would duplicate a strip that's already on screen.
-    let next_tab = MenuItemBuilder::new("Next Document")
-        .id("next-tab")
-        .accelerator("CmdOrCtrl+Shift+]")
-        .build(app)?;
-    let prev_tab = MenuItemBuilder::new("Previous Document")
-        .id("prev-tab")
-        .accelerator("CmdOrCtrl+Shift+[")
-        .build(app)?;
-
+    // No tab navigation commands here on purpose: switching tabs is a
+    // click on the tab strip, and duplicating that as a menu item plus
+    // accelerator earns nothing.
     let window_submenu = SubmenuBuilder::new(app, "Window")
         .minimize()
         .maximize() // shows as "Zoom" — the Cocoa convention
-        .separator()
-        .item(&prev_tab)
-        .item(&next_tab)
         .separator()
         .item(&mr_fill)
         .item(&mr_center)

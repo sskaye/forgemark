@@ -409,9 +409,10 @@ reuse for tab switches. Two gotchas:
 
 ### Phase 5 — Native shell / menu routing — **implemented**
 
-- **Tab navigation.** ⌘⇧] / ⌘⇧[ as `next-tab` / `prev-tab` menu items in
-  the Window menu, routed through `menuBridge` to a `cycleTab` action
-  that wraps at both ends.
+- **Tab navigation: built, then removed.** ⌘⇧] / ⌘⇧[ plus Window-menu
+  items worked, but switching tabs is a click on a strip that's already
+  on screen — the shortcut and menu entries earned nothing. Removed
+  along with the `cycleTab` action rather than left as dead code.
 - **Multi-select open.** `openMarkdownFiles` replaces the `multiple:
 false` dialog; each file becomes a tab. Reads are sequential — parallel
   buys nothing perceptible and makes failures messier — and unreadable
@@ -433,9 +434,9 @@ deliberately not something a tab owns.
 
 **Deliberately not done: the native Window-menu document list.** It would
 have to be rebuilt from Rust on every tab open, close, and rename, and it
-duplicates the tab strip that's already on screen. The cost is real and
-the value is redundant, so the Window menu gets navigation commands
-instead of a list.
+duplicates the tab strip that's already on screen. The same reasoning
+later removed the navigation commands, so the Window menu is unchanged
+from before tabs.
 
 #### Original notes
 
