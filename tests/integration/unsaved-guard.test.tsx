@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
 import { ThemeProvider } from "../../src/theme/ThemeProvider";
-import { DocumentProvider, useDocument } from "../../src/state/DocumentProvider";
+import { DocumentProvider, useWorkspace } from "../../src/state/DocumentProvider";
 import { AppShell } from "../../src/components/AppShell";
 import { saveMarkdownFile, openMarkdownFile } from "../../src/services/fileIO";
 import { invoke } from "@tauri-apps/api/core";
@@ -21,19 +21,26 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn(() => Promise.resolve()) }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 
-// ⌘N and ⌘O discard the open buffer. Auto-save normally means there's
-// nothing to lose — but it's skipped for Untitled documents and while a
-// conflict is pending, and those were exactly the cases that discarded
-// silently. See `guardDiscard` in DocumentBindings.
+// Since tabs landed, ⌘N and ⌘O open a new tab and discard nothing, so
+// they no longer need a guard. The two actions that DO destroy work are
+// closing a tab and quitting — that's what this covers.
+//
+// Auto-save means a saved document is only dirty for the ~500ms since the
+// last keystroke, so the exposed cases are the ones auto-save skips:
+// Untitled buffers (no path to write to) and documents with a pending
+// conflict (writing would clobber the disk copy).
 
 function Probe() {
-  const { state, dispatch } = useDocument();
+  const { workspace, dispatch } = useWorkspace();
+  const active = workspace.docs[workspace.activeId];
   return (
     <div>
-      <span data-testid="body">{state.body}</span>
-      <span data-testid="dirty">{state.dirty ? "dirty" : "clean"}</span>
+      <span data-testid="body">{active.body}</span>
+      <span data-testid="name">{active.fileName}</span>
+      <span data-testid="dirty">{active.dirty ? "dirty" : "clean"}</span>
+      <span data-testid="tab-count">{workspace.order.length}</span>
       <button
-        data-testid="load-saved"
+        data-testid="load"
         onClick={() =>
           dispatch({
             type: "load",
@@ -77,38 +84,73 @@ function mount() {
   );
 }
 
-function pressNewDocument() {
-  fireEvent.keyDown(window, { key: "n", metaKey: true });
+const body = () => screen.getByTestId("body").textContent;
+const click = async (id: string) => {
+  await act(async () => {
+    screen.getByTestId(id).click();
+  });
+};
+
+// File > Close, which the tab strip's × also routes through.
+async function closeTab() {
+  await act(async () => {
+    window.dispatchEvent(new CustomEvent("forgemark:menu", { detail: "close-file" }));
+  });
 }
 
-const body = () => screen.getByTestId("body").textContent;
+async function requestQuit() {
+  await act(async () => {
+    window.dispatchEvent(new CustomEvent("forgemark:close-requested"));
+  });
+}
 
-describe("unsaved-work guard", () => {
+describe("opening no longer discards anything", () => {
   beforeEach(() => {
     vi.mocked(saveMarkdownFile).mockReset().mockResolvedValue("/tmp/saved.md");
-    vi.mocked(invoke).mockClear();
     vi.mocked(openMarkdownFile)
       .mockReset()
       .mockResolvedValue(null as never);
+    vi.mocked(invoke).mockClear();
   });
 
-  it("prompts instead of discarding an Untitled buffer", async () => {
+  it("⌘N opens a tab instead of replacing unsaved work", async () => {
+    // This used to prompt, because ⌘N destroyed the buffer in place.
     mount();
-    fireEvent.click(screen.getByTestId("edit"));
+    await click("edit");
     await waitFor(() => expect(screen.getByTestId("dirty").textContent).toBe("dirty"));
 
-    await act(async () => pressNewDocument());
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "n", metaKey: true });
+    });
+
+    await waitFor(() => expect(screen.getByTestId("tab-count").textContent).toBe("2"));
+    expect(screen.queryByTestId("fm-unsaved-modal")).toBeNull();
+    // The work is still open in its own tab, untouched.
+    expect(body()).toBe("");
+    expect(screen.getByTestId("name").textContent).toBe("Untitled 2");
+  });
+});
+
+describe("closing a tab guards unsaved work", () => {
+  beforeEach(() => {
+    vi.mocked(saveMarkdownFile).mockReset().mockResolvedValue("/tmp/saved.md");
+    vi.mocked(invoke).mockClear();
+  });
+
+  it("prompts instead of dropping an Untitled buffer", async () => {
+    mount();
+    await click("edit");
+    await closeTab();
 
     expect(await screen.findByTestId("fm-unsaved-modal")).toBeTruthy();
-    // Crucially, the work is still there — the prompt blocks the discard
-    // rather than reporting it after the fact.
+    // The prompt blocks the close rather than reporting it afterwards.
     expect(body()).toBe("precious work\n");
   });
 
-  it("Don't Save discards, Cancel does not", async () => {
+  it("Cancel keeps the document; Don't Save drops it", async () => {
     const { unmount } = mount();
-    fireEvent.click(screen.getByTestId("edit"));
-    await act(async () => pressNewDocument());
+    await click("edit");
+    await closeTab();
     await screen.findByTestId("fm-unsaved-modal");
 
     fireEvent.click(screen.getByTestId("fm-unsaved-cancel"));
@@ -117,41 +159,44 @@ describe("unsaved-work guard", () => {
     unmount();
 
     mount();
-    fireEvent.click(screen.getByTestId("edit"));
-    await act(async () => pressNewDocument());
+    await click("edit");
+    await closeTab();
     await screen.findByTestId("fm-unsaved-modal");
 
     await act(async () => {
       fireEvent.click(screen.getByTestId("fm-unsaved-discard"));
     });
+    // Closing the last tab leaves a fresh Untitled one rather than an
+    // empty window.
     await waitFor(() => expect(body()).toBe(""));
+    expect(screen.getByTestId("tab-count").textContent).toBe("1");
   });
 
-  it("saves silently and proceeds when the file already has a path", async () => {
+  it("saves silently when the document already has a path", async () => {
     // Forgemark is auto-save-first: prompting to save something auto-save
     // would have written 500ms later would be incoherent.
     mount();
-    fireEvent.click(screen.getByTestId("load-saved"));
-    fireEvent.click(screen.getByTestId("edit"));
+    await click("load");
+    await click("edit");
     await waitFor(() => expect(screen.getByTestId("dirty").textContent).toBe("dirty"));
 
-    await act(async () => pressNewDocument());
+    await closeTab();
 
-    await waitFor(() => expect(body()).toBe(""));
+    await waitFor(() =>
+      expect(vi.mocked(saveMarkdownFile)).toHaveBeenCalledWith("/tmp/saved.md", "precious work\n"),
+    );
     expect(screen.queryByTestId("fm-unsaved-modal")).toBeNull();
-    expect(vi.mocked(saveMarkdownFile)).toHaveBeenCalledWith("/tmp/saved.md", "precious work\n");
   });
 
   it("offers no Save button while a conflict is pending", async () => {
     // Saving mid-conflict would clobber the disk copy, so the only safe
-    // choices here are discard or cancel.
+    // choices are discard or cancel.
     mount();
-    fireEvent.click(screen.getByTestId("load-saved"));
-    fireEvent.click(screen.getByTestId("edit"));
-    fireEvent.click(screen.getByTestId("conflict"));
-    await waitFor(() => expect(screen.getByTestId("dirty").textContent).toBe("dirty"));
+    await click("load");
+    await click("edit");
+    await click("conflict");
 
-    await act(async () => pressNewDocument());
+    await closeTab();
 
     expect(await screen.findByTestId("fm-unsaved-modal")).toBeTruthy();
     expect(screen.queryByTestId("fm-unsaved-save")).toBeNull();
@@ -159,16 +204,28 @@ describe("unsaved-work guard", () => {
     expect(vi.mocked(saveMarkdownFile)).not.toHaveBeenCalled();
   });
 
-  it("quit waits for the prompt, then tells Rust it may exit", async () => {
-    // Rust blocks the close and emits forgemark:close-requested; nothing
-    // exits until the frontend invokes approve_exit.
+  it("does not prompt when there is nothing to lose", async () => {
     mount();
-    fireEvent.click(screen.getByTestId("edit"));
-    await waitFor(() => expect(screen.getByTestId("dirty").textContent).toBe("dirty"));
+    await click("load");
+    await waitFor(() => expect(body()).toBe("on disk\n"));
 
-    await act(async () => {
-      window.dispatchEvent(new CustomEvent("forgemark:close-requested"));
-    });
+    await closeTab();
+
+    await waitFor(() => expect(body()).toBe(""));
+    expect(screen.queryByTestId("fm-unsaved-modal")).toBeNull();
+  });
+});
+
+describe("quitting guards unsaved work", () => {
+  beforeEach(() => {
+    vi.mocked(saveMarkdownFile).mockReset().mockResolvedValue("/tmp/saved.md");
+    vi.mocked(invoke).mockClear();
+  });
+
+  it("waits for the prompt, then tells Rust it may exit", async () => {
+    mount();
+    await click("edit");
+    await requestQuit();
 
     expect(await screen.findByTestId("fm-unsaved-modal")).toBeTruthy();
     expect(vi.mocked(invoke)).not.toHaveBeenCalledWith("approve_exit");
@@ -179,27 +236,14 @@ describe("unsaved-work guard", () => {
     await waitFor(() => expect(vi.mocked(invoke)).toHaveBeenCalledWith("approve_exit"));
   });
 
-  it("quit exits straight away when nothing is dirty", async () => {
+  it("exits straight away when nothing is dirty", async () => {
     mount();
-    fireEvent.click(screen.getByTestId("load-saved"));
+    await click("load");
     await waitFor(() => expect(body()).toBe("on disk\n"));
 
-    await act(async () => {
-      window.dispatchEvent(new CustomEvent("forgemark:close-requested"));
-    });
+    await requestQuit();
 
     await waitFor(() => expect(vi.mocked(invoke)).toHaveBeenCalledWith("approve_exit"));
-    expect(screen.queryByTestId("fm-unsaved-modal")).toBeNull();
-  });
-
-  it("does not prompt when there is nothing to lose", async () => {
-    mount();
-    fireEvent.click(screen.getByTestId("load-saved"));
-    await waitFor(() => expect(body()).toBe("on disk\n"));
-
-    await act(async () => pressNewDocument());
-
-    await waitFor(() => expect(body()).toBe(""));
     expect(screen.queryByTestId("fm-unsaved-modal")).toBeNull();
   });
 });

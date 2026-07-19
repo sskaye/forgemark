@@ -58,7 +58,7 @@ export function DocumentBindings({
   docId?: DocId;
   logger?: Logger;
 }) {
-  const { workspace, dispatchTo } = useWorkspace();
+  const { workspace, dispatch: workspaceDispatch, dispatchTo } = useWorkspace();
   const id = docId ?? workspace.activeId;
   const state = workspace.docs[id];
   // Window-level listeners (shortcuts, menu commands, quit) are app-wide
@@ -67,10 +67,6 @@ export function DocumentBindings({
   const isActive = id === workspace.activeId;
 
   const dispatch = useMemo(() => dispatchTo(id), [dispatchTo, id]);
-  const setViewMode = useCallback(
-    (viewMode: "rendered" | "source") => dispatch({ type: "setViewMode", viewMode }),
-    [dispatch],
-  );
   const { recordOpened, remove: removeRecent } = useRecentFiles();
   const [defaultView] = useDefaultView();
   // Hold the default view in a ref so the load handler reads the
@@ -89,6 +85,10 @@ export function DocumentBindings({
   // the window has to consider background tabs too.
   const workspaceRef = useRef(workspace);
   workspaceRef.current = workspace;
+  const workspaceDispatchRef = useRef(workspaceDispatch);
+  workspaceDispatchRef.current = workspaceDispatch;
+  const idRef = useRef(id);
+  idRef.current = id;
 
   // guardDiscard is declared further down (it needs performSave), but the
   // open-path listener above has to reach it. A ref keeps that listener
@@ -134,19 +134,24 @@ export function DocumentBindings({
           parsed = recovery.file;
           dispatch({ type: "error", message: recoveryMessage(err, recovery) });
         }
-        dispatch({
-          type: "load",
-          filePath: opened.path,
-          fileName: opened.fileName,
-          text: opened.text,
-          body: parsed.body,
-          comments: parsed.comments,
-          readOnly: opened.readOnly,
+        // Open in a tab. `openTab` focuses an existing tab if this file
+        // is already open, and reuses the current one if it's an
+        // untouched Untitled buffer.
+        workspaceDispatchRef.current({
+          type: "openTab",
+          initial: {
+            filePath: opened.path,
+            fileName: opened.fileName,
+            originalText: opened.text,
+            body: parsed.body,
+            comments: parsed.comments,
+            readOnly: opened.readOnly,
+            // Seed the preferred view here rather than dispatching a
+            // second action at the freshly created tab.
+            viewMode: defaultViewRef.current,
+          },
         });
         recordOpenedRef.current(opened.path, opened.fileName);
-        if (defaultViewRef.current !== "rendered") {
-          setViewMode(defaultViewRef.current);
-        }
       } catch (err) {
         // Stale recent-file entry — surface a polite error and the
         // caller can decide to remove it from the recent list.
@@ -163,8 +168,10 @@ export function DocumentBindings({
         }
       }
     },
-    [dispatch, setViewMode, logger],
+    [dispatch, logger],
   );
+  const openPathRef = useRef(openPath);
+  openPathRef.current = openPath;
 
   // ⌘O's dialog branch, extracted so the discard guard can replay it
   // after the user has decided what to do with unsaved work.
@@ -187,26 +194,24 @@ export function DocumentBindings({
         parsed = recovery.file;
         dispatch({ type: "error", message: recoveryMessage(err, recovery) });
       }
-      dispatch({
-        type: "load",
-        filePath: opened.path,
-        fileName: opened.fileName,
-        text: opened.text,
-        body: parsed.body,
-        comments: parsed.comments,
-        readOnly: opened.readOnly,
+      workspaceDispatchRef.current({
+        type: "openTab",
+        initial: {
+          filePath: opened.path,
+          fileName: opened.fileName,
+          originalText: opened.text,
+          body: parsed.body,
+          comments: parsed.comments,
+          readOnly: opened.readOnly,
+          viewMode: defaultViewRef.current,
+        },
       });
       recordOpenedRef.current(opened.path, opened.fileName);
-      // Phase 11 default-view preference: applied on the next
-      // opened document, per design handoff §9.
-      if (defaultViewRef.current !== "rendered") {
-        setViewMode(defaultViewRef.current);
-      }
     } catch (err) {
       logger("open failed", err);
       dispatch({ type: "error", message: errorMessage("Open failed", err) });
     }
-  }, [dispatch, logger, setViewMode]);
+  }, [dispatch, logger]);
 
   // Listen for `forgemark:open-path` custom events from non-keyboard
   // surfaces (Open Recent menu, future native menu bar).
@@ -214,9 +219,8 @@ export function DocumentBindings({
     if (!isActive) return;
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<{ path: string }>).detail;
-      // Open Recent / Finder discard the current buffer just like ⌘O
-      // does, so they go through the same guard.
-      if (detail?.path) void guardDiscardRef.current({ kind: "openPath", path: detail.path });
+      // Open Recent / Finder open in a tab, same as ⌘O.
+      if (detail?.path) void openPathRef.current(detail.path);
     };
     window.addEventListener("forgemark:open-path", handler);
     return () => window.removeEventListener("forgemark:open-path", handler);
@@ -263,22 +267,50 @@ export function DocumentBindings({
     [dispatch, logger],
   );
 
+  // Quitting has to account for every open document, and each document's
+  // file IO lives in its own bindings instance — this one can only save
+  // its own. So the quit walks the tabs: find the first document with
+  // unsaved work, hand focus to it so its instance takes over, and let
+  // that instance re-enter here once it's dealt with. When nothing is
+  // dirty anywhere, tell Rust it may exit.
+  const runQuit = useCallback(async () => {
+    const ws = workspaceRef.current;
+    const dirtyId = ws.order.find((docId) => ws.docs[docId].dirty);
+
+    if (!dirtyId) {
+      try {
+        await invoke("approve_exit");
+      } catch (err) {
+        logger("approve exit failed", err);
+      }
+      return;
+    }
+
+    if (dirtyId !== ws.activeId) {
+      // Bring the unsaved document forward — prompting about a document
+      // the user can't see would be baffling — then re-emit so the newly
+      // active instance picks the quit up.
+      workspaceDispatchRef.current({ type: "activateTab", docId: dirtyId });
+      window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("forgemark:close-requested"));
+      }, 0);
+      return;
+    }
+
+    await guardDiscardRef.current({ kind: "quit" });
+  }, [logger]);
+
   // Carry out an intent once nothing is standing in its way.
   const executeIntent = useCallback(
     async (intent: PendingIntent) => {
-      if (intent.kind === "newUntitled") dispatch({ type: "newUntitled" });
-      else if (intent.kind === "openDialog") await runOpenDialog();
-      else if (intent.kind === "openPath") await openPath(intent.path);
-      else {
-        // Rust is holding the window open waiting for this.
-        try {
-          await invoke("approve_exit");
-        } catch (err) {
-          logger("approve exit failed", err);
-        }
+      if (intent.kind === "closeTab") {
+        workspaceDispatchRef.current({ type: "closeTab", docId: intent.docId });
+        return;
       }
+      // Quit: loop back so the next unsaved document gets its turn.
+      await runQuit();
     },
-    [dispatch, openPath, runOpenDialog, logger],
+    [runQuit],
   );
 
   // Rust intercepts window-close and ⌘Q and defers to us, so quitting
@@ -286,10 +318,12 @@ export function DocumentBindings({
   // beforeunload, which Tauri doesn't reliably honour.
   useEffect(() => {
     if (!isActive) return;
-    const onCloseRequested = () => void guardDiscardRef.current({ kind: "quit" });
+    const onCloseRequested = () => void runQuitRef.current();
     window.addEventListener("forgemark:close-requested", onCloseRequested);
     return () => window.removeEventListener("forgemark:close-requested", onCloseRequested);
   }, [isActive]);
+  const runQuitRef = useRef(runQuit);
+  runQuitRef.current = runQuit;
 
   // ⌘N and ⌘O throw away the current buffer. Before this guard they did
   // it silently, which was survivable only because auto-save had usually
@@ -340,6 +374,19 @@ export function DocumentBindings({
           if (!cancelled) dispatch({ type: "clearIntent" });
           return;
         }
+      } else if (intent.kind === "quit") {
+        // "Don't Save" during a quit. The document stays dirty, so the
+        // quit walk would find it again and ask about it forever — drop
+        // the tab instead. We're exiting anyway, and removing it is what
+        // lets the walk move on to the next unsaved document.
+        workspaceDispatchRef.current({ type: "closeTab", docId: idRef.current });
+        if (!cancelled) dispatch({ type: "clearIntent" });
+        // Re-enter once the workspace has settled, rather than reading
+        // stale state synchronously.
+        window.setTimeout(() => {
+          window.dispatchEvent(new CustomEvent("forgemark:close-requested"));
+        }, 0);
+        return;
       }
       if (cancelled) return;
       await executeIntent(intent);
@@ -357,7 +404,7 @@ export function DocumentBindings({
     if (!isActive) return;
     const onMenu = (e: Event) => {
       if ((e as CustomEvent<string>).detail !== "close-file") return;
-      void guardDiscardRef.current({ kind: "newUntitled" });
+      void guardDiscardRef.current({ kind: "closeTab", docId: idRef.current });
     };
     window.addEventListener("forgemark:menu", onMenu);
     return () => window.removeEventListener("forgemark:menu", onMenu);
@@ -373,7 +420,8 @@ export function DocumentBindings({
       const s = stateRef.current;
       if (key === "o") {
         e.preventDefault();
-        await guardDiscard({ kind: "openDialog" });
+        // Opens in a tab of its own — nothing is discarded, so no guard.
+        await runOpenDialog();
       } else if (key === "s") {
         e.preventDefault();
         if (s.readOnly) return;
@@ -390,12 +438,12 @@ export function DocumentBindings({
         await performSave({ forcePrompt: e.shiftKey });
       } else if (key === "n") {
         e.preventDefault();
-        await guardDiscard({ kind: "newUntitled" });
+        workspaceDispatchRef.current({ type: "openTab" });
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [dispatch, guardDiscard, performSave, isActive]);
+  }, [dispatch, performSave, runOpenDialog, isActive]);
 
   // ── Auto-save (500ms quiet period after last edit) ──
   // Phase 10: skip auto-save while there's an externalChange pending.

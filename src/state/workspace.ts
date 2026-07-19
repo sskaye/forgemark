@@ -106,6 +106,29 @@ export function reduceWorkspace(state: WorkspaceState, action: WorkspaceAction):
         const existing = findByPath(state, path);
         if (existing) return state.activeId === existing ? state : { ...state, activeId: existing };
       }
+      // Opening a file while sitting on an untouched Untitled tab reuses
+      // that tab instead of leaving an empty one behind. Only for file
+      // opens: a bare ⌘N on an empty tab should still give you a second
+      // one, or the shortcut would look broken.
+      const active = state.docs[state.activeId];
+      const activeIsPristine =
+        active != null && active.filePath == null && !active.dirty && active.body === "";
+      if (activeIsPristine && action.initial != null) {
+        return {
+          ...state,
+          docs: {
+            ...state.docs,
+            [state.activeId]: {
+              ...createDocument(state.docs, action.initial),
+              // The editor for this tab is already mounted, so bump the
+              // remount key — otherwise the incoming document inherits the
+              // empty buffer's undo history.
+              loadGeneration: active.loadGeneration + 1,
+            },
+          },
+        };
+      }
+
       const id = makeId(state.nextDocId);
       return {
         docs: { ...state.docs, [id]: createDocument(state.docs, action.initial) },

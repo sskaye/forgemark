@@ -155,19 +155,24 @@ describe("window-level listeners stay single", () => {
     expect(vi.mocked(saveMarkdownFile)).toHaveBeenCalledWith("/other/second.md", "second body\n");
   });
 
-  it("⌘N replaces only the active document", async () => {
+  it("⌘N opens exactly one new tab, not one per open document", async () => {
+    // Since tabs landed ⌘N adds a document rather than replacing the
+    // current one. That makes it a sharp test of the isActive gate:
+    // two mounted bindings without it would each handle the keystroke
+    // and open two tabs.
     mount();
     await click("load-first");
     await click("open-tab");
     await click("load-second");
+    expect(screen.getByTestId("tab-count").textContent).toBe("2");
 
     await act(async () => {
       fireEvent.keyDown(window, { key: "n", metaKey: true });
     });
 
-    // The active tab resets; the background one is untouched.
-    await waitFor(() => expect(screen.getByTestId("active-name").textContent).toBe("Untitled"));
+    await waitFor(() => expect(screen.getByTestId("tab-count").textContent).toBe("3"));
+    // The existing documents are untouched.
     expect(screen.getByTestId("first-body").textContent).toBe("first body\n");
-    expect(screen.getByTestId("tab-count").textContent).toBe("2");
+    expect(screen.getByTestId("active-name").textContent).toBe("Untitled");
   });
 });

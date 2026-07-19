@@ -274,7 +274,39 @@ each register a watch on that folder and each wakes on the other's saves
 before filtering by basename. Correct, just duplicated work. Add a
 path-keyed registry with refcounting only if profiling shows it matters.
 
-### Phase 3 — Tab bar UI
+### Phase 3 — Tab bar UI — **implemented**
+
+`TabBar` sits between `TitleBar` and `ErrorBanner`, and hides itself
+entirely while one document is open so the app stays as quiet as it was.
+Manually verified in a real window.
+
+Tabs made three semantics change, beyond the strip itself:
+
+- **⌘N / ⌘O no longer discard anything**, so they no longer prompt — they
+  open tabs. The guard didn't go away, it moved to the two actions that
+  now genuinely destroy work: closing a tab and quitting. `PendingIntent`
+  shrank from four cases to two.
+- **Opening a file onto an untouched Untitled tab reuses it** instead of
+  leaving an empty tab behind. File opens only; a bare ⌘N on an empty tab
+  still gives you a second one, or the shortcut looks broken.
+- **Quit walks the tabs.** Each document's file IO lives in its own
+  bindings instance, so the active one can't save another. It finds the
+  first unsaved document, brings it forward, asks, then re-enters for the
+  next. Note "Don't Save" during a quit **closes that tab**: the document
+  stays dirty otherwise, so the walk would find it again and ask forever.
+  That's what makes the loop converge.
+
+Six pre-existing tests asserted the old ⌘N/⌘O prompt behavior. They were
+rewritten rather than deleted, moving each assertion to where the
+protection now lives. One became stronger: ⌘N must open exactly _one_
+tab, which fails loudly if the `isActive` gate regresses.
+
+**Known limitation, addressed in Phase 4:** `AppShell` still renders a
+single `EditorPane` for the active document, so switching tabs remounts
+the editor. Content and dirty state survive (they're in the reducer) but
+per-tab undo history, cursor, and scroll do not.
+
+#### Original notes
 
 `.fm-app-shell` is already a vertical flex stack with fixed-height chrome
 on top, so `<TabBar />` between `TitleBar` and `ErrorBanner`

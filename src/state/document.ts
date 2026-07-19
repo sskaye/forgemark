@@ -76,11 +76,14 @@ export type DocumentState = {
   intentResolution: "save" | "discard" | null;
 };
 
-// Something the user asked for that throws away the current buffer.
+// Something the user asked for that would throw unsaved work away.
+//
+// Before tabs this also covered ⌘N and ⌘O, which replaced the open buffer
+// in place. They now open a new tab instead and discard nothing, so the
+// guard narrowed to the two actions that genuinely destroy work.
 export type PendingIntent =
-  | { kind: "newUntitled" }
-  | { kind: "openDialog" }
-  | { kind: "openPath"; path: string }
+  // Closing a tab drops that document.
+  | { kind: "closeTab"; docId: string }
   // Window close or ⌘Q. Rust has blocked the exit and is waiting to be
   // told it may proceed.
   | { kind: "quit" };

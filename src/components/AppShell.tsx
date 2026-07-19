@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TitleBar } from "./TitleBar";
+import { TabBar } from "./TabBar";
 import { Sidebar } from "./Sidebar";
 import { EditorPane } from "./EditorPane";
 import { ErrorBanner } from "./ErrorBanner";
@@ -190,6 +191,7 @@ export function AppShell() {
         onToggleSidebar={() => setSidebarOpen((s) => !s)}
         onOpenSettings={() => setSettingsOpen(true)}
       />
+      <TabBar />
       <ErrorBanner />
       {/* Phase 10 — file-conflict surfaces. The banner shows when the
           file changed on disk but we have no unsaved work; the
