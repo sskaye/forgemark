@@ -407,7 +407,37 @@ reuse for tab switches. Two gotchas:
   (`RenderedView.tsx:246`), which swallows updates during mount. On
   remount it starts `false` and flips via `queueMicrotask`.
 
-### Phase 5 — Native shell / menu routing
+### Phase 5 — Native shell / menu routing — **implemented**
+
+- **Tab navigation.** ⌘⇧] / ⌘⇧[ as `next-tab` / `prev-tab` menu items in
+  the Window menu, routed through `menuBridge` to a `cycleTab` action
+  that wraps at both ends.
+- **Multi-select open.** `openMarkdownFiles` replaces the `multiple:
+false` dialog; each file becomes a tab. Reads are sequential — parallel
+  buys nothing perceptible and makes failures messier — and unreadable
+  files are skipped rather than sinking the whole batch.
+- **`close-file` → close tab.** Already done in Phase 3.
+
+**Correction to this document.** Earlier revisions claimed
+`windowActions.ts` had a latent bug in `window-center`, "working only by
+accident of assignment order". **That was wrong.** `previousGeometry` is
+assigned the _current_ geometry immediately above, so reading `.w/.h`
+from it returns the current size — exactly what "keep current size,
+centre it" wants. The code was correct; one variable was just serving two
+meanings. Phase 5 introduces a `current` local and reads that, which is a
+readability change, not a fix.
+
+Likewise `previousGeometry` stays at module scope: it's a property of the
+window, Forgemark is single-window by decision (§1), and it is
+deliberately not something a tab owns.
+
+**Deliberately not done: the native Window-menu document list.** It would
+have to be rebuilt from Rust on every tab open, close, and rename, and it
+duplicates the tab strip that's already on screen. The cost is real and
+the value is redundant, so the Window menu gets navigation commands
+instead of a list.
+
+#### Original notes
 
 - `close-file` currently dispatches `newUntitled` (`AppShell.tsx:149`) —
   should close a tab.

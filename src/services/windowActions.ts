@@ -25,9 +25,14 @@ export type WindowAction =
 
 type Geometry = { x: number; y: number; w: number; h: number };
 
-// Module-level memo of the last "before resize" geometry. Set right
-// before each non-return action; cleared on return-previous so a
-// double-tap returns where you started rather than ping-ponging.
+// Memo of the last "before resize" geometry. Set right before each
+// non-return action; cleared on return-previous so a double-tap returns
+// where you started rather than ping-ponging.
+//
+// Module scope is right for this: it's a property of the window, and
+// Forgemark is single-window (tabs, not windows — see
+// docs/MULTI-DOCUMENT-PLAN.md §1). It is deliberately NOT per-document;
+// resizing is not something a tab owns.
 let previousGeometry: Geometry | null = null;
 
 export async function applyWindowAction(action: WindowAction): Promise<void> {
@@ -47,12 +52,13 @@ export async function applyWindowAction(action: WindowAction): Promise<void> {
   const scale = await win.scaleFactor();
   const curPos = await win.outerPosition();
   const curSize = await win.outerSize();
-  previousGeometry = {
+  const current: Geometry = {
     x: curPos.x / scale,
     y: curPos.y / scale,
     w: curSize.width / scale,
     h: curSize.height / scale,
   };
+  previousGeometry = current;
 
   // Compute the target geometry from the screen's available area.
   const availW = window.screen.availWidth;
@@ -74,11 +80,14 @@ export async function applyWindowAction(action: WindowAction): Promise<void> {
       // already filling
       break;
     case "window-center": {
-      // Keep the current size, centre on the available area.
-      x = availLeft + Math.max(0, Math.floor((availW - previousGeometry.w) / 2));
-      y = availTop + Math.max(0, Math.floor((availH - previousGeometry.h) / 2));
-      w = previousGeometry.w;
-      h = previousGeometry.h;
+      // Keep the current size, centre on the available area. Reads
+      // `current`, not `previousGeometry` — they hold the same value here
+      // (the memo was just assigned from it), but naming the one we mean
+      // keeps this correct if the snapshot ever moves.
+      x = availLeft + Math.max(0, Math.floor((availW - current.w) / 2));
+      y = availTop + Math.max(0, Math.floor((availH - current.h) / 2));
+      w = current.w;
+      h = current.h;
       break;
     }
     case "window-left-half":

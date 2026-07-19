@@ -21,16 +21,41 @@ export type OpenedFile = {
 // Open a markdown file. Returns null if the user cancelled.
 // Throws if the chosen file can't be read (e.g. moved between dialog
 // pick and read).
+//
+// Kept for callers that want exactly one document; multi-select lives in
+// `openMarkdownFiles` below.
 export async function openMarkdownFile(): Promise<OpenedFile | null> {
+  const [first = null] = await openMarkdownFiles({ multiple: false });
+  return first;
+}
+
+// Open one or more markdown files. Each becomes its own tab.
+//
+// Reads are sequential rather than concurrent: a fistful of parallel
+// file reads buys nothing perceptible here and makes the failure story
+// worse. Files that can't be read are skipped and reported, so one bad
+// path out of five doesn't sink the other four.
+export async function openMarkdownFiles(opts: { multiple?: boolean } = {}): Promise<OpenedFile[]> {
   const selected = await open({
-    multiple: false,
+    multiple: opts.multiple ?? true,
     directory: false,
     filters: [{ name: "Markdown", extensions: ["md", "markdown"] }],
   });
-  if (selected === null) return null;
-  const path = Array.isArray(selected) ? selected[0] : selected;
-  if (!path) return null;
-  return readMarkdownFile(path);
+  if (selected === null) return [];
+  const paths = (Array.isArray(selected) ? selected : [selected]).filter(Boolean);
+  const opened: OpenedFile[] = [];
+  const failures: string[] = [];
+  for (const path of paths) {
+    try {
+      opened.push(await readMarkdownFile(path));
+    } catch (err) {
+      failures.push(`${path}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  if (opened.length === 0 && failures.length > 0) {
+    throw new Error(failures.join("; "));
+  }
+  return opened;
 }
 
 // Read a known path. Surfaces a helpful error if the path is missing or

@@ -3,7 +3,7 @@ import { useWorkspace } from "./DocumentProvider";
 import type { PendingIntent } from "./document";
 import { anyDirty, type DocId } from "./workspace";
 import { invoke } from "@tauri-apps/api/core";
-import { openMarkdownFile, saveMarkdownFile, readMarkdownFile } from "../services/fileIO";
+import { openMarkdownFiles, saveMarkdownFile, readMarkdownFile } from "../services/fileIO";
 import {
   parseForgemarkFile,
   recoverForgemarkFile,
@@ -173,40 +173,41 @@ export function DocumentBindings({
   const openPathRef = useRef(openPath);
   openPathRef.current = openPath;
 
-  // ⌘O's dialog branch, extracted so the discard guard can replay it
-  // after the user has decided what to do with unsaved work.
+  // ⌘O. Each chosen file opens in its own tab.
   const runOpenDialog = useCallback(async () => {
     try {
-      const opened = await openMarkdownFile();
-      if (!opened) return;
-      let parsed;
-      try {
-        // Phase 9: tolerant mode keeps comments that are missing
-        // their marker pair so the lost-anchor banner can surface
-        // them (instead of dropping all comments on a single
-        // missing-marker case).
-        parsed = parseForgemarkFile(opened.text, { tolerant: true });
-      } catch (err) {
-        // Fail soft: recover as many comments as possible (coalescing
-        // splattered anchors, detaching unrecoverable ones for
-        // reattachment) instead of dropping every comment.
-        const recovery = recoverForgemarkFile(opened.text);
-        parsed = recovery.file;
-        dispatch({ type: "error", message: recoveryMessage(err, recovery) });
+      const files = await openMarkdownFiles();
+      for (const opened of files) {
+        let parsed;
+        try {
+          // Phase 9: tolerant mode keeps comments that are missing their
+          // marker pair so the lost-anchor banner can surface them,
+          // instead of dropping all comments on a single missing marker.
+          parsed = parseForgemarkFile(opened.text, { tolerant: true });
+        } catch (err) {
+          // Fail soft: recover as many comments as possible (coalescing
+          // splattered anchors, detaching unrecoverable ones for
+          // reattachment) instead of dropping every comment.
+          const recovery = recoverForgemarkFile(opened.text);
+          parsed = recovery.file;
+          dispatch({ type: "error", message: recoveryMessage(err, recovery) });
+        }
+        workspaceDispatchRef.current({
+          type: "openTab",
+          initial: {
+            filePath: opened.path,
+            fileName: opened.fileName,
+            originalText: opened.text,
+            body: parsed.body,
+            comments: parsed.comments,
+            readOnly: opened.readOnly,
+            // Seed the preferred view here rather than dispatching a
+            // second action at the freshly created tab.
+            viewMode: defaultViewRef.current,
+          },
+        });
+        recordOpenedRef.current(opened.path, opened.fileName);
       }
-      workspaceDispatchRef.current({
-        type: "openTab",
-        initial: {
-          filePath: opened.path,
-          fileName: opened.fileName,
-          originalText: opened.text,
-          body: parsed.body,
-          comments: parsed.comments,
-          readOnly: opened.readOnly,
-          viewMode: defaultViewRef.current,
-        },
-      });
-      recordOpenedRef.current(opened.path, opened.fileName);
     } catch (err) {
       logger("open failed", err);
       dispatch({ type: "error", message: errorMessage("Open failed", err) });

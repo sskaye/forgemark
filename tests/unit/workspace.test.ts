@@ -190,6 +190,26 @@ describe("workspace — activate and reorder", () => {
     expect(reduceWorkspace(activated, { type: "activateTab", docId: "nope" })).toBe(activated);
   });
 
+  it("cycles forward and back, wrapping at both ends", () => {
+    let ws = createWorkspace();
+    ws = reduceWorkspace(ws, { type: "openTab" });
+    ws = reduceWorkspace(ws, { type: "openTab" });
+    const [a, b, c] = ws.order;
+    expect(ws.activeId).toBe(c);
+
+    expect(reduceWorkspace(ws, { type: "cycleTab", delta: 1 }).activeId).toBe(a);
+    expect(reduceWorkspace(ws, { type: "cycleTab", delta: -1 }).activeId).toBe(b);
+
+    const atFirst = reduceWorkspace(ws, { type: "activateTab", docId: a });
+    expect(reduceWorkspace(atFirst, { type: "cycleTab", delta: -1 }).activeId).toBe(c);
+  });
+
+  it("cycling is a no-op with a single tab", () => {
+    const ws = createWorkspace();
+    expect(reduceWorkspace(ws, { type: "cycleTab", delta: 1 })).toBe(ws);
+    expect(reduceWorkspace(ws, { type: "cycleTab", delta: -1 })).toBe(ws);
+  });
+
   it("moves a tab and clamps out-of-range targets", () => {
     let ws = createWorkspace();
     ws = reduceWorkspace(ws, { type: "openTab" });
