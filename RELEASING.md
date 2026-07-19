@@ -34,8 +34,13 @@ rustup target add x86_64-apple-darwin   # one-time; aarch64 already added by tau
 The `npm run release` script captures every step of the macOS build/sign/notarize flow. Run it from a clean working tree.
 
 ```sh
-# Bump versions in package.json, src-tauri/Cargo.toml, src-tauri/tauri.conf.json
-# (all three must agree — there's no script for this yet).
+# Bump the version in FOUR places — all must agree, and there's no script:
+#   package.json
+#   src-tauri/tauri.conf.json
+#   src-tauri/Cargo.toml
+#   src-tauri/Cargo.lock   <- the `name = "forgemark"` entry. It's tracked,
+#                             and cargo rewrites it on the next build, so
+#                             skipping it leaves a stray diff mid-release.
 # Update CHANGELOG.md with the new release line.
 
 export APPLE_KEYCHAIN_PROFILE=forgemark-notary
@@ -74,15 +79,28 @@ A Gatekeeper prompt on a fresh account means the staple didn't apply; rerun `xcr
 
 ## Tag and publish
 
+Create the release **before** pushing the tag. Pushing the tag starts
+`windows-release.yml`, which creates the release itself if it doesn't exist
+yet — so doing it the other way round is a race, and if the workflow wins,
+`gh release create` fails with "release already exists".
+
 ```sh
 git tag -a v<ver> -m "Forgemark v<ver>"
-git push origin v<ver>
 
+# Create the release off the local tag first, with the macOS artifact.
 gh release create v<ver> \
   --title "Forgemark v<ver>" \
   --notes-file CHANGELOG.md \
   "src-tauri/target/universal-apple-darwin/release/bundle/dmg/Forgemark_<ver>_universal.dmg#Forgemark <ver> — universal macOS"
+
+# Then publish the tag; the Windows workflow attaches its installers to
+# the release that now exists.
+git push origin v<ver>
 ```
+
+If `gh release create` complains the tag doesn't exist on the remote yet, add
+`--target main` (it resolves the tag locally) or push the tag first and use
+`gh release upload` instead of `create`.
 
 (Tag signing requires GPG or SSH-based signing — drop `-s` if neither is set up.)
 
