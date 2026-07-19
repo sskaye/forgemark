@@ -70,6 +70,15 @@ export async function startMenuBridge(): Promise<UnlistenFn | null> {
       dispatchOpenPath(event.payload);
     });
 
+    // Rust blocks window-close and ⌘Q and asks us first, so unsaved work
+    // gets the same guard as ⌘N/⌘O. Re-dispatched as a DOM event to keep
+    // the decision in DocumentBindings (and testable without a Tauri
+    // runtime); it answers by invoking `approve_exit`.
+    const unlistenClose = await listen("forgemark:close-requested", () => {
+      if (typeof window === "undefined") return;
+      window.dispatchEvent(new CustomEvent("forgemark:close-requested"));
+    });
+
     // Drain any cold-start queue. invoke() returns the array and
     // clears the Rust state in one round-trip.
     try {
@@ -84,6 +93,7 @@ export async function startMenuBridge(): Promise<UnlistenFn | null> {
     return () => {
       unlistenMenu();
       unlistenOpen();
+      unlistenClose();
     };
   } catch {
     return null;

@@ -12,13 +12,15 @@
 // items (text-size, sidebar) live in Settings; comment-card actions
 // (Reply, Resolve, Edit, Delete, Reattach) live on the card itself.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-use tauri::Emitter;
-// Manager (`.state()`) and RunEvent (`::Opened`) are only used by the
-// macOS file-open handler below, which doesn't compile on other platforms.
+use tauri::{Emitter, Manager as _};
+// RunEvent::Opened is macOS-only, so the bare-name import that the
+// file-open handler uses stays gated. (Manager is imported unconditionally
+// above — the quit guard needs `.state()` on every platform.)
 #[cfg(target_os = "macos")]
-use tauri::{Manager, RunEvent};
+use tauri::RunEvent;
 
 // Queue of file paths that arrived before the webview was ready to
 // receive them. macOS fires RunEvent::Opened during cold-start (when
@@ -39,6 +41,22 @@ fn print_current_webview(window: tauri::WebviewWindow) -> Result<(), String> {
     window.print().map_err(|err| err.to_string())
 }
 
+// Set once the frontend has dealt with unsaved work and the app is
+// genuinely allowed to go away. Both quit paths below consult it, so a
+// second close request after approval isn't intercepted again — without
+// it, `app.exit` would re-enter ExitRequested and the app could never
+// actually quit.
+#[derive(Default)]
+struct ExitApproved(AtomicBool);
+
+// The frontend calls this after the unsaved-work guard is satisfied
+// (nothing dirty, saved, or explicitly discarded).
+#[tauri::command]
+fn approve_exit(app: tauri::AppHandle) {
+    app.state::<ExitApproved>().0.store(true, Ordering::SeqCst);
+    app.exit(0);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
@@ -46,15 +64,42 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .manage(PendingFiles::default())
+        .manage(ExitApproved::default())
         .invoke_handler(tauri::generate_handler![
             take_pending_files,
-            print_current_webview
+            print_current_webview,
+            approve_exit
         ])
+        // Closing the window (red button / ⌘W) must not throw away
+        // unsaved work. Rust can't know whether there is any, so hand the
+        // decision to the frontend: block the close, ask, and let it call
+        // `approve_exit` once it's satisfied. ⌘Q takes the ExitRequested
+        // path in `app.run` below and lands in the same place.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.state::<ExitApproved>().0.load(Ordering::SeqCst) {
+                    return;
+                }
+                api.prevent_close();
+                let _ = window.emit("forgemark:close-requested", ());
+            }
+        })
         .setup(|app| {
             let menu = build_menu(app.handle())?;
             app.set_menu(menu)?;
             app.on_menu_event(|app, event| {
                 let id = event.id().0.clone();
+                // Quit is a custom item (see build_menu) so it lands here
+                // rather than terminating the process behind our back.
+                // Send it down the same road as a window close.
+                if id == "quit" {
+                    if app.state::<ExitApproved>().0.load(Ordering::SeqCst) {
+                        app.exit(0);
+                    } else {
+                        let _ = app.emit("forgemark:close-requested", ());
+                    }
+                    return;
+                }
                 let _ = app.emit("forgemark:menu", id);
             });
             Ok(())
@@ -70,6 +115,20 @@ pub fn run() {
     // attached yet, so we also stash the paths in PendingFiles for
     // the JS `take_pending_files` invoke to claim on mount.
     app.run(|_app, _event| {
+        // Backstop for exit requests that reach neither the window-close
+        // handler nor the Quit menu item — e.g. Dock > Quit, or a system
+        // logout. Verified against ⌘Q and the red close button; the other
+        // routes are covered by construction rather than by testing.
+        //
+        // Note this can't intercept `app.exit(n)`: that arrives as
+        // ExitRequested with `code: Some(n)` and prevent_exit is ignored
+        // for it. Which is exactly what makes `approve_exit` work.
+        if let tauri::RunEvent::ExitRequested { api, .. } = &_event {
+            if !_app.state::<ExitApproved>().0.load(Ordering::SeqCst) {
+                api.prevent_exit();
+                let _ = _app.emit("forgemark:close-requested", ());
+            }
+        }
         // RunEvent::Opened is macOS-only (Finder "Open With", file
         // associations, drag-onto-dock). Compile it out on other platforms
         // so the Windows/Linux build doesn't reference a variant that
@@ -102,6 +161,15 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .id("settings")
         .accelerator("CmdOrCtrl+,")
         .build(app)?;
+    // Deliberately NOT SubmenuBuilder::quit(). The predefined Quit item
+    // maps to NSApplication `terminate:` on macOS, which tears the
+    // process down without ever entering Tauri's event loop — so
+    // RunEvent::ExitRequested never fires and the unsaved-work guard
+    // never runs. A custom item routes ⌘Q through on_menu_event instead.
+    let quit = MenuItemBuilder::new("Quit Forgemark")
+        .id("quit")
+        .accelerator("CmdOrCtrl+Q")
+        .build(app)?;
     let app_submenu = SubmenuBuilder::new(app, "Forgemark")
         .about(None)
         .separator()
@@ -109,7 +177,7 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .separator()
         .hide()
         .separator()
-        .quit()
+        .item(&quit)
         .build()?;
 
     // File menu — every item maps to an existing keyboard shortcut.
@@ -267,6 +335,9 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .accelerator("Ctrl+Alt+C")
         .build(app)?;
 
+    // No tab navigation commands here on purpose: switching tabs is a
+    // click on the tab strip, and duplicating that as a menu item plus
+    // accelerator earns nothing.
     let window_submenu = SubmenuBuilder::new(app, "Window")
         .minimize()
         .maximize() // shows as "Zoom" — the Cocoa convention

@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useRef } from "react";
-import { useDocument } from "./DocumentProvider";
-import { openMarkdownFile, saveMarkdownFile, readMarkdownFile } from "../services/fileIO";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useWorkspace } from "./DocumentProvider";
+import type { PendingIntent } from "./document";
+import { anyDirty, type DocId } from "./workspace";
+import { invoke } from "@tauri-apps/api/core";
+import { openMarkdownFiles, saveMarkdownFile, readMarkdownFile } from "../services/fileIO";
 import {
   parseForgemarkFile,
   recoverForgemarkFile,
@@ -40,14 +43,30 @@ function recoveryMessage(err: unknown, recovery: RecoveryResult): string {
 //
 //   ⌘O / Ctrl+O — open file dialog
 //   ⌘S / Ctrl+S — save (dirty: write body; clean: write original bytes)
-//   ⌘N / Ctrl+N — new untitled buffer (discards current; warning prompt
-//                  is Phase 11's save-on-close work, deferred for now)
+//   ⌘N / Ctrl+N — new untitled buffer (goes through guardDiscard, so
+//                  unsaved work is saved or explicitly discarded first)
 //
 // Auto-save: when a file path is set and the document is dirty, schedules
 // a save 500ms after the last edit. Untitled buffers never auto-save —
 // the user must ⌘S to choose a destination.
-export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }) {
-  const { state, dispatch, setViewMode } = useDocument();
+export function DocumentBindings({
+  docId,
+  logger = defaultLogger,
+}: {
+  // Which open document these bindings serve. Omitted means "the active
+  // one", which is how every pre-tabs caller uses it.
+  docId?: DocId;
+  logger?: Logger;
+}) {
+  const { workspace, dispatch: workspaceDispatch, dispatchTo } = useWorkspace();
+  const id = docId ?? workspace.activeId;
+  const state = workspace.docs[id];
+  // Window-level listeners (shortcuts, menu commands, quit) are app-wide
+  // singletons — only the active document's instance may own them, or N
+  // open documents would each save, each open, each prompt.
+  const isActive = id === workspace.activeId;
+
+  const dispatch = useMemo(() => dispatchTo(id), [dispatchTo, id]);
   const { recordOpened, remove: removeRecent } = useRecentFiles();
   const [defaultView] = useDefaultView();
   // Hold the default view in a ref so the load handler reads the
@@ -62,6 +81,19 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
   // Stable refs to read latest state in event handlers without re-binding.
   const stateRef = useRef(state);
   stateRef.current = state;
+  // Unsaved work is an app-wide question, not a per-document one: closing
+  // the window has to consider background tabs too.
+  const workspaceRef = useRef(workspace);
+  workspaceRef.current = workspace;
+  const workspaceDispatchRef = useRef(workspaceDispatch);
+  workspaceDispatchRef.current = workspaceDispatch;
+  const idRef = useRef(id);
+  idRef.current = id;
+
+  // guardDiscard is declared further down (it needs performSave), but the
+  // open-path listener above has to reach it. A ref keeps that listener
+  // bound once instead of re-subscribing on every render.
+  const guardDiscardRef = useRef<(intent: PendingIntent) => Promise<void>>(async () => {});
 
   // Phase 10: baseline fingerprint of the bytes we last read or wrote.
   // The watcher consults this to ignore re-fires triggered by our own
@@ -102,19 +134,24 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
           parsed = recovery.file;
           dispatch({ type: "error", message: recoveryMessage(err, recovery) });
         }
-        dispatch({
-          type: "load",
-          filePath: opened.path,
-          fileName: opened.fileName,
-          text: opened.text,
-          body: parsed.body,
-          comments: parsed.comments,
-          readOnly: opened.readOnly,
+        // Open in a tab. `openTab` focuses an existing tab if this file
+        // is already open, and reuses the current one if it's an
+        // untouched Untitled buffer.
+        workspaceDispatchRef.current({
+          type: "openTab",
+          initial: {
+            filePath: opened.path,
+            fileName: opened.fileName,
+            originalText: opened.text,
+            body: parsed.body,
+            comments: parsed.comments,
+            readOnly: opened.readOnly,
+            // Seed the preferred view here rather than dispatching a
+            // second action at the freshly created tab.
+            viewMode: defaultViewRef.current,
+          },
         });
         recordOpenedRef.current(opened.path, opened.fileName);
-        if (defaultViewRef.current !== "rendered") {
-          setViewMode(defaultViewRef.current);
-        }
       } catch (err) {
         // Stale recent-file entry — surface a polite error and the
         // caller can decide to remove it from the recent list.
@@ -131,19 +168,64 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
         }
       }
     },
-    [dispatch, setViewMode, logger],
+    [dispatch, logger],
   );
+  const openPathRef = useRef(openPath);
+  openPathRef.current = openPath;
+
+  // ⌘O. Each chosen file opens in its own tab.
+  const runOpenDialog = useCallback(async () => {
+    try {
+      const files = await openMarkdownFiles();
+      for (const opened of files) {
+        let parsed;
+        try {
+          // Phase 9: tolerant mode keeps comments that are missing their
+          // marker pair so the lost-anchor banner can surface them,
+          // instead of dropping all comments on a single missing marker.
+          parsed = parseForgemarkFile(opened.text, { tolerant: true });
+        } catch (err) {
+          // Fail soft: recover as many comments as possible (coalescing
+          // splattered anchors, detaching unrecoverable ones for
+          // reattachment) instead of dropping every comment.
+          const recovery = recoverForgemarkFile(opened.text);
+          parsed = recovery.file;
+          dispatch({ type: "error", message: recoveryMessage(err, recovery) });
+        }
+        workspaceDispatchRef.current({
+          type: "openTab",
+          initial: {
+            filePath: opened.path,
+            fileName: opened.fileName,
+            originalText: opened.text,
+            body: parsed.body,
+            comments: parsed.comments,
+            readOnly: opened.readOnly,
+            // Seed the preferred view here rather than dispatching a
+            // second action at the freshly created tab.
+            viewMode: defaultViewRef.current,
+          },
+        });
+        recordOpenedRef.current(opened.path, opened.fileName);
+      }
+    } catch (err) {
+      logger("open failed", err);
+      dispatch({ type: "error", message: errorMessage("Open failed", err) });
+    }
+  }, [dispatch, logger]);
 
   // Listen for `forgemark:open-path` custom events from non-keyboard
   // surfaces (Open Recent menu, future native menu bar).
   useEffect(() => {
+    if (!isActive) return;
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<{ path: string }>).detail;
-      if (detail?.path) void openPath(detail.path);
+      // Open Recent / Finder open in a tab, same as ⌘O.
+      if (detail?.path) void openPathRef.current(detail.path);
     };
     window.addEventListener("forgemark:open-path", handler);
     return () => window.removeEventListener("forgemark:open-path", handler);
-  }, [openPath]);
+  }, [isActive]);
 
   // Save handler — shared by ⌘S and the pending-save effect (which
   // fires when the save-conflict modal's Overwrite is clicked).
@@ -171,6 +253,9 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
             body: s.body,
             comments: s.comments,
             readOnly: false,
+            // Path/filename rebind only — same buffer, so don't discard
+            // the user's undo history.
+            rebindOnly: true,
           });
         }
         // Refresh baseline so the watcher doesn't fire on our own write.
@@ -183,8 +268,183 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
     [dispatch, logger],
   );
 
+  // Quitting has to account for every open document, and each document's
+  // file IO lives in its own bindings instance — this one can only save
+  // its own. So the quit walks the tabs: find the first document with
+  // unsaved work, hand focus to it so its instance takes over, and let
+  // that instance re-enter here once it's dealt with. When nothing is
+  // dirty anywhere, tell Rust it may exit.
+  const runQuit = useCallback(async () => {
+    const ws = workspaceRef.current;
+    const dirtyId = ws.order.find((docId) => ws.docs[docId].dirty);
+
+    if (!dirtyId) {
+      try {
+        await invoke("approve_exit");
+      } catch (err) {
+        logger("approve exit failed", err);
+      }
+      return;
+    }
+
+    if (dirtyId !== ws.activeId) {
+      // Bring the unsaved document forward — prompting about a document
+      // the user can't see would be baffling — then re-emit so the newly
+      // active instance picks the quit up.
+      workspaceDispatchRef.current({ type: "activateTab", docId: dirtyId });
+      window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("forgemark:close-requested"));
+      }, 0);
+      return;
+    }
+
+    await guardDiscardRef.current({ kind: "quit" });
+  }, [logger]);
+
+  // Carry out an intent once nothing is standing in its way.
+  const executeIntent = useCallback(
+    async (intent: PendingIntent) => {
+      if (intent.kind === "closeTab") {
+        workspaceDispatchRef.current({ type: "closeTab", docId: intent.docId });
+        return;
+      }
+      // Quit: loop back so the next unsaved document gets its turn.
+      await runQuit();
+    },
+    [runQuit],
+  );
+
+  // Session restore. AppShell decides *whether* to restore (it mounts
+  // once per launch; these bindings mount once per document, so a
+  // per-instance guard would re-fire every time a tab opened). It just
+  // asks, and this does the opening.
+  //
+  // Sequential rather than concurrent so tab order matches the previous
+  // session. `openTab` dedupes by path, so a file already opened by
+  // other means — Finder, the PendingFiles queue — doesn't double up,
+  // and files that have since moved take the usual open-failed path.
+  useEffect(() => {
+    if (!isActive) return;
+    const onRestore = (e: Event) => {
+      const detail = (e as CustomEvent<{ paths: string[]; activeIndex: number }>).detail;
+      if (!detail?.paths?.length) return;
+      void (async () => {
+        for (const path of detail.paths) {
+          await openPathRef.current(path);
+        }
+        // Focus whichever document was active. Paths that failed to open
+        // shift the positions, so match by path rather than by index.
+        const wantedPath = detail.paths[detail.activeIndex];
+        if (wantedPath == null) return;
+        const ws = workspaceRef.current;
+        const target = ws.order.find((docId) => ws.docs[docId].filePath === wantedPath);
+        if (target) workspaceDispatchRef.current({ type: "activateTab", docId: target });
+      })();
+    };
+    window.addEventListener("forgemark:restore-session", onRestore);
+    return () => window.removeEventListener("forgemark:restore-session", onRestore);
+  }, [isActive]);
+
+  // Rust intercepts window-close and ⌘Q and defers to us, so quitting
+  // gets the same unsaved-work guard as ⌘N/⌘O instead of relying on
+  // beforeunload, which Tauri doesn't reliably honour.
+  useEffect(() => {
+    if (!isActive) return;
+    const onCloseRequested = () => void runQuitRef.current();
+    window.addEventListener("forgemark:close-requested", onCloseRequested);
+    return () => window.removeEventListener("forgemark:close-requested", onCloseRequested);
+  }, [isActive]);
+  const runQuitRef = useRef(runQuit);
+  runQuitRef.current = runQuit;
+
+  // ⌘N and ⌘O throw away the current buffer. Before this guard they did
+  // it silently, which was survivable only because auto-save had usually
+  // just written the file — but auto-save is skipped for Untitled
+  // documents and while a conflict is pending, and in exactly those two
+  // cases the work was gone with no prompt.
+  //
+  // Forgemark is an auto-save-first app, so prompting to save something
+  // auto-save would have written 500ms later would be incoherent. The
+  // rule is therefore: if we *can* save it for the user, do that and
+  // carry on. Only ask when we can't.
+  const guardDiscard = useCallback(
+    async (intent: PendingIntent) => {
+      const s = stateRef.current;
+      if (!s.dirty || s.readOnly) {
+        await executeIntent(intent);
+        return;
+      }
+      // Untitled needs a destination from the user, and saving during an
+      // unresolved conflict would clobber the disk copy. Both have to ask.
+      const canSaveSilently = s.filePath != null && s.externalChange == null;
+      if (canSaveSilently) {
+        await performSave();
+        await executeIntent(intent);
+        return;
+      }
+      dispatch({ type: "requestIntent", intent });
+    },
+    [dispatch, executeIntent, performSave],
+  );
+  guardDiscardRef.current = guardDiscard;
+
+  // The user answered the unsaved-changes prompt. "save" routes through
+  // the normal save path (which prompts for a location when Untitled) and
+  // only proceeds if that succeeded — cancelling the save dialog must
+  // cancel the whole action rather than silently discarding.
+  useEffect(() => {
+    const resolution = state.intentResolution;
+    const intent = state.pendingIntent;
+    if (!resolution || !intent) return;
+    let cancelled = false;
+    (async () => {
+      if (resolution === "save") {
+        await performSave();
+        // performSave leaves `dirty` set if the user backed out of the
+        // location dialog or the write failed. Don't discard their work.
+        if (stateRef.current.dirty) {
+          if (!cancelled) dispatch({ type: "clearIntent" });
+          return;
+        }
+      } else if (intent.kind === "quit") {
+        // "Don't Save" during a quit. The document stays dirty, so the
+        // quit walk would find it again and ask about it forever — drop
+        // the tab instead. We're exiting anyway, and removing it is what
+        // lets the walk move on to the next unsaved document.
+        workspaceDispatchRef.current({ type: "closeTab", docId: idRef.current });
+        if (!cancelled) dispatch({ type: "clearIntent" });
+        // Re-enter once the workspace has settled, rather than reading
+        // stale state synchronously.
+        window.setTimeout(() => {
+          window.dispatchEvent(new CustomEvent("forgemark:close-requested"));
+        }, 0);
+        return;
+      }
+      if (cancelled) return;
+      await executeIntent(intent);
+      dispatch({ type: "clearIntent" });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [state.intentResolution, state.pendingIntent, dispatch, executeIntent, performSave]);
+
+  // File > Close. Clears the document but keeps the window open
+  // (TextEdit / Pages convention), so it discards the buffer and has to
+  // clear the same guard as ⌘N.
+  useEffect(() => {
+    if (!isActive) return;
+    const onMenu = (e: Event) => {
+      if ((e as CustomEvent<string>).detail !== "close-file") return;
+      void guardDiscardRef.current({ kind: "closeTab", docId: idRef.current });
+    };
+    window.addEventListener("forgemark:menu", onMenu);
+    return () => window.removeEventListener("forgemark:menu", onMenu);
+  }, [isActive]);
+
   // ── Keyboard shortcuts ──
   useEffect(() => {
+    if (!isActive) return;
     const onKey = async (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
@@ -192,43 +452,8 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
       const s = stateRef.current;
       if (key === "o") {
         e.preventDefault();
-        try {
-          const opened = await openMarkdownFile();
-          if (!opened) return;
-          let parsed;
-          try {
-            // Phase 9: tolerant mode keeps comments that are missing
-            // their marker pair so the lost-anchor banner can surface
-            // them (instead of dropping all comments on a single
-            // missing-marker case).
-            parsed = parseForgemarkFile(opened.text, { tolerant: true });
-          } catch (err) {
-            // Fail soft: recover as many comments as possible (coalescing
-            // splattered anchors, detaching unrecoverable ones for
-            // reattachment) instead of dropping every comment.
-            const recovery = recoverForgemarkFile(opened.text);
-            parsed = recovery.file;
-            dispatch({ type: "error", message: recoveryMessage(err, recovery) });
-          }
-          dispatch({
-            type: "load",
-            filePath: opened.path,
-            fileName: opened.fileName,
-            text: opened.text,
-            body: parsed.body,
-            comments: parsed.comments,
-            readOnly: opened.readOnly,
-          });
-          recordOpenedRef.current(opened.path, opened.fileName);
-          // Phase 11 default-view preference: applied on the next
-          // opened document, per design handoff §9.
-          if (defaultViewRef.current !== "rendered") {
-            setViewMode(defaultViewRef.current);
-          }
-        } catch (err) {
-          logger("open failed", err);
-          dispatch({ type: "error", message: errorMessage("Open failed", err) });
-        }
+        // Opens in a tab of its own — nothing is discarded, so no guard.
+        await runOpenDialog();
       } else if (key === "s") {
         e.preventDefault();
         if (s.readOnly) return;
@@ -245,12 +470,12 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
         await performSave({ forcePrompt: e.shiftKey });
       } else if (key === "n") {
         e.preventDefault();
-        dispatch({ type: "newUntitled" });
+        workspaceDispatchRef.current({ type: "openTab" });
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [dispatch, logger, performSave, setViewMode]);
+  }, [dispatch, performSave, runOpenDialog, isActive]);
 
   // ── Auto-save (500ms quiet period after last edit) ──
   // Phase 10: skip auto-save while there's an externalChange pending.
@@ -298,21 +523,22 @@ export function DocumentBindings({ logger = defaultLogger }: { logger?: Logger }
     };
   }, [state.pendingSave, performSave, dispatch]);
 
-  // Phase 11 save-on-close: block window close while there's unsaved
-  // work. The browser shows its own confirmation dialog when
-  // beforeunload's returnValue is set; the native Tauri close event
-  // (which the OS surfaces as a "Do you want to save…" sheet) will be
-  // wired up alongside the menu bar in a Phase 11 follow-up.
+  // Fallback for the plain-browser dev surface (`npm run vite:dev`),
+  // where there's no Tauri runtime to intercept the close. In the real
+  // app the Rust CloseRequested/ExitRequested handlers get there first
+  // and route through guardDiscard, which is the path that can actually
+  // offer to save.
   useEffect(() => {
+    if (!isActive) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (!state.dirty) return;
+      if (!anyDirty(workspaceRef.current)) return;
       e.preventDefault();
       // Modern browsers ignore the string but require an assignment.
       e.returnValue = "You have unsaved changes.";
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [state.dirty]);
+  }, [isActive]);
 
   // Phase 10: watch the open file for external changes. The watcher
   // wrapper compares against baselineRef so writes we just did don't

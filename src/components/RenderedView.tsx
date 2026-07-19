@@ -153,8 +153,22 @@ export function RenderedView({
   onOpenExternalLink = openUrl,
   handleRef,
 }: Props) {
-  const lastInitialRef = useRef("");
   const initialMarkdown = useMemo(() => bodyWithAnchorSpans(body), [body]);
+  // Seeded with the same value handed to `content:` below, so the sync
+  // effect correctly treats the mount as already-applied and skips a
+  // redundant setContent.
+  const lastInitialRef = useRef(initialMarkdown);
+
+  // editorReadyRef gates onUpdate so initial mount + external loads
+  // don't dispatch spurious edits. Declared before useEditor because
+  // onCreate touches it during editor construction.
+  //
+  // It starts false and is flipped true in onCreate. It must NOT depend
+  // on the sync effect below to flip it: that effect early-returns when
+  // the content already matches, which is always true for an empty
+  // Untitled buffer — leaving the gate shut forever, swallowing every
+  // keystroke, so the document never went dirty and never auto-saved.
+  const editorReadyRef = useRef(false);
 
   const editor = useEditor({
     extensions: [
@@ -193,6 +207,12 @@ export function RenderedView({
     ],
     content: initialMarkdown,
     editable: !readOnly,
+    // The editor is constructed with the right content already, so it's
+    // ready for user input immediately. Later content swaps re-close the
+    // gate themselves in the sync effect below.
+    onCreate: () => {
+      editorReadyRef.current = true;
+    },
     editorProps: {
       attributes: {
         class: "fm-prose",
@@ -225,12 +245,6 @@ export function RenderedView({
       onEdit(newBody);
     },
   });
-
-  // editorReadyRef gates onUpdate so initial mount + external loads
-  // don't dispatch spurious edits. Reset on every initialMarkdown
-  // change (including external reloads), set after the post-
-  // setContent paint via a microtask.
-  const editorReadyRef = useRef(false);
 
   // When the body changes (file open / external reload / programmatic
   // edits like accept-suggestion), replace the doc. User keystrokes
@@ -339,8 +353,7 @@ export function RenderedView({
         // entire code block (the comment is on the block, not a sub-span).
         const from = cls.kind === "block" ? cls.from : selFrom;
         const to = cls.kind === "block" ? cls.to : selTo;
-        const text =
-          cls.kind === "block" ? cls.text : state.doc.textBetween(from, to, " ", " ");
+        const text = cls.kind === "block" ? cls.text : state.doc.textBetween(from, to, " ", " ");
         if (cls.kind !== "reject" && text.trim().length === 0) return null;
 
         // Overlap: inline anchors are detected via the anchor mark; a block
@@ -641,7 +654,10 @@ export function classifyCodeSelection(
   });
 
   if (blocks.length > 1) {
-    return { kind: "reject", reason: "Select within a single code block, or outside it, to comment." };
+    return {
+      kind: "reject",
+      reason: "Select within a single code block, or outside it, to comment.",
+    };
   }
   if (blocks.length === 1) {
     const b = blocks[0];
@@ -660,7 +676,10 @@ export function classifyCodeSelection(
         existingAnchorId: id != null && Number.isFinite(id) ? id : null,
       };
     }
-    return { kind: "reject", reason: "Select within a single code block, or outside it, to comment." };
+    return {
+      kind: "reject",
+      reason: "Select within a single code block, or outside it, to comment.",
+    };
   }
 
   // No code block — but the selection may be inside inline code. We allow a

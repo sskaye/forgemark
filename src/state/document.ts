@@ -28,6 +28,14 @@ export type DocumentState = {
   body: string;
   comments: Comment[];
   dirty: boolean;
+  // Bumped whenever `body` is replaced by something other than a user
+  // keystroke — opening a file, or reloading it from disk. The rendered
+  // editor keys off this to force a genuine remount, which is what
+  // discards the Tiptap/ProseMirror undo stack. Without it the undo
+  // history outlives the content it belongs to and ⌘Z walks backwards
+  // into the *previous* document. Save As is deliberately excluded (see
+  // `rebindOnly` on the `load` action).
+  loadGeneration: number;
   viewMode: "rendered" | "source";
   readOnly: boolean;
   error: string | null;
@@ -58,7 +66,27 @@ export type DocumentState = {
   // file open.
   filter: FilterMode;
   sort: SortMode;
+  // An action that would discard unsaved work, parked while we ask the
+  // user what to do. Only set when the work *can't* just be saved for
+  // them — see `guardDiscard` in DocumentBindings.
+  pendingIntent: PendingIntent | null;
+  // The user's answer. Kept separate from `pendingIntent` so the
+  // executing effect knows both what to do and what was asked; cleared
+  // together via `clearIntent`.
+  intentResolution: "save" | "discard" | null;
 };
+
+// Something the user asked for that would throw unsaved work away.
+//
+// Before tabs this also covered ⌘N and ⌘O, which replaced the open buffer
+// in place. They now open a new tab instead and discard nothing, so the
+// guard narrowed to the two actions that genuinely destroy work.
+export type PendingIntent =
+  // Closing a tab drops that document.
+  | { kind: "closeTab"; docId: string }
+  // Window close or ⌘Q. Rust has blocked the exit and is waiting to be
+  // told it may proceed.
+  | { kind: "quit" };
 
 // Phase 10: the disk content that conflicts with the in-memory state.
 // Held verbatim so "Reload from disk" can replace the state, and parsed
@@ -153,6 +181,7 @@ export const INITIAL_STATE: DocumentState = {
   body: "",
   comments: [],
   dirty: false,
+  loadGeneration: 0,
   viewMode: "rendered",
   readOnly: false,
   error: null,
@@ -166,6 +195,8 @@ export const INITIAL_STATE: DocumentState = {
   pendingSave: false,
   filter: { kind: "all" },
   sort: "doc",
+  pendingIntent: null,
+  intentResolution: null,
 };
 
 export type DocumentAction =
@@ -179,6 +210,11 @@ export type DocumentAction =
       body: string;
       comments: Comment[];
       readOnly: boolean;
+      // Save As re-dispatches `load` purely to rebind path/filename —
+      // the content is the same buffer the user has been editing, so
+      // their undo history must survive. Set this to keep
+      // `loadGeneration` (and therefore the editor instance) stable.
+      rebindOnly?: boolean;
     }
   | { type: "edit"; body: string }
   | { type: "saved"; text: string; body: string }
@@ -232,7 +268,10 @@ export type DocumentAction =
   | { type: "requestSave" }
   | { type: "clearPendingSave" }
   | { type: "setFilter"; filter: FilterMode }
-  | { type: "setSort"; sort: SortMode };
+  | { type: "setSort"; sort: SortMode }
+  | { type: "requestIntent"; intent: PendingIntent }
+  | { type: "resolveIntent"; resolution: "save" | "discard" }
+  | { type: "clearIntent" };
 
 export function reduceDocument(state: DocumentState, action: DocumentAction): DocumentState {
   switch (action.type) {
@@ -245,6 +284,7 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
         body: action.body,
         comments: action.comments,
         dirty: false,
+        loadGeneration: action.rebindOnly ? state.loadGeneration : state.loadGeneration + 1,
         viewMode: "rendered",
         readOnly: action.readOnly,
         error: null,
@@ -256,6 +296,11 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
         saveConflictOpen: false,
         editDuringOpenDismissed: false,
         pendingSave: false,
+        // A load is the completion of whatever intent was parked (or a
+        // load from an unrelated surface). Either way nothing is waiting
+        // on the user any more.
+        pendingIntent: null,
+        intentResolution: null,
         // Filter / sort persist across loads — they're a viewing
         // preference, not a document property.
       };
@@ -277,8 +322,25 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
       };
     case "setViewMode":
       return { ...state, viewMode: action.viewMode };
+    case "requestIntent":
+      return { ...state, pendingIntent: action.intent, intentResolution: null };
+    case "resolveIntent":
+      if (!state.pendingIntent) return state;
+      return { ...state, intentResolution: action.resolution };
+    case "clearIntent":
+      if (!state.pendingIntent && !state.intentResolution) return state;
+      return { ...state, pendingIntent: null, intentResolution: null };
     case "newUntitled":
-      return { ...INITIAL_STATE, filter: state.filter, sort: state.sort };
+      return {
+        ...INITIAL_STATE,
+        filter: state.filter,
+        sort: state.sort,
+        // Must keep climbing, not reset to INITIAL_STATE's 0 — otherwise
+        // ⌘N out of a never-loaded Untitled buffer (generation still 0)
+        // wouldn't change the key, and the discarded document's undo
+        // stack would survive into the new one.
+        loadGeneration: state.loadGeneration + 1,
+      };
     case "error":
       return { ...state, error: action.message };
     case "dismissError":
@@ -481,6 +543,9 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
         body: ec.body,
         comments: ec.comments,
         dirty: false,
+        // Disk content replaced the buffer — the undo stack describes
+        // text that no longer exists. Force a fresh editor.
+        loadGeneration: state.loadGeneration + 1,
         error: null,
         focusedCommentId: null,
         hoveredCommentId: null,

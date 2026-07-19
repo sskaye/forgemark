@@ -1,0 +1,101 @@
+/* Tab strip. Sits directly under the title bar as its own fixed-height
+   row in the app-shell flex column — `flex-shrink: 0` so it never eats
+   into the editor, which keeps `flex: 1; min-height: 0`. */
+.fm-tabbar {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  height: 32px;
+  gap: 1px;
+  padding: 0 8px;
+  background: var(--fm-titlebar-bg);
+  border-bottom: 0.5px solid var(--fm-titlebar-border);
+  user-select: none;
+  /* Many open documents scroll sideways rather than squeezing to
+     illegibility or forcing the window to scroll. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.fm-tabbar::-webkit-scrollbar {
+  display: none;
+}
+
+.fm-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 200px;
+  padding: 0 8px 0 12px;
+  cursor: default;
+  font-family: var(--fm-ui);
+  font-size: 12px;
+  color: var(--fm-chrome-text);
+  opacity: 0.72;
+  border-top: 2px solid transparent;
+  border-radius: 6px 6px 0 0;
+}
+
+.fm-tab:hover {
+  background: var(--fm-accent-soft);
+}
+
+.fm-tab-active {
+  background: var(--fm-card-bg);
+  border-top-color: var(--fm-accent);
+  opacity: 1;
+  font-weight: 600;
+}
+
+.fm-tab:focus-visible {
+  outline: 2px solid var(--fm-accent);
+  outline-offset: -2px;
+}
+
+.fm-tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.fm-tab-dot {
+  flex-shrink: 0;
+  color: var(--fm-accent);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.fm-tab-close {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: default;
+  /* Revealed on tab hover / focus so the strip stays quiet at rest;
+     always visible on the active tab. */
+  opacity: 0;
+}
+
+.fm-tab:hover .fm-tab-close,
+.fm-tab-active .fm-tab-close,
+.fm-tab-close:focus-visible {
+  opacity: 0.65;
+}
+
+.fm-tab-close:hover {
+  opacity: 1;
+  background: var(--fm-accent-soft-strong);
+}

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TitleBar } from "./TitleBar";
+import { TabBar } from "./TabBar";
 import { Sidebar } from "./Sidebar";
 import { EditorPane } from "./EditorPane";
 import { ErrorBanner } from "./ErrorBanner";
@@ -7,12 +8,13 @@ import { ReattachModal } from "./ReattachModal";
 import { FileConflictBanner } from "./FileConflictBanner";
 import { EditDuringOpenModal } from "./EditDuringOpenModal";
 import { SaveConflictModal } from "./SaveConflictModal";
+import { UnsavedChangesModal } from "./UnsavedChangesModal";
 import { SettingsModal } from "./SettingsModal";
 import { CleanExportModal } from "./CleanExportModal";
 import { PrintDocument } from "./PrintDocument";
 import { PrintOptionsModal, type PrintOptions } from "./PrintOptionsModal";
 import { FirstRunWelcome } from "./FirstRunWelcome";
-import { useDocument } from "../state/DocumentProvider";
+import { useDocument, useWorkspace } from "../state/DocumentProvider";
 import { DocumentBindings } from "../state/DocumentBindings";
 import {
   classifyAnchors,
@@ -22,10 +24,10 @@ import {
 } from "../format";
 import { contextSnippet, parseForgemarkFile } from "../format";
 import { useFontSize, useFirstRun } from "../state/preferences";
+import { readSession, writeSession, type SessionSnapshot } from "../state/session";
 import { saveMarkdownFile } from "../services/fileIO";
 import { applyWindowAction, isWindowAction } from "../services/windowActions";
 import { invoke } from "@tauri-apps/api/core";
-import { ask } from "@tauri-apps/plugin-dialog";
 import "./AppShell.css";
 // Bundled sample file — Vite's `?raw` import pulls in the markdown text
 // at build time so the first-run "Open sample" path doesn't need a
@@ -37,6 +39,7 @@ import SAMPLE_TEXT from "../../assets/sample-onboarding.md?raw";
 // EditorPane and Sidebar.
 export function AppShell() {
   const { state, dispatch, setViewMode } = useDocument();
+  const { workspace } = useWorkspace();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [cleanExportOpen, setCleanExportOpen] = useState(false);
@@ -131,24 +134,9 @@ export function AppShell() {
         setPrintOptionsOpen(true);
         return;
       }
-      if (detail === "close-file") {
-        // File > Close — clear the document, keep the window open
-        // (TextEdit / Pages convention). Prompt before discarding
-        // unsaved work via Tauri's dialog plugin (window.confirm()
-        // is suppressed in the Tauri webview; ask() is the
-        // platform-appropriate equivalent).
-        if (state.dirty) {
-          const proceed = await ask("You have unsaved changes. Close without saving?", {
-            title: "Close document",
-            kind: "warning",
-            okLabel: "Discard changes",
-            cancelLabel: "Cancel",
-          });
-          if (!proceed) return;
-        }
-        dispatch({ type: "newUntitled" });
-        return;
-      }
+      // `close-file` is handled in DocumentBindings — it discards the
+      // buffer, so it goes through the same unsaved-work guard as ⌘N
+      // and ⌘O rather than carrying its own prompt.
       if (isWindowAction(detail)) {
         try {
           await applyWindowAction(detail);
@@ -178,6 +166,36 @@ export function AppShell() {
   const reattachTargetStatus =
     reattachTargetComment != null ? anchorStatuses.get(reattachTargetComment.id) : null;
 
+  // Read the stored session during the first render, before the persist
+  // effect below can overwrite it with the empty startup workspace.
+  const pendingSessionRef = useRef<SessionSnapshot | null | undefined>(undefined);
+  if (pendingSessionRef.current === undefined) pendingSessionRef.current = readSession();
+
+  // Ask, once per launch, for the previous session to be reopened.
+  // AppShell is the right home for the "once": it mounts once, whereas
+  // DocumentBindings mounts per document and would re-fire on every new
+  // tab. The opening itself lives there, next to the file IO.
+  useEffect(() => {
+    const session = pendingSessionRef.current;
+    if (!session) return;
+    pendingSessionRef.current = null;
+    window.dispatchEvent(new CustomEvent("forgemark:restore-session", { detail: session }));
+  }, []);
+
+  // Remember which files are open so the next launch can reopen them.
+  // Untitled buffers are skipped on purpose (see state/session.ts).
+  useEffect(() => {
+    const paths: string[] = [];
+    let activeIndex = -1;
+    for (const id of workspace.order) {
+      const path = workspace.docs[id].filePath;
+      if (path == null) continue;
+      if (id === workspace.activeId) activeIndex = paths.length;
+      paths.push(path);
+    }
+    writeSession({ paths, activeIndex });
+  }, [workspace]);
+
   // Reflect file state in the document title (browser tab and Tauri OS title).
   useEffect(() => {
     const dotted = state.dirty ? "• " : "";
@@ -186,7 +204,15 @@ export function AppShell() {
 
   return (
     <div className="fm-app-shell" data-testid="fm-app-shell">
-      <DocumentBindings />
+      {/* One headless bindings instance per OPEN document — not per
+          visible one. Bindings own auto-save and the external-change
+          watcher, so a background document whose bindings weren't
+          mounted would silently stop saving and stop noticing that its
+          file changed on disk. Window-level listeners inside are gated
+          on isActive so they stay single. */}
+      {workspace.order.map((id) => (
+        <DocumentBindings key={id} docId={id} />
+      ))}
       <TitleBar
         fileName={state.fileName}
         modified={state.dirty}
@@ -196,6 +222,7 @@ export function AppShell() {
         onToggleSidebar={() => setSidebarOpen((s) => !s)}
         onOpenSettings={() => setSettingsOpen(true)}
       />
+      <TabBar />
       <ErrorBanner />
       {/* Phase 10 — file-conflict surfaces. The banner shows when the
           file changed on disk but we have no unsaved work; the
@@ -245,8 +272,24 @@ export function AppShell() {
           }}
         />
       )}
+      {state.pendingIntent && state.intentResolution == null && (
+        <UnsavedChangesModal
+          fileName={state.fileName}
+          untitled={state.filePath == null}
+          conflictPending={state.externalChange != null}
+          onSave={() => dispatch({ type: "resolveIntent", resolution: "save" })}
+          onDiscard={() => dispatch({ type: "resolveIntent", resolution: "discard" })}
+          onCancel={() => dispatch({ type: "clearIntent" })}
+        />
+      )}
       <div className="fm-app-body">
-        <EditorPane anchorStatuses={anchorStatuses} />
+        {/* Every open document keeps a mounted editor, so per-tab undo,
+            cursor, and scroll survive switching. Inactive panes are
+            hidden rather than unmounted; their window listeners are gated
+            on isActive so the shortcuts stay single. */}
+        {workspace.order.map((id) => (
+          <EditorPane key={id} docId={id} />
+        ))}
         {sidebarOpen && <Sidebar anchorStatuses={anchorStatuses} />}
       </div>
       {printOptions && (

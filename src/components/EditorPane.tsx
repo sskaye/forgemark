@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useDocument } from "../state/DocumentProvider";
+import { useWorkspace } from "../state/DocumentProvider";
+import type { DocId } from "../state/workspace";
 import { useAuthorName } from "../state/preferences";
 import { RenderedView, type RenderedSearchMatch, type RenderedViewHandle } from "./RenderedView";
 import { SourceView, type SourceViewHandle } from "./SourceView";
@@ -8,12 +9,14 @@ import { OverlapPrompt } from "./OverlapPrompt";
 import { FindReplaceBar } from "./FindReplaceBar";
 import { LostAnchorBanner } from "./LostAnchorBanner";
 import { ContextMenu } from "./ContextMenu";
-import { nextCommentId, serializeForgemarkFile, type AnchorStatus } from "../format";
+import { classifyAnchors, nextCommentId, serializeForgemarkFile } from "../format";
 import type { ViewSyncAnchor } from "../services/viewSync";
 import "./EditorPane.css";
 
 type Props = {
-  anchorStatuses: Map<number, AnchorStatus>;
+  // Which open document this pane shows. Omitted means the active one,
+  // which is how the pre-tabs callers (and several tests) use it.
+  docId?: DocId;
 };
 
 // Editor pane. Switches between the rendered (Tiptap) view and the raw
@@ -28,13 +31,37 @@ type Props = {
 // Phase 8: source view is now CodeMirror-based with a "read-only review"
 // chip overlay. Card-click focus changes scroll the source view to the
 // matching marker via the SourceView imperative handle.
-export function EditorPane({ anchorStatuses }: Props) {
-  const { state, dispatch, setViewMode } = useDocument();
+export function EditorPane({ docId }: Props) {
+  const { workspace, dispatchTo } = useWorkspace();
+  const id = docId ?? workspace.activeId;
+  const state = workspace.docs[id];
+  // Every open document keeps a mounted editor so its undo history,
+  // cursor, and scroll survive a tab switch. Only one is on screen, and
+  // only that one may own the window-level shortcuts.
+  const isActive = id === workspace.activeId;
+
+  const dispatch = useMemo(() => dispatchTo(id), [dispatchTo, id]);
+  const setViewMode = useCallback(
+    (viewMode: "rendered" | "source") => dispatch({ type: "setViewMode", viewMode }),
+    [dispatch],
+  );
+  // Each pane classifies its own anchors. AppShell keeps a separate memo
+  // for the sidebar and modals; that duplicates the work for the active
+  // document only, and classifyAnchors is a pure pass over data already
+  // in memory. Hoist into the workspace if it ever shows up in a profile.
+  const anchorStatuses = useMemo(
+    () => classifyAnchors(state.body, state.comments),
+    [state.body, state.comments],
+  );
   const [author] = useAuthorName();
   const handleRef = useRef<RenderedViewHandle | null>(null);
   const sourceRef = useRef<SourceViewHandle | null>(null);
   const paneRef = useRef<HTMLElement | null>(null);
   const pendingViewSyncRef = useRef<ViewSyncAnchor | null>(null);
+  // Hiding a pane with display:none drops its scrollTop, and reading it
+  // during the switch races the DOM update — so track it continuously
+  // while visible and put it back on the way in.
+  const scrollTopRef = useRef(0);
   const [findState, setFindState] = useState({
     open: false,
     replaceVisible: false,
@@ -142,6 +169,7 @@ export function EditorPane({ anchorStatuses }: Props) {
   }, []);
 
   useEffect(() => {
+    if (!isActive) return;
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
@@ -180,16 +208,17 @@ export function EditorPane({ anchorStatuses }: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [moveActiveMatch, openComposer, openFindReplace, setViewMode, state.viewMode]);
+  }, [moveActiveMatch, openComposer, openFindReplace, setViewMode, state.viewMode, isActive]);
 
   useEffect(() => {
+    if (!isActive) return;
     const onMenu = (e: Event) => {
       const detail = (e as CustomEvent<string>).detail;
       if (detail === "find-replace") openFindReplace(false);
     };
     window.addEventListener("forgemark:menu", onMenu);
     return () => window.removeEventListener("forgemark:menu", onMenu);
-  }, [openFindReplace]);
+  }, [openFindReplace, isActive]);
 
   useEffect(() => {
     if (!findState.open) return;
@@ -368,6 +397,20 @@ export function EditorPane({ anchorStatuses }: Props) {
   );
 
   useEffect(() => {
+    if (!isActive) return;
+    const pane = paneRef.current;
+    if (!pane) return;
+    // After the pane is laid out again, not during the same frame.
+    const frame = requestAnimationFrame(() => {
+      pane.scrollTop = scrollTopRef.current;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isActive]);
+
+  useEffect(() => {
+    // Global event with no document identity — without this gate every
+    // mounted pane would capture on the active pane's view-mode toggle.
+    if (!isActive) return;
     const onCapture = (e: Event) => {
       const detail = (e as CustomEvent<{ from: "rendered" | "source"; to: "rendered" | "source" }>)
         .detail;
@@ -381,7 +424,7 @@ export function EditorPane({ anchorStatuses }: Props) {
     };
     window.addEventListener("forgemark:capture-view-sync", onCapture);
     return () => window.removeEventListener("forgemark:capture-view-sync", onCapture);
-  }, [state.viewMode]);
+  }, [state.viewMode, isActive]);
 
   useEffect(() => {
     const anchor = pendingViewSyncRef.current;
@@ -434,7 +477,22 @@ export function EditorPane({ anchorStatuses }: Props) {
   }
 
   return (
-    <main ref={paneRef} className="fm-editor-pane" data-testid="fm-editor-pane" role="main">
+    <main
+      ref={paneRef}
+      className="fm-editor-pane"
+      data-testid="fm-editor-pane"
+      data-doc-id={id}
+      data-active={isActive ? "true" : "false"}
+      // Inactive panes stay mounted (that's the point — undo, cursor and
+      // scroll survive a tab switch) but are taken out of the layout and
+      // hidden from assistive tech and find-in-page.
+      hidden={!isActive}
+      style={isActive ? undefined : { display: "none" }}
+      onScroll={(e) => {
+        if (isActive) scrollTopRef.current = e.currentTarget.scrollTop;
+      }}
+      role="main"
+    >
       {findState.open && (
         <FindReplaceBar
           query={findState.query}
@@ -478,6 +536,9 @@ export function EditorPane({ anchorStatuses }: Props) {
         />
         {state.viewMode === "rendered" ? (
           <RenderedView
+            // Remount on every content-replacing load so the Tiptap undo
+            // stack can't outlive the document it belongs to.
+            key={state.loadGeneration}
             body={state.body}
             onEdit={(body) => dispatch({ type: "edit", body })}
             readOnly={editorReadOnly}
