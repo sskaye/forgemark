@@ -2,6 +2,12 @@
 
 All notable changes to Forgemark are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Launching Forgemark no longer reopens the tabs from last time. A launch now opens exactly what it was asked for: the file you double-clicked, or a blank document if you opened the app on its own. Restoring the old tabs meant the working set only ever grew — finishing with a file left you closing its tab by hand so the next launch wouldn't inherit it. Open Recent is still there for getting back to something. Tabs are unaffected while the app is running.
+
 ## [1.4.0] — 2026-07-18
 
 ### Added

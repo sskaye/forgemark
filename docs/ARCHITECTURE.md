@@ -88,6 +88,9 @@ Two behaviors fall out of the format rather than taste:
 Closing the last tab leaves a fresh Untitled one and keeps the window open
 (TextEdit / Pages convention).
 
+Tabs are a **within-session working set**: they last as long as the app runs and
+do not survive a relaunch. See "Starting clean" below.
+
 ## Unsaved work
 
 Auto-save writes 500ms after the last edit, but skips Untitled buffers (no
@@ -122,19 +125,21 @@ document forward in turn, then calls `approve_exit`, which sets a flag and exits
 (the flag matters — `app.exit` re-enters `ExitRequested`, and without it the app
 could never quit).
 
-## Session restore
+## Starting clean
 
-`src/state/session.ts` persists `{ paths, activeIndex }`; on launch the files
-reopen as tabs with the previously active one focused. Only documents **with a
-path** are remembered — persisting Untitled buffers would mean putting document
-content in localStorage, and the guard above already ensures they're saved or
-explicitly discarded first. Paths are stored rather than contents, so a file
-edited outside Forgemark comes back current.
+A launch opens exactly what it was asked for: the file the OS handed over
+(Finder, drag-onto-dock, `open`), or a blank Untitled buffer when the app is
+launched on its own. Nothing carries over from the previous run.
 
-`AppShell` decides _whether_ to restore (it mounts once per launch);
-`DocumentBindings` does the opening (it has the file IO). That split is
-load-bearing: bindings mount once per _document_, so a guard there re-fires on
-every new tab.
+Earlier versions restored the last session's tabs from localStorage. It read as
+a feature and behaved as a chore: because the working set only ever grew, every
+launch inherited the last one's clutter, and finishing with a file meant
+remembering to close its tab or finding it again among a dozen others next time.
+Reaching a file you had open is already cheap — Open Recent — while un-reaching
+the ones you didn't want was not.
+
+The deliberate consequence: closing the app is how you clear the desk. Tabs mean
+"what I'm working on now", not "what I have ever worked on".
 
 ## Core modules
 
@@ -142,7 +147,6 @@ every new tab.
 | --------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Document model  | `src/state/document.ts`, `src/state/DocumentProvider.tsx`                                          | Pure reducer and context. Keeps file path, raw original text, body, comments, dirty state, composer state, lost-anchor state, conflict state, sidebar controls, and `loadGeneration` (see below).                                     |
 | Workspace       | `src/state/workspace.ts`                                                                           | The open documents: `docs`, tab `order`, `activeId`. Routes document actions to one document; owns tab open/close/activate/reorder, path dedupe, and Untitled numbering. Wraps `reduceDocument` untouched.                            |
-| Session         | `src/state/session.ts`                                                                             | Persists which files were open (paths, not contents) so a launch can reopen them.                                                                                                                                                     |
 | Side effects    | `src/state/DocumentBindings.tsx`                                                                   | Mounted once per OPEN document. Opens/saves files, runs autosave, watches external file changes, consumes pending save requests, and guards unsaved work. Window listeners inside are gated on `isActive`.                            |
 | Shell layout    | `src/components/AppShell.tsx`, `src/components/TabBar.tsx`                                         | Assembles the app and hosts modals/banners. Renders one `DocumentBindings` and one `EditorPane` per open document. The tab strip hides itself when only one document is open.                                                         |
 | Rendered editor | `src/components/EditorPane.tsx`, `src/components/RenderedView.tsx`, `src/components/AnchorMark.ts` | Rendered view converts Forgemark markers to Tiptap anchor spans and back. New comments and suggestions are created here because this layer has selection access. One pane per open document; inactive ones are hidden, not unmounted. |
@@ -159,7 +163,7 @@ every new tab.
 Opening a file:
 
 1. `DocumentBindings` calls `openMarkdownFiles` (⌘O, multi-select) or
-   `readMarkdownFile` (Open Recent, Finder, session restore).
+   `readMarkdownFile` (Open Recent, Finder).
 2. `parseForgemarkFile(..., { tolerant: true })` splits body/comments.
 3. An `openTab` action puts it in a tab — focusing the existing tab if the file
    is already open, or reusing the current one if it's an untouched Untitled
@@ -261,7 +265,7 @@ External file changes:
 - `tests/integration/*`: AppShell, rendered/source views, composer, sidebar,
   suggestions, lost anchors, file opening, settings, skill download, file
   conflicts, tabs, per-tab editors, background documents, the unsaved-work
-  guard, and session restore.
+  guard, and cold start.
 - `tests/perf/end-to-end.test.ts`: large-document performance smoke.
 - `tests/e2e/smoke.spec.ts`: Playwright smoke against the dev surface.
 - `tests/ai/*`: optional live-agent fixtures and prompts. These are excluded
