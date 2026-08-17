@@ -6,6 +6,7 @@ import { RenderedView, type RenderedSearchMatch, type RenderedViewHandle } from 
 import { HtmlView, type HtmlCapturedSelection, type HtmlViewHandle } from "./HtmlView";
 import { SourceView, type SourceViewHandle } from "./SourceView";
 import { NewCommentComposer } from "./NewCommentComposer";
+import { SelectionToolbar } from "./SelectionToolbar";
 import { OverlapPrompt } from "./OverlapPrompt";
 import { FindReplaceBar } from "./FindReplaceBar";
 import { LostAnchorBanner } from "./LostAnchorBanner";
@@ -98,6 +99,12 @@ export function EditorPane({ docId }: Props) {
     x: number;
     y: number;
   } | null>(null);
+  // The live selection in an HTML report, as the toolbar's anchor. Held
+  // here rather than in document state because it is a transient view
+  // concern that must not survive a tab switch or a reload.
+  const [selectionAffordance, setSelectionAffordance] = useState<HtmlCapturedSelection | null>(
+    null,
+  );
 
   // Composer trigger: ⌘⌥M (or the right-click menu) opens the
   // composer at the current selection. Selections inside fenced code
@@ -744,6 +751,10 @@ export function EditorPane({ docId }: Props) {
             onAnchorHover={(id) => dispatch({ type: "setHoveredComment", id })}
             onRequestElementComment={(capture) => openComposerFor(capture)}
             onContextMenu={(at) => setContextMenu({ x: at.x, y: at.y })}
+            // Background documents stay mounted, and the toolbar is
+            // position:fixed — an inactive pane must neither poll nor
+            // paint one over the document in front.
+            onSelectionChange={isActive ? setSelectionAffordance : undefined}
             handleRef={htmlRef}
           />
         ) : (
@@ -763,6 +774,23 @@ export function EditorPane({ docId }: Props) {
           />
         )}
       </div>
+      {isHtml &&
+        isActive &&
+        state.viewMode === "rendered" &&
+        selectionAffordance != null &&
+        state.composer == null &&
+        contextMenu == null && (
+          <SelectionToolbar
+            x={selectionAffordance.rect.left}
+            y={selectionAffordance.rect.top}
+            allowSuggest={
+              selectionAffordance.kind !== "element" &&
+              !state.body.slice(selectionAffordance.from, selectionAffordance.to).includes("<")
+            }
+            onComment={() => openComposerFor(selectionAffordance, "comment")}
+            onSuggest={() => openComposerFor(selectionAffordance, "suggest")}
+          />
+        )}
       {state.composer?.mode === "new" && state.viewMode === "rendered" && (
         <NewCommentComposer
           x={state.composer.x}

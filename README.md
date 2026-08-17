@@ -69,6 +69,8 @@ What differs is what you can do with the document:
 | Edit the prose                       | yes      | no                  |
 | Find (⌘F)                            | yes      | Source view only    |
 
+**To comment, select a passage and a Comment / Suggest edit bar appears above it** — or press ⌘⌥M, or hover a figure and click its Comment button. Right-click is not the way in here: inside the report frame the menu belongs to the system webview, which answers it with Look Up / Translate / Copy and does not reliably let the app replace it.
+
 **Reports are review-only by design.** Editing one would mean modelling the document, and any model that round-trips through an editor destroys the `<style>` block, the inline `<svg>`, and every unrecognised attribute a generated report is made of. So Forgemark renders the file verbatim in a sandboxed frame and only ever splices markers into the source at exact byte offsets — the file you save differs from the one you opened by the comments you added, and nothing else.
 
 **Scripts inside a report never run.** A chart drawn in JavaScript renders empty; static and inline-SVG charts are unaffected.

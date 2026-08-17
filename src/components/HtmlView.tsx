@@ -57,8 +57,9 @@ export type HtmlCapturedSelection = {
   // Set when the selection can't be anchored, with a user-facing reason.
   rejectReason?: string;
   overlappingAnchorId: number | null;
-  // Host-viewport coordinates, for positioning the composer.
-  rect: { left: number; bottom: number };
+  // Host-viewport coordinates. `bottom` anchors the composer below the
+  // selection; `top` anchors the selection toolbar above it.
+  rect: { left: number; top: number; bottom: number };
 };
 
 export type HtmlViewHandle = {
@@ -80,8 +81,12 @@ type Props = {
   // to select — a chart, a figure, a table.
   onRequestElementComment: (capture: HtmlCapturedSelection) => void;
   // Right-click inside an iframe never reaches the host window, so the
-  // frame forwards it with host-viewport coordinates.
+  // frame forwards it with host-viewport coordinates. Not every engine
+  // delivers it, which is why it is not the only way in.
   onContextMenu?: (at: { x: number; y: number }) => void;
+  // Fires as the reader selects and deselects text in the report, so the
+  // host can float a Comment / Suggest edit affordance at the selection.
+  onSelectionChange?: (capture: HtmlCapturedSelection | null) => void;
   handleRef?: React.MutableRefObject<HtmlViewHandle | null>;
 };
 
@@ -94,10 +99,14 @@ export function HtmlView({
   onAnchorHover,
   onRequestElementComment,
   onContextMenu,
+  onSelectionChange,
   handleRef,
 }: Props) {
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
+  // Lets the frame's own listeners nudge the selection watcher, without
+  // the watcher having to know when the frame was (re)written.
+  const pokeSelectionRef = useRef<() => void>(() => {});
   const { theme } = useTheme();
 
   // Rebuilt whenever the source changes — which for an HTML document
@@ -209,6 +218,71 @@ export function HtmlView({
     };
   }, []);
 
+  // Watch the reader's selection, by polling from the host.
+  //
+  // Polling rather than listening looks wrong and isn't. Every event a
+  // selection would announce itself with — `mouseup`, `keyup`,
+  // `selectionchange` — is raised inside the frame's own document, and
+  // whether a listener the host attached there is ever called is up to
+  // the embedder's engine. WKWebView shows its native menu on right-click
+  // in a report, which means our in-frame `contextmenu` handler is not
+  // suppressing it, so that delivery cannot be relied on for the one
+  // affordance the reader needs most.
+  //
+  // Reading the selection across the boundary is a different capability,
+  // and one we already depend on: `allow-same-origin` grants it, and ⌘⌥M
+  // has worked on that basis from the start. So the toolbar is driven by
+  // what we can read, not by what we hope gets dispatched.
+  //
+  // The frame's own `selectionchange` / `mouseup` fire this immediately
+  // where they are delivered, so the toolbar is instant in practice; the
+  // interval is the floor that guarantees it appears at all. Both call
+  // the same function, and it is idempotent.
+  //
+  // Cost is one `isCollapsed` check every 200ms, with the expensive part
+  // guarded behind it.
+  useEffect(() => {
+    if (!onSelectionChange) {
+      pokeSelectionRef.current = () => {};
+      return;
+    }
+    let lastKey = "";
+    const tick = () => {
+      const doc = frameRef.current?.contentDocument;
+      const selection = doc?.getSelection();
+      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+        if (lastKey !== "") {
+          lastKey = "";
+          onSelectionChange(null);
+        }
+        return;
+      }
+      const range = selection.getRangeAt(0);
+      // Offsets and length alone are not identity: the same three
+      // numbers describe "abc" at the start of one paragraph and "xyz"
+      // at the start of the next, and treating those as unchanged would
+      // strand the toolbar over the previous passage. Position on screen
+      // is what the toolbar actually tracks, so it belongs in the key.
+      const box = rectOf(range);
+      const key = [
+        range.startOffset,
+        range.endOffset,
+        selection.toString().length,
+        Math.round(box.top),
+        Math.round(box.left),
+      ].join(":");
+      if (key === lastKey) return;
+      lastKey = key;
+      onSelectionChange(capture());
+    };
+    pokeSelectionRef.current = tick;
+    const handle = window.setInterval(tick, 200);
+    return () => {
+      window.clearInterval(handle);
+      pokeSelectionRef.current = () => {};
+    };
+  }, [capture, onSelectionChange]);
+
   // Load the source into the frame and decorate it. Deliberately keyed on
   // `body` alone: a comment add rewrites the source, so the frame is
   // rewritten, and the pane's scroll position is restored afterwards
@@ -318,6 +392,8 @@ export function HtmlView({
       // need it.
       let remembered: Range | null = null;
       const rememberSelection = () => {
+        // Tell the watcher straight away; it is cheap and idempotent.
+        pokeSelectionRef.current();
         const selection = doc.getSelection();
         if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
         if (selection.toString().trim().length === 0) return;
@@ -483,6 +559,21 @@ export function HtmlView({
   );
 }
 
+// A range's bounding box, or a zero box when the document doesn't
+// implement the layout API. Only ever used to notice movement, so a
+// constant answer degrades to "never moved" rather than to a crash.
+function rectOf(range: Range): { top: number; left: number } {
+  try {
+    if (typeof range.getBoundingClientRect === "function") {
+      const r = range.getBoundingClientRect();
+      return { top: r.top, left: r.left };
+    }
+  } catch {
+    /* fall through */
+  }
+  return { top: 0, left: 0 };
+}
+
 // Where to float the composer: just under the end of the selection, in
 // host-viewport coordinates.
 //
@@ -493,15 +584,20 @@ export function HtmlView({
 function composerAnchorRect(
   frame: HTMLIFrameElement,
   range: Range,
-): { left: number; bottom: number } {
+): { left: number; top: number; bottom: number } {
   const frameRect = frame.getBoundingClientRect();
   try {
     const rects = typeof range.getClientRects === "function" ? range.getClientRects() : null;
-    const last =
-      rects && rects.length > 0 ? rects[rects.length - 1] : range.getBoundingClientRect();
-    return { left: frameRect.left + last.left, bottom: frameRect.top + last.bottom };
+    const list = rects && rects.length > 0 ? Array.from(rects) : [range.getBoundingClientRect()];
+    const last = list[list.length - 1];
+    const highest = list.reduce((a, b) => (b.top < a.top ? b : a), list[0]);
+    return {
+      left: frameRect.left + last.left,
+      top: frameRect.top + highest.top,
+      bottom: frameRect.top + last.bottom,
+    };
   } catch {
-    return { left: frameRect.left, bottom: frameRect.top };
+    return { left: frameRect.left, top: frameRect.top, bottom: frameRect.top };
   }
 }
 
@@ -545,6 +641,7 @@ function captureElement(
   const rect = el.getBoundingClientRect();
   const at = {
     left: frameRect.left + rect.left,
+    top: frameRect.top + rect.top,
     bottom: frameRect.top + rect.bottom,
   };
 

@@ -1,0 +1,41 @@
+/* Floats just above the reader's selection in an HTML report. Positioned
+ * in host-viewport coordinates, so it sits over the frame rather than in
+ * it — the frame's own document is never given Forgemark's chrome. */
+.fm-selection-toolbar {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  /* Lift it clear of the selected line. */
+  transform: translateY(-100%);
+  margin-top: -6px;
+  background: var(--fm-card-bg-elevated);
+  border: 0.5px solid var(--fm-card-border);
+  border-radius: 7px;
+  box-shadow: var(--fm-card-shadow-focused);
+}
+
+.fm-selection-toolbar-button {
+  font-family: var(--fm-ui);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: var(--fm-ui-letterspacing);
+  color: var(--fm-prose-ink);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  padding: 5px 9px;
+  cursor: default;
+  white-space: nowrap;
+}
+
+.fm-selection-toolbar-button:hover {
+  background: var(--fm-accent);
+  color: var(--fm-accent-text);
+}
+
+.fm-selection-toolbar-button:focus-visible {
+  outline: 2px solid var(--fm-accent);
+  outline-offset: -1px;
+}
