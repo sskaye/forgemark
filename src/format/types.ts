@@ -41,6 +41,25 @@ export type ParsedFile = {
   comments: Comment[];
 };
 
+// Which document language the body is written in. The storage format is
+// identical in both — `<!-- fmc:N -->` markers and a trailing
+// `<!-- forgemark-comments -->` block are valid HTML *and* valid
+// Markdown — but the rules for where a marker may legally appear differ,
+// so marker scanning is parameterised on this. Everything else in the
+// format layer (serializer, YAML emitter, splice helpers, clean export)
+// is language-blind and takes no `format` argument.
+export type DocFormat = "markdown" | "html";
+
+export const DEFAULT_FORMAT: DocFormat = "markdown";
+
+// Extension → format. Anything unrecognised is treated as Markdown,
+// which is both the historical behaviour and the safer default: the
+// Markdown scanner never invents anchors, it only misses them.
+export function detectFormat(pathOrName: string | null | undefined): DocFormat {
+  if (!pathOrName) return DEFAULT_FORMAT;
+  return /\.(html?|xhtml)$/i.test(pathOrName) ? "html" : DEFAULT_FORMAT;
+}
+
 // Field order canonicalised by the serializer. Listed here so tests can
 // reference the same source of truth.
 export const COMMENT_KEY_ORDER = [

@@ -19,9 +19,11 @@ import { removeMarkersFromBody } from "./compose";
 import {
   BLOCK_OPEN,
   COMMENT_KEY_ORDER,
+  DEFAULT_FORMAT,
   REPLY_KEY_ORDER,
   SUGGESTED_EDIT_KEY_ORDER,
   type Comment,
+  type DocFormat,
   type ParsedFile,
   type Reply,
   type SuggestedEdit,
@@ -84,6 +86,10 @@ export type ParseOptions = {
   // unmatched markers, duplicate ids, marker without YAML record —
   // still throw. Default false (strict, the original behaviour).
   tolerant?: boolean;
+  // Which language the body is in. Only affects where markers are
+  // recognised — the trailing block, the YAML schema, and every
+  // validation rule below are identical for both. Defaults to markdown.
+  format?: DocFormat;
 };
 
 export function parseForgemarkFile(input: string, opts: ParseOptions = {}): ParsedFile {
@@ -116,7 +122,10 @@ export type RecoveryResult = {
   problems: string[];
 };
 
-export function recoverForgemarkFile(input: string): RecoveryResult {
+export function recoverForgemarkFile(
+  input: string,
+  format: DocFormat = DEFAULT_FORMAT,
+): RecoveryResult {
   const block = locateBlock(input);
   if (!block) {
     return { file: { body: input, comments: [] }, recovered: false, problems: [] };
@@ -138,7 +147,7 @@ export function recoverForgemarkFile(input: string): RecoveryResult {
   let body = coalesceAnchorMarkers(block.body);
   const problems: string[] = [];
 
-  const { pairs, unmatched } = pairMarkers(findMarkers(body));
+  const { pairs, unmatched } = pairMarkers(findMarkers(body, format));
   const pairCount = new Map<number, number>();
   for (const p of pairs) pairCount.set(p.id, (pairCount.get(p.id) ?? 0) + 1);
   const recordIds = new Set(comments.map((c) => c.id));
@@ -417,7 +426,7 @@ function validateAgainstBody(body: string, comments: Comment[], opts: ParseOptio
     seen.set(c.id, c);
   }
 
-  const markers = findMarkers(body);
+  const markers = findMarkers(body, opts.format ?? DEFAULT_FORMAT);
   const { pairs, unmatched } = pairMarkers(markers);
   if (unmatched.length > 0) {
     const m = unmatched[0];

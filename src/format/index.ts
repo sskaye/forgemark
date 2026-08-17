@@ -7,20 +7,39 @@ export {
   type RecoveryResult,
 } from "./parser";
 export { serializeForgemarkFile } from "./serializer";
-export { findMarkers, pairMarkers, anchorTextFor, type Marker, type MarkerPair } from "./markers";
+export {
+  findMarkers,
+  findMarkersMarkdown,
+  findMarkersHtml,
+  pairMarkers,
+  anchorTextFor,
+  type Marker,
+  type MarkerPair,
+} from "./markers";
 export {
   openMarker,
   closeMarker,
+  detectFormat,
   BLOCK_OPEN,
   BLOCK_CLOSE,
+  DEFAULT_FORMAT,
   COMMENT_KEY_ORDER,
   REPLY_KEY_ORDER,
   SUGGESTED_EDIT_KEY_ORDER,
   type Comment,
+  type DocFormat,
   type Reply,
   type SuggestedEdit,
   type ParsedFile,
 } from "./types";
+export {
+  buildHtmlTextMap,
+  textRangeToSource,
+  rangeIsExact,
+  runAt,
+  type HtmlTextMap,
+  type HtmlTextRun,
+} from "./html/textmap";
 export { escapeContent, unescapeContent } from "./escape";
 export { bodyWithAnchorSpans, bodyFromAnchorSpans, coalesceAnchorMarkers } from "./markers-display";
 export {
