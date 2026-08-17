@@ -187,7 +187,7 @@ export function Sidebar({ anchorStatuses }: SidebarProps) {
           }}
           onAcceptSuggestion={() => {
             if (!c.suggested_edit) return;
-            const result = replaceAnchoredText(state.body, c.id, c.suggested_edit.to);
+            const result = replaceAnchoredText(state.body, c.id, c.suggested_edit.to, state.format);
             if (!result) {
               dispatch({
                 type: "error",
@@ -214,7 +214,7 @@ export function Sidebar({ anchorStatuses }: SidebarProps) {
             });
           }}
           onRejectSuggestion={() => {
-            const newBody = stripAnchoredMarkers(state.body, c.id);
+            const newBody = stripAnchoredMarkers(state.body, c.id, state.format);
             if (newBody == null) {
               dispatch({
                 type: "error",

@@ -1,45 +1,65 @@
 // Tauri file I/O wrappers.
 //
-// Phase 2 surface:
-//   - openMarkdownFile(): show the open dialog, return the file's text + path
-//     + read-only state, or null if the user cancelled.
-//   - saveMarkdownFile(path, text): write the file. Returns void on success.
+// Surface:
+//   - openDocuments(): show the open dialog, return each file's text +
+//     path + read-only state.
+//   - readDocument(path): read a known path.
+//   - saveDocument(path, text): write the file.
 //   - basename(path): extract the file's display name.
+//
+// Forgemark opens Markdown and HTML. The two are the same product — the
+// storage format is identical, and a workspace holds a mix of both — so
+// there is one dialog with one filter list rather than a mode switch.
 //
 // All Tauri-flavoured calls go through this module. Tests stub it.
 
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile, stat } from "@tauri-apps/plugin-fs";
+import { detectFormat } from "../format/types";
+import type { DocFormat } from "../format/types";
+
+// The one place the set of openable extensions is written down.
+const MARKDOWN_EXTENSIONS = ["md", "markdown"];
+const HTML_EXTENSIONS = ["html", "htm", "xhtml"];
+
+const OPEN_FILTERS = [
+  { name: "Documents", extensions: [...MARKDOWN_EXTENSIONS, ...HTML_EXTENSIONS] },
+  { name: "Markdown", extensions: MARKDOWN_EXTENSIONS },
+  { name: "HTML", extensions: HTML_EXTENSIONS },
+];
 
 export type OpenedFile = {
   path: string;
   fileName: string;
   text: string;
   readOnly: boolean;
+  // Decided here, from the extension, so every caller agrees and the
+  // decision is made exactly once per open.
+  format: DocFormat;
 };
 
-// Open a markdown file. Returns null if the user cancelled.
+// Open a single document. Returns null if the user cancelled.
 // Throws if the chosen file can't be read (e.g. moved between dialog
 // pick and read).
 //
 // Kept for callers that want exactly one document; multi-select lives in
-// `openMarkdownFiles` below.
-export async function openMarkdownFile(): Promise<OpenedFile | null> {
-  const [first = null] = await openMarkdownFiles({ multiple: false });
+// `openDocuments` below.
+export async function openDocument(): Promise<OpenedFile | null> {
+  const [first = null] = await openDocuments({ multiple: false });
   return first;
 }
 
-// Open one or more markdown files. Each becomes its own tab.
+// Open one or more documents. Each becomes its own tab.
 //
 // Reads are sequential rather than concurrent: a fistful of parallel
 // file reads buys nothing perceptible here and makes the failure story
 // worse. Files that can't be read are skipped and reported, so one bad
 // path out of five doesn't sink the other four.
-export async function openMarkdownFiles(opts: { multiple?: boolean } = {}): Promise<OpenedFile[]> {
+export async function openDocuments(opts: { multiple?: boolean } = {}): Promise<OpenedFile[]> {
   const selected = await open({
     multiple: opts.multiple ?? true,
     directory: false,
-    filters: [{ name: "Markdown", extensions: ["md", "markdown"] }],
+    filters: OPEN_FILTERS,
   });
   if (selected === null) return [];
   const paths = (Array.isArray(selected) ? selected : [selected]).filter(Boolean);
@@ -47,7 +67,7 @@ export async function openMarkdownFiles(opts: { multiple?: boolean } = {}): Prom
   const failures: string[] = [];
   for (const path of paths) {
     try {
-      opened.push(await readMarkdownFile(path));
+      opened.push(await readDocument(path));
     } catch (err) {
       failures.push(`${path}: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -61,7 +81,7 @@ export async function openMarkdownFiles(opts: { multiple?: boolean } = {}): Prom
 // Read a known path. Surfaces a helpful error if the path is missing or
 // is a directory (defensive — the dialog filter should have caught this,
 // but tests cover the case).
-export async function readMarkdownFile(path: string): Promise<OpenedFile> {
+export async function readDocument(path: string): Promise<OpenedFile> {
   let stats;
   try {
     stats = await stat(path);
@@ -71,8 +91,8 @@ export async function readMarkdownFile(path: string): Promise<OpenedFile> {
   if (stats.isDirectory) {
     throw new Error(`Path is a directory, not a markdown file: ${path}`);
   }
-  if (!isMarkdownPath(path)) {
-    throw new Error(`Not a markdown file: ${path}`);
+  if (!isSupportedPath(path)) {
+    throw new Error(`Not a Markdown or HTML file: ${path}`);
   }
   const text = await readTextFile(path);
   return {
@@ -80,17 +100,29 @@ export async function readMarkdownFile(path: string): Promise<OpenedFile> {
     fileName: basename(path),
     text,
     readOnly: stats.readonly === true,
+    format: detectFormat(path),
   };
 }
 
 // Save text to the given path. If `path` is null (e.g. an Untitled buffer),
 // prompts for a destination via a save dialog and returns the chosen path.
-export async function saveMarkdownFile(path: string | null, text: string): Promise<string | null> {
+//
+// `format` picks the dialog's default extension. An Untitled buffer is
+// always Markdown — there is no way to author a report in Forgemark —
+// so HTML only reaches this branch via Save As on an opened report.
+export async function saveDocument(
+  path: string | null,
+  text: string,
+  format: DocFormat = "markdown",
+): Promise<string | null> {
   let target = path;
   if (!target) {
     const chosen = await save({
-      filters: [{ name: "Markdown", extensions: ["md", "markdown"] }],
-      defaultPath: "Untitled.md",
+      filters:
+        format === "html"
+          ? [{ name: "HTML", extensions: HTML_EXTENSIONS }]
+          : [{ name: "Markdown", extensions: MARKDOWN_EXTENSIONS }],
+      defaultPath: format === "html" ? "Untitled.html" : "Untitled.md",
     });
     if (!chosen) return null; // user cancelled
     target = chosen;
@@ -106,4 +138,13 @@ export function basename(path: string): string {
 
 export function isMarkdownPath(path: string): boolean {
   return /\.(md|markdown)$/i.test(path);
+}
+
+export function isHtmlPath(path: string): boolean {
+  return /\.(html?|xhtml)$/i.test(path);
+}
+
+// Whether Forgemark will open this path at all.
+export function isSupportedPath(path: string): boolean {
+  return isMarkdownPath(path) || isHtmlPath(path);
 }

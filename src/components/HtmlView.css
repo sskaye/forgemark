@@ -1,0 +1,15 @@
+/* The report frame.
+ *
+ * Sized to its content by HtmlView so the editor pane owns scrolling —
+ * an iframe with its own scrollbar would decouple the report from the
+ * comment sidebar, the scroll restoration, and the view-sync machinery
+ * that all assume one scrolling surface per document. */
+.fm-html-view {
+  display: block;
+  width: 100%;
+  border: 0;
+  /* Replaced by an exact pixel height once the document has laid out. */
+  height: 320px;
+  background: var(--fm-editor-paper);
+  color-scheme: light dark;
+}

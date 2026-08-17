@@ -7,9 +7,9 @@ import type { Comment } from "../../src/format";
 import { typeIntoEditor, editorText } from "../utils/typing";
 
 vi.mock("../../src/services/fileIO", () => ({
-  openMarkdownFile: vi.fn(),
-  readMarkdownFile: vi.fn(),
-  saveMarkdownFile: vi.fn(),
+  openDocument: vi.fn(),
+  readDocument: vi.fn(),
+  saveDocument: vi.fn(),
 }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn(), ask: vi.fn() }));
 vi.mock("@tauri-apps/plugin-fs", () => ({

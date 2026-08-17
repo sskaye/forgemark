@@ -16,11 +16,7 @@ import type { Comment } from "../types";
 import { rankCandidates, type ReattachCandidate } from "../matching";
 import { buildHtmlTextMap, textRangeToSource } from "./textmap";
 
-export function htmlCandidates(
-  body: string,
-  comment: Comment,
-  max: number,
-): ReattachCandidate[] {
+export function htmlCandidates(body: string, comment: Comment, max: number): ReattachCandidate[] {
   const anchor = comment.anchor_text;
   if (!anchor || anchor.length === 0) return [];
 

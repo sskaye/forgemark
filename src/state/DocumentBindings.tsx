@@ -3,7 +3,7 @@ import { useWorkspace } from "./DocumentProvider";
 import type { PendingIntent } from "./document";
 import { anyDirty, type DocId } from "./workspace";
 import { invoke } from "@tauri-apps/api/core";
-import { openMarkdownFiles, saveMarkdownFile, readMarkdownFile } from "../services/fileIO";
+import { openDocuments, saveDocument, readDocument } from "../services/fileIO";
 import {
   parseForgemarkFile,
   recoverForgemarkFile,
@@ -123,14 +123,17 @@ export function DocumentBindings({
   const openPath = useCallback(
     async (path: string) => {
       try {
-        const opened = await readMarkdownFile(path);
+        const opened = await readDocument(path);
         let parsed;
         try {
-          parsed = parseForgemarkFile(opened.text, { tolerant: true });
+          parsed = parseForgemarkFile(opened.text, {
+            tolerant: true,
+            format: opened.format,
+          });
         } catch (err) {
           // Fail soft: recover as many comments as possible instead of
           // blanking every comment on a single damaged anchor.
-          const recovery = recoverForgemarkFile(opened.text);
+          const recovery = recoverForgemarkFile(opened.text, opened.format);
           parsed = recovery.file;
           dispatch({ type: "error", message: recoveryMessage(err, recovery) });
         }
@@ -145,6 +148,7 @@ export function DocumentBindings({
             originalText: opened.text,
             body: parsed.body,
             comments: parsed.comments,
+            format: opened.format,
             readOnly: opened.readOnly,
             // Seed the preferred view here rather than dispatching a
             // second action at the freshly created tab.
@@ -176,19 +180,22 @@ export function DocumentBindings({
   // ⌘O. Each chosen file opens in its own tab.
   const runOpenDialog = useCallback(async () => {
     try {
-      const files = await openMarkdownFiles();
+      const files = await openDocuments();
       for (const opened of files) {
         let parsed;
         try {
           // Phase 9: tolerant mode keeps comments that are missing their
           // marker pair so the lost-anchor banner can surface them,
           // instead of dropping all comments on a single missing marker.
-          parsed = parseForgemarkFile(opened.text, { tolerant: true });
+          parsed = parseForgemarkFile(opened.text, {
+            tolerant: true,
+            format: opened.format,
+          });
         } catch (err) {
           // Fail soft: recover as many comments as possible (coalescing
           // splattered anchors, detaching unrecoverable ones for
           // reattachment) instead of dropping every comment.
-          const recovery = recoverForgemarkFile(opened.text);
+          const recovery = recoverForgemarkFile(opened.text, opened.format);
           parsed = recovery.file;
           dispatch({ type: "error", message: recoveryMessage(err, recovery) });
         }
@@ -200,6 +207,7 @@ export function DocumentBindings({
             originalText: opened.text,
             body: parsed.body,
             comments: parsed.comments,
+            format: opened.format,
             readOnly: opened.readOnly,
             // Seed the preferred view here rather than dispatching a
             // second action at the freshly created tab.
@@ -241,7 +249,7 @@ export function DocumentBindings({
       // path when set.
       const seedPath = opts.forcePrompt ? null : s.filePath;
       try {
-        const path = await saveMarkdownFile(seedPath, text);
+        const path = await saveDocument(seedPath, text, s.format);
         if (!path) return; // user cancelled save dialog
         dispatch({ type: "saved", text, body: s.body });
         if (path !== s.filePath) {
@@ -457,7 +465,7 @@ export function DocumentBindings({
     const handle = setTimeout(async () => {
       const text = serializeForgemarkFile({ body: state.body, comments: state.comments });
       try {
-        await saveMarkdownFile(state.filePath, text);
+        await saveDocument(state.filePath, text);
         dispatch({ type: "saved", text, body: state.body });
         baselineRef.current = await fingerprint(text, null);
       } catch (err) {
@@ -527,7 +535,10 @@ export function DocumentBindings({
             // change with parseError set so the save-conflict modal
             // can show "Unknown changes".
             try {
-              const parsed = parseForgemarkFile(text, { tolerant: true });
+              const parsed = parseForgemarkFile(text, {
+                tolerant: true,
+                format: stateRef.current.format,
+              });
               dispatch({
                 type: "externalChangeDetected",
                 text,

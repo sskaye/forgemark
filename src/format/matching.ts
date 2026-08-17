@@ -35,7 +35,11 @@ export function rankCandidates(
   return fuzzyCandidates(body, anchor).slice(0, max);
 }
 
-export function exactCandidates(body: string, anchor: string, comment: Comment): ReattachCandidate[] {
+export function exactCandidates(
+  body: string,
+  anchor: string,
+  comment: Comment,
+): ReattachCandidate[] {
   const out: ReattachCandidate[] = [];
   let i = 0;
   while (true) {

@@ -174,7 +174,12 @@ export function findMarkersHtml(body: string): Marker[] {
         const remainder = body.slice(i);
         const openMatch = remainder.match(/^<!--\s*fmc:(\d+)\s*-->/);
         if (openMatch) {
-          out.push({ type: "open", id: Number(openMatch[1]), start: i, end: i + openMatch[0].length });
+          out.push({
+            type: "open",
+            id: Number(openMatch[1]),
+            start: i,
+            end: i + openMatch[0].length,
+          });
           i += openMatch[0].length;
           continue;
         }

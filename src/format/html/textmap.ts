@@ -137,10 +137,7 @@ export function buildHtmlTextMap(html: string): HtmlTextMap {
 // from. Handles the three things that make raw length differ from
 // rendered length: character references, CRLF normalisation, and lone
 // carriage returns.
-function decodeRun(
-  raw: string,
-  base: number,
-): { text: string; starts: number[]; ends: number[] } {
+function decodeRun(raw: string, base: number): { text: string; starts: number[]; ends: number[] } {
   let text = "";
   const starts: number[] = [];
   const ends: number[] = [];

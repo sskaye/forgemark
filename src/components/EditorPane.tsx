@@ -3,6 +3,7 @@ import { useWorkspace } from "../state/DocumentProvider";
 import type { DocId } from "../state/workspace";
 import { useAuthorName } from "../state/preferences";
 import { RenderedView, type RenderedSearchMatch, type RenderedViewHandle } from "./RenderedView";
+import { HtmlView, type HtmlCapturedSelection, type HtmlViewHandle } from "./HtmlView";
 import { SourceView, type SourceViewHandle } from "./SourceView";
 import { NewCommentComposer } from "./NewCommentComposer";
 import { OverlapPrompt } from "./OverlapPrompt";
@@ -50,11 +51,20 @@ export function EditorPane({ docId }: Props) {
   // document only, and classifyAnchors is a pure pass over data already
   // in memory. Hoist into the workspace if it ever shows up in a profile.
   const anchorStatuses = useMemo(
-    () => classifyAnchors(state.body, state.comments),
-    [state.body, state.comments],
+    () => classifyAnchors(state.body, state.comments, state.format),
+    [state.body, state.comments, state.format],
   );
+  // HTML documents are review-only: the prose can't be edited, because
+  // editing means modelling the document and any editor model destroys
+  // the CSS, inline SVG, and unknown attributes a generated report is
+  // made of. Commenting, replying, suggesting and accepting a suggestion
+  // all still work — they are splices on the source, not edits through a
+  // model. Find/replace is off for the same reason replace is: there is
+  // nothing to type into.
+  const isHtml = state.format === "html";
   const [author] = useAuthorName();
   const handleRef = useRef<RenderedViewHandle | null>(null);
+  const htmlRef = useRef<HtmlViewHandle | null>(null);
   const sourceRef = useRef<SourceViewHandle | null>(null);
   const paneRef = useRef<HTMLElement | null>(null);
   const pendingViewSyncRef = useRef<ViewSyncAnchor | null>(null);
@@ -83,9 +93,57 @@ export function EditorPane({ docId }: Props) {
   // blocks or inline code spans are refused, mirroring the
   // parser-level rule from Phase 3. In Source view the trigger is a
   // no-op — Source is read-only review.
+  // Open the composer for whatever the reader has selected. Both views
+  // capture the same shape — a source range, the selected text, and the
+  // surrounding context — so everything downstream of this point is
+  // shared: the composer, the reducer action, and the YAML record.
+  const openComposerFor = useCallback(
+    (captured: HtmlCapturedSelection, initialMode: "comment" | "suggest" = "comment") => {
+      if (captured.rejectReason) {
+        dispatch({ type: "error", message: captured.rejectReason });
+        return;
+      }
+      if (captured.overlappingAnchorId != null) {
+        dispatch({
+          type: "openComposer",
+          composer: {
+            mode: "overlapPrompt",
+            targetCommentId: captured.overlappingAnchorId,
+            x: captured.rect.left,
+            y: captured.rect.bottom + 6,
+          },
+        });
+        return;
+      }
+      dispatch({
+        type: "openComposer",
+        composer: {
+          mode: "new",
+          from: captured.from,
+          to: captured.to,
+          selectionText: captured.text,
+          contextBefore: captured.contextBefore,
+          contextAfter: captured.contextAfter,
+          ...(captured.kind === "element" ? { anchorKind: "element" as const } : {}),
+          ...(captured.anchorSelector ? { anchorSelector: captured.anchorSelector } : {}),
+          x: captured.rect.left,
+          y: captured.rect.bottom + 6,
+          initialMode,
+        },
+      });
+    },
+    [dispatch],
+  );
+
   const openComposer = useCallback(
     (initialMode: "comment" | "suggest" = "comment") => {
       if (state.viewMode !== "rendered") return;
+      if (isHtml) {
+        const captured = htmlRef.current?.captureSelection();
+        if (!captured) return;
+        openComposerFor(captured, initialMode);
+        return;
+      }
       const handle = handleRef.current;
       if (!handle) return;
       const captured = handle.captureSelection();
@@ -129,11 +187,15 @@ export function EditorPane({ docId }: Props) {
         },
       });
     },
-    [dispatch, state.viewMode],
+    [dispatch, isHtml, openComposerFor, state.viewMode],
   );
 
   const openFindReplace = useCallback(
     (replaceVisible: boolean) => {
+      // Find is implemented over the editor's document model, which an
+      // HTML report doesn't have. Rather than half-wire it, it stays off
+      // here; Source view is searchable and is one keystroke away.
+      if (isHtml) return;
       if (state.viewMode !== "rendered") {
         setViewMode("rendered");
       }
@@ -146,7 +208,7 @@ export function EditorPane({ docId }: Props) {
         activeIndex: selected && selected.length > 0 ? 0 : prev.activeIndex,
       }));
     },
-    [setViewMode, state.viewMode],
+    [isHtml, setViewMode, state.viewMode],
   );
 
   const closeFindReplace = useCallback(() => {
@@ -222,7 +284,7 @@ export function EditorPane({ docId }: Props) {
 
   useEffect(() => {
     if (!findState.open) return;
-    if (state.viewMode !== "rendered") return;
+    if (state.viewMode !== "rendered" || isHtml) return;
     const handle = handleRef.current;
     if (!handle) return;
     if (findState.query.length === 0) {
@@ -252,6 +314,7 @@ export function EditorPane({ docId }: Props) {
     findState.matches,
     findState.open,
     findState.query,
+    isHtml,
     state.body,
     state.viewMode,
   ]);
@@ -290,22 +353,49 @@ export function EditorPane({ docId }: Props) {
     return () => window.removeEventListener("contextmenu", onCtx);
   }, [state.viewMode]);
 
+  // Both views expose `applyAnchor(from, to, id) -> new body`. For
+  // Markdown that runs through the editor's mark system; for HTML it is
+  // a byte splice into the source, which is the only way to add an
+  // anchor without re-serializing (and so rewriting) the file.
+  const applyAnchor = useCallback(
+    (from: number, to: number, id: number): string | null => {
+      if (isHtml) return htmlRef.current?.applyAnchor(from, to, id) ?? null;
+      return handleRef.current?.applyAnchor(from, to, id) ?? null;
+    },
+    [isHtml],
+  );
+
+  // Anchor metadata common to a new comment and a new suggestion.
+  const anchorFields = useCallback(
+    (c: {
+      selectionText: string;
+      contextBefore: string;
+      contextAfter: string;
+      anchorKind?: "element";
+      anchorSelector?: string;
+    }) => ({
+      anchor_text: c.selectionText,
+      ...(c.anchorKind ? { anchor_kind: c.anchorKind } : {}),
+      ...(c.anchorSelector ? { anchor_selector: c.anchorSelector } : {}),
+      context_before: c.contextBefore,
+      context_after: c.contextAfter,
+    }),
+    [],
+  );
+
   const submitComment = useCallback(
     (commentBody: string) => {
       const c = state.composer;
       if (!c || c.mode !== "new") return;
-      const handle = handleRef.current;
-      if (!handle) return;
       const id = nextCommentId(state.comments);
-      const newBody = handle.applyAnchor(c.from, c.to, id);
+      const newBody = applyAnchor(c.from, c.to, id);
+      if (newBody == null) return;
       dispatch({
         type: "addComment",
         body: newBody,
         comment: {
           id,
-          anchor_text: c.selectionText,
-          context_before: c.contextBefore,
-          context_after: c.contextAfter,
+          ...anchorFields(c),
           author,
           timestamp: new Date().toISOString(),
           resolved: false,
@@ -313,7 +403,7 @@ export function EditorPane({ docId }: Props) {
         },
       });
     },
-    [state.composer, state.comments, author, dispatch],
+    [state.composer, state.comments, author, dispatch, applyAnchor, anchorFields],
   );
 
   // Phase 7: suggested-edit submission. The composer captures both the
@@ -324,18 +414,15 @@ export function EditorPane({ docId }: Props) {
     (replacement: string, optionalBody: string) => {
       const c = state.composer;
       if (!c || c.mode !== "new") return;
-      const handle = handleRef.current;
-      if (!handle) return;
       const id = nextCommentId(state.comments);
-      const newBody = handle.applyAnchor(c.from, c.to, id);
+      const newBody = applyAnchor(c.from, c.to, id);
+      if (newBody == null) return;
       dispatch({
         type: "addComment",
         body: newBody,
         comment: {
           id,
-          anchor_text: c.selectionText,
-          context_before: c.contextBefore,
-          context_after: c.contextAfter,
+          ...anchorFields(c),
           author,
           timestamp: new Date().toISOString(),
           resolved: false,
@@ -346,7 +433,7 @@ export function EditorPane({ docId }: Props) {
         },
       });
     },
-    [state.composer, state.comments, author, dispatch],
+    [state.composer, state.comments, author, dispatch, applyAnchor, anchorFields],
   );
 
   const cancelComposer = useCallback(() => dispatch({ type: "closeComposer" }), [dispatch]);
@@ -453,12 +540,18 @@ export function EditorPane({ docId }: Props) {
   useEffect(() => {
     if (state.viewMode !== "rendered") return;
     if (state.focusedCommentId == null) return;
+    // The anchor lives inside the report's iframe, which the pane can't
+    // reach with a querySelector and which can't scroll its own host.
+    if (isHtml) {
+      htmlRef.current?.scrollToComment(state.focusedCommentId);
+      return;
+    }
     const pane = paneRef.current;
     if (!pane) return;
     const span = pane.querySelector<HTMLElement>(`[data-anchor-id="${state.focusedCommentId}"]`);
     if (!span || typeof span.scrollIntoView !== "function") return;
     span.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [state.focusedCommentId, state.viewMode]);
+  }, [state.focusedCommentId, state.viewMode, isHtml]);
 
   // Source mode has its own scrollToMarker handle.
   useEffect(() => {
@@ -526,6 +619,21 @@ export function EditorPane({ docId }: Props) {
           <span>Source view · read-only review</span>
         </aside>
       )}
+      {/* An HTML report can be commented on but not rewritten. Saying so
+          up front is better than letting someone discover it by trying
+          to type — the editing they can't do is the only thing that
+          differs from a Markdown document. */}
+      {state.viewMode === "rendered" && isHtml && (
+        <aside
+          className="fm-source-chip"
+          data-testid="fm-html-chip"
+          title="Select any passage to comment, or hover a figure or table. The report's own text isn't editable here."
+          aria-label="HTML report, review only"
+        >
+          <span className="fm-source-chip-dot" aria-hidden="true" />
+          <span>HTML report · review only</span>
+        </aside>
+      )}
       <div className="fm-document">
         <LostAnchorBanner
           count={lostAnchorIds.length}
@@ -534,7 +642,22 @@ export function EditorPane({ docId }: Props) {
             dispatch({ type: "openReattach", commentId: lostAnchorIds[0] });
           }}
         />
-        {state.viewMode === "rendered" ? (
+        {state.viewMode === "source" ? (
+          <SourceView ref={sourceRef} text={sourceText} format={state.format} />
+        ) : isHtml ? (
+          <HtmlView
+            key={state.loadGeneration}
+            body={state.body}
+            comments={state.comments}
+            focusedCommentId={state.focusedCommentId}
+            hoveredCommentId={state.hoveredCommentId}
+            onAnchorClick={(id) => dispatch({ type: "setFocusedComment", id })}
+            onAnchorHover={(id) => dispatch({ type: "setHoveredComment", id })}
+            onRequestElementComment={(capture) => openComposerFor(capture)}
+            onContextMenu={(at) => setContextMenu({ x: at.x, y: at.y })}
+            handleRef={htmlRef}
+          />
+        ) : (
           <RenderedView
             // Remount on every content-replacing load so the Tiptap undo
             // stack can't outlive the document it belongs to.
@@ -549,8 +672,6 @@ export function EditorPane({ docId }: Props) {
             onExternalLinkError={(message) => dispatch({ type: "error", message })}
             handleRef={handleRef}
           />
-        ) : (
-          <SourceView ref={sourceRef} text={sourceText} />
         )}
       </div>
       {state.composer?.mode === "new" && state.viewMode === "rendered" && (

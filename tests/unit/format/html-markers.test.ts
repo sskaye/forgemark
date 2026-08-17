@@ -14,7 +14,9 @@ describe("findMarkersHtml", () => {
     // The Markdown scanner treats 4+ leading spaces after a blank line as
     // an indented code block and skips it. HTML is indented as a matter
     // of course, so that rule makes markers invisible.
-    const src = ["<div>", "", "    <p><!-- fmc:2 -->hi<!-- /fmc:2 --></p>", "</div>", ""].join("\n");
+    const src = ["<div>", "", "    <p><!-- fmc:2 -->hi<!-- /fmc:2 --></p>", "</div>", ""].join(
+      "\n",
+    );
     expect(findMarkers(src, "markdown")).toHaveLength(0);
     expect(findMarkers(src, "html").map((m) => m.type)).toEqual(["open", "close"]);
   });
@@ -40,7 +42,7 @@ describe("findMarkersHtml", () => {
   });
 
   it("ignores marker-shaped text inside an attribute value", () => {
-    const src = '<p title="<!-- fmc:5 -->" data-x=\'<!-- fmc:6 -->\'>real</p>\n';
+    const src = "<p title=\"<!-- fmc:5 -->\" data-x='<!-- fmc:6 -->'>real</p>\n";
     expect(findMarkersHtml(src)).toHaveLength(0);
   });
 
@@ -75,7 +77,7 @@ describe("findMarkersHtml", () => {
   });
 
   it("does not run off the end on unterminated markup", () => {
-    expect(() => findMarkersHtml("<p><span class=\"x")).not.toThrow();
+    expect(() => findMarkersHtml('<p><span class="x')).not.toThrow();
     expect(() => findMarkersHtml("<!-- unterminated")).not.toThrow();
     expect(() => findMarkersHtml("<script>never closed")).not.toThrow();
   });

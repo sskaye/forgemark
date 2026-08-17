@@ -22,6 +22,18 @@ export type Comment = {
   id: number;
   // anchor_text is required unless `floating: true`. Validation enforces.
   anchor_text?: string;
+  // What the marker pair encloses. Absent means a run of text, which is
+  // the overwhelming majority and so stays unwritten. "element" means the
+  // markers wrap a whole block — a figure, chart, or table — which is the
+  // only way to comment on something that has no text to select, and the
+  // thing reviewers most want to point at in a generated report.
+  anchor_kind?: "element";
+  // A CSS selector that identifies the anchored element, written when
+  // the report gives it a stable id. Tried before any text matching when
+  // reattaching, which turns recovery after a regenerated report from
+  // probabilistic into exact. Purely a hint: a stale selector costs
+  // nothing because text matching still runs.
+  anchor_selector?: string;
   context_before?: string;
   context_after?: string;
   author: string;
@@ -66,6 +78,8 @@ export const COMMENT_KEY_ORDER = [
   "id",
   "floating",
   "anchor_text",
+  "anchor_kind",
+  "anchor_selector",
   "context_before",
   "context_after",
   "author",

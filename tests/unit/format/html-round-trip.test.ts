@@ -127,9 +127,7 @@ describe("html reattachment after a regenerated report", () => {
     expect(report).not.toContain("ISF from this record");
     const candidates = findCandidates(report, split, "html");
     expect(candidates.length).toBeGreaterThan(0);
-    expect(report.slice(candidates[0].from, candidates[0].to)).toBe(
-      "ISF</code> from this record",
-    );
+    expect(report.slice(candidates[0].from, candidates[0].to)).toBe("ISF</code> from this record");
   });
 
   it("finds nothing when the passage is genuinely gone", () => {

@@ -8,7 +8,9 @@ import {
   type ViewUpdate,
 } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
+import { html as htmlLanguage } from "@codemirror/lang-html";
 import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
+import type { DocFormat } from "../format/types";
 import {
   buildSourceTextIndex,
   findAnchorPosition,
@@ -44,6 +46,10 @@ export type SourceViewHandle = {
 
 type Props = {
   text: string;
+  // Which grammar to highlight with. The marker and trailing-block
+  // decorations below are regex-based and identical either way — only
+  // the syntax layer underneath them changes.
+  format?: DocFormat;
 };
 
 // Match `<!-- fmc:N -->` or `<!-- /fmc:N -->` for any non-negative integer N.
@@ -102,10 +108,13 @@ const decorationPlugin = ViewPlugin.fromClass(
 
 // The base extensions are stable across re-renders; only the doc text
 // changes via a Compartment-less transaction (we replace via dispatch).
+function languageFor(format: DocFormat) {
+  return format === "html" ? htmlLanguage() : markdown();
+}
+
 const baseExtensions = [
   EditorState.readOnly.of(true),
   EditorView.editable.of(false),
-  markdown(),
   syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
   decorationPlugin,
   EditorView.theme(
@@ -130,12 +139,16 @@ const baseExtensions = [
   ),
 ];
 
-export const SourceView = forwardRef<SourceViewHandle, Props>(function SourceView({ text }, ref) {
+export const SourceView = forwardRef<SourceViewHandle, Props>(function SourceView(
+  { text, format = "markdown" },
+  ref,
+) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
-  // We keep one Compartment around purely to enable surgical reconfigures
-  // in the future (e.g. theme swap). For now it's unused but stable.
-  const themeCompartment = useRef(new Compartment());
+  // The grammar is swapped through a Compartment rather than by
+  // rebuilding the editor, so a format change can't discard scroll
+  // position or the decorations layered over it.
+  const languageCompartment = useRef(new Compartment());
 
   // Mount once.
   useEffect(() => {
@@ -143,7 +156,7 @@ export const SourceView = forwardRef<SourceViewHandle, Props>(function SourceVie
     if (!host) return;
     const state = EditorState.create({
       doc: text,
-      extensions: [...baseExtensions, themeCompartment.current.of([])],
+      extensions: [...baseExtensions, languageCompartment.current.of(languageFor(format))],
     });
     const view = new EditorView({ state, parent: host });
     viewRef.current = view;
@@ -167,6 +180,14 @@ export const SourceView = forwardRef<SourceViewHandle, Props>(function SourceVie
       changes: { from: 0, to: view.state.doc.length, insert: text },
     });
   }, [text]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: languageCompartment.current.reconfigure(languageFor(format)),
+    });
+  }, [format]);
 
   useImperativeHandle(
     ref,

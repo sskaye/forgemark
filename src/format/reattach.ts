@@ -51,7 +51,6 @@ export type AnchorStatus =
   | { kind: "orphaned"; candidates: ReattachCandidate[] }
   | { kind: "floating" };
 
-
 const MAX_CANDIDATES = 5;
 
 // Detect anchor status for one comment relative to the current body.
@@ -117,4 +116,3 @@ export function findCandidates(
 
   return rankCandidates(body, anchor, comment, MAX_CANDIDATES);
 }
-

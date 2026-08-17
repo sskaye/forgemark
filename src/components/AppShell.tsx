@@ -24,7 +24,7 @@ import {
 } from "../format";
 import { contextSnippet, parseForgemarkFile } from "../format";
 import { useFontSize, useFirstRun } from "../state/preferences";
-import { saveMarkdownFile } from "../services/fileIO";
+import { saveDocument } from "../services/fileIO";
 import { applyWindowAction, isWindowAction } from "../services/windowActions";
 import { invoke } from "@tauri-apps/api/core";
 import "./AppShell.css";
@@ -156,8 +156,8 @@ export function AppShell() {
   // change. classifyAnchors does one marker scan + per-orphan candidate
   // generation, which the perf test bounds at < 2s for 50k-word bodies.
   const anchorStatuses = useMemo(
-    () => classifyAnchors(state.body, state.comments),
-    [state.body, state.comments],
+    () => classifyAnchors(state.body, state.comments, state.format),
+    [state.body, state.comments, state.format],
   );
 
   const reattachTargetComment =
@@ -292,7 +292,7 @@ export function AppShell() {
             const baseName = state.fileName.replace(/\.(md|markdown)$/i, "");
             const defaultPath = baseName + "-clean.md";
             try {
-              await saveMarkdownFile(null, text);
+              await saveDocument(null, text);
               setCleanExportOpen(false);
               // Hint the OS save dialog name via the fileIO layer's
               // save() — its current signature takes no default name,

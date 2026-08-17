@@ -3,13 +3,13 @@ import { render, screen, waitFor, fireEvent, act } from "@testing-library/react"
 import { ThemeProvider } from "../../src/theme/ThemeProvider";
 import { DocumentProvider, useWorkspace } from "../../src/state/DocumentProvider";
 import { AppShell } from "../../src/components/AppShell";
-import { saveMarkdownFile, openMarkdownFile } from "../../src/services/fileIO";
+import { saveDocument, openDocument } from "../../src/services/fileIO";
 import { invoke } from "@tauri-apps/api/core";
 
 vi.mock("../../src/services/fileIO", () => ({
-  openMarkdownFile: vi.fn(),
-  readMarkdownFile: vi.fn(),
-  saveMarkdownFile: vi.fn(),
+  openDocument: vi.fn(),
+  readDocument: vi.fn(),
+  saveDocument: vi.fn(),
 }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn(), ask: vi.fn() }));
 vi.mock("@tauri-apps/plugin-fs", () => ({
@@ -106,8 +106,8 @@ async function requestQuit() {
 
 describe("opening no longer discards anything", () => {
   beforeEach(() => {
-    vi.mocked(saveMarkdownFile).mockReset().mockResolvedValue("/tmp/saved.md");
-    vi.mocked(openMarkdownFile)
+    vi.mocked(saveDocument).mockReset().mockResolvedValue("/tmp/saved.md");
+    vi.mocked(openDocument)
       .mockReset()
       .mockResolvedValue(null as never);
     vi.mocked(invoke).mockClear();
@@ -133,7 +133,7 @@ describe("opening no longer discards anything", () => {
 
 describe("closing a tab guards unsaved work", () => {
   beforeEach(() => {
-    vi.mocked(saveMarkdownFile).mockReset().mockResolvedValue("/tmp/saved.md");
+    vi.mocked(saveDocument).mockReset().mockResolvedValue("/tmp/saved.md");
     vi.mocked(invoke).mockClear();
   });
 
@@ -183,7 +183,11 @@ describe("closing a tab guards unsaved work", () => {
     await closeTab();
 
     await waitFor(() =>
-      expect(vi.mocked(saveMarkdownFile)).toHaveBeenCalledWith("/tmp/saved.md", "precious work\n"),
+      expect(vi.mocked(saveDocument)).toHaveBeenCalledWith(
+        "/tmp/saved.md",
+        "precious work\n",
+        "markdown",
+      ),
     );
     expect(screen.queryByTestId("fm-unsaved-modal")).toBeNull();
   });
@@ -201,7 +205,7 @@ describe("closing a tab guards unsaved work", () => {
     expect(await screen.findByTestId("fm-unsaved-modal")).toBeTruthy();
     expect(screen.queryByTestId("fm-unsaved-save")).toBeNull();
     expect(screen.getByTestId("fm-unsaved-discard")).toBeTruthy();
-    expect(vi.mocked(saveMarkdownFile)).not.toHaveBeenCalled();
+    expect(vi.mocked(saveDocument)).not.toHaveBeenCalled();
   });
 
   it("does not prompt when there is nothing to lose", async () => {
@@ -218,7 +222,7 @@ describe("closing a tab guards unsaved work", () => {
 
 describe("quitting guards unsaved work", () => {
   beforeEach(() => {
-    vi.mocked(saveMarkdownFile).mockReset().mockResolvedValue("/tmp/saved.md");
+    vi.mocked(saveDocument).mockReset().mockResolvedValue("/tmp/saved.md");
     vi.mocked(invoke).mockClear();
   });
 
