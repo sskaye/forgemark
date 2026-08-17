@@ -51,6 +51,7 @@ export default [
         Text: "readonly",
         Comment: "readonly",
         Range: "readonly",
+        DOMRect: "readonly",
         NodeFilter: "readonly",
         HTMLIFrameElement: "readonly",
         ResizeObserver: "readonly",

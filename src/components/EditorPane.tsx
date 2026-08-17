@@ -735,7 +735,12 @@ export function EditorPane({ docId }: Props) {
             comments={state.comments}
             focusedCommentId={state.focusedCommentId}
             hoveredCommentId={state.hoveredCommentId}
-            onAnchorClick={(id) => dispatch({ type: "setFocusedComment", id })}
+            onAnchorClick={(id) => {
+              // A click inside the frame never reaches the host window,
+              // so the menu's own click-away listener can't see it.
+              setContextMenu(null);
+              dispatch({ type: "setFocusedComment", id });
+            }}
             onAnchorHover={(id) => dispatch({ type: "setHoveredComment", id })}
             onRequestElementComment={(capture) => openComposerFor(capture)}
             onContextMenu={(at) => setContextMenu({ x: at.x, y: at.y })}

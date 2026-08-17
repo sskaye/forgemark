@@ -307,10 +307,70 @@ export function HtmlView({
         if (findAnchorId(e.target) !== null) latest.current.onAnchorHover(null);
       };
 
+      // Remember the reader's last real selection.
+      //
+      // A right-click into a frame that doesn't already hold focus
+      // focuses it first, and focusing a browsing context can collapse
+      // its selection — so by the time `contextmenu` fires, the passage
+      // the reader is pointing at may no longer be selected, and the
+      // menu would silently never open. A document rendered in the host
+      // window never hits this, which is why the Markdown path doesn't
+      // need it.
+      let remembered: Range | null = null;
+      const rememberSelection = () => {
+        const selection = doc.getSelection();
+        if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
+        if (selection.toString().trim().length === 0) return;
+        remembered = selection.getRangeAt(0).cloneRange();
+      };
+      doc.addEventListener("mouseup", rememberSelection);
+      doc.addEventListener("keyup", rememberSelection);
+      doc.addEventListener("selectionchange", rememberSelection);
+
+      // Where a range sits on screen. Ranges are the one thing whose
+      // layout API a document we did not create may not implement, so
+      // this steps down to the enclosing element rather than throwing —
+      // and reports nothing measurable rather than guessing.
+      const boxesFor = (range: Range): DOMRect[] => {
+        if (typeof range.getClientRects === "function") {
+          const rects = range.getClientRects();
+          if (rects.length > 0) return Array.from(rects);
+        }
+        if (typeof range.getBoundingClientRect === "function") {
+          return [range.getBoundingClientRect()];
+        }
+        const node = range.commonAncestorContainer;
+        const el = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
+        return el ? [el.getBoundingClientRect()] : [];
+      };
+
+      // Whether a point falls inside a range, with a little slack for the
+      // click landing on the edge of a glyph.
+      const rangeContainsPoint = (range: Range, x: number, y: number): boolean =>
+        boxesFor(range).some(
+          (r) => x >= r.left - 2 && x <= r.right + 2 && y >= r.top - 2 && y <= r.bottom + 2,
+        );
+
       const onFrameContextMenu = (e: MouseEvent) => {
         e.preventDefault();
         const selection = doc.getSelection();
-        if (!selection || selection.isCollapsed || selection.toString().trim().length === 0) return;
+        const live = selection && !selection.isCollapsed && selection.toString().trim().length > 0;
+
+        if (!live) {
+          // Put the reader's selection back, but only when they actually
+          // right-clicked on it — restoring a selection somewhere else on
+          // the page would be worse than doing nothing.
+          if (!remembered || !selection) return;
+          try {
+            if (!rangeContainsPoint(remembered, e.clientX, e.clientY)) return;
+            selection.removeAllRanges();
+            selection.addRange(remembered);
+          } catch {
+            return;
+          }
+          if (selection.toString().trim().length === 0) return;
+        }
+
         const frameRect = frame.getBoundingClientRect();
         latest.current.onContextMenu?.({
           x: frameRect.left + e.clientX,
@@ -342,6 +402,9 @@ export function HtmlView({
         doc.removeEventListener("mouseover", onMouseOver);
         doc.removeEventListener("mouseout", onMouseOut);
         doc.removeEventListener("contextmenu", onFrameContextMenu);
+        doc.removeEventListener("mouseup", rememberSelection);
+        doc.removeEventListener("keyup", rememberSelection);
+        doc.removeEventListener("selectionchange", rememberSelection);
       };
     };
 
