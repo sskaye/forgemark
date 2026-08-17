@@ -1,12 +1,13 @@
 # Forgemark
 
-A desktop application for collaborative review of markdown documents — by humans **and** AI agents working as peers. Comments, threaded replies, and suggested edits all live inside the markdown file itself, so an AI agent reading the raw file sees the full review context with no special tooling.
+A desktop application for collaborative review of Markdown documents and generated HTML reports — by humans **and** AI agents working as peers. Comments, threaded replies, and suggested edits all live inside the file itself, so an AI agent reading the raw file sees the full review context with no special tooling.
 
 > **Status:** v1.3.0 — see [CHANGELOG](CHANGELOG.md) for what shipped.
 
 ## What it is
 
 - **For humans:** a quiet, native macOS / Windows app that feels like Word commenting — select text, type a note, see threads in a sidebar, suggest edits. Open several documents at once in tabs; they reopen where you left them.
+- **For generated reports:** open an `.html` file and review it the same way. The report renders exactly as its author designed it — its own CSS, its own charts — and you can comment on a passage or on a whole figure. See [HTML reports](#html-reports).
 - **For AI agents:** the same comments are plain markdown. Read existing comments, add new ones, address them — all by editing the file. The bundled [skill package](#ai-agents) teaches Claude / Codex / any other capable LLM the format in one read.
 - **Not** a Google Docs replacement, not a real-time co-editor, not a git client. Specifically a review tool.
 
@@ -52,6 +53,27 @@ the strongest predictor of week-two retention was completing a real piece of wor
 Inline `<!-- fmc:N -->...<!-- /fmc:N -->` markers wrap commented passages; a single trailing HTML comment holds a YAML list of records (id, anchor_text, author, body, replies, suggested edits, floating notes). The file round-trips byte-equivalent through the parser; comments survive `git diff` because they're plain text.
 
 The canonical spec lives in [`assets/forgemark-skill/SKILL.md`](assets/forgemark-skill/SKILL.md).
+
+## HTML reports
+
+`<!-- fmc:N -->` is already valid HTML, and so is the trailing comments block, so the storage format is identical in an `.html` file — no translation, no second format to learn.
+
+What differs is what you can do with the document:
+
+|                                      | Markdown | HTML report         |
+| ------------------------------------ | -------- | ------------------- |
+| Comment, reply, resolve              | yes      | yes                 |
+| Suggest an edit                      | yes      | on plain prose only |
+| Accept / reject a suggestion         | yes      | yes                 |
+| Comment on a figure, chart, or table | —        | yes                 |
+| Edit the prose                       | yes      | no                  |
+| Find (⌘F)                            | yes      | Source view only    |
+
+**Reports are review-only by design.** Editing one would mean modelling the document, and any model that round-trips through an editor destroys the `<style>` block, the inline `<svg>`, and every unrecognised attribute a generated report is made of. So Forgemark renders the file verbatim in a sandboxed frame and only ever splices markers into the source at exact byte offsets — the file you save differs from the one you opened by the comments you added, and nothing else.
+
+**Scripts inside a report never run.** A chart drawn in JavaScript renders empty; static and inline-SVG charts are unaffected.
+
+**Rebuilding a report keeps the review.** Reports are usually regenerated rather than edited, which drops every anchor. Forgemark puts back the ones it is sure about in one click and asks about anything ambiguous. Comments on a figure record its `id`, so they reattach exactly even if the caption was renumbered — worth telling your agent to keep ids stable, which the bundled skill already does.
 
 ## AI agents
 

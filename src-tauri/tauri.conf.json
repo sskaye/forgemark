@@ -42,12 +42,17 @@
     "publisher": "Forgemark contributors",
     "copyright": "© 2026 Forgemark contributors",
     "category": "Productivity",
-    "shortDescription": "Collaborative review of markdown documents.",
-    "longDescription": "Forgemark is a desktop app for collaborative review of markdown documents — by humans and AI agents working as peers. Comments, threaded replies, and suggested edits live inside the .md file itself.",
+    "shortDescription": "Collaborative review of Markdown documents and HTML reports.",
+    "longDescription": "Forgemark is a desktop app for collaborative review of Markdown documents and generated HTML reports — by humans and AI agents working as peers. Comments, threaded replies, and suggested edits live inside the file itself.",
     "fileAssociations": [
       {
         "ext": ["md", "markdown"],
         "name": "Markdown document",
+        "role": "Editor"
+      },
+      {
+        "ext": ["html", "htm"],
+        "name": "HTML report",
         "role": "Editor"
       }
     ],

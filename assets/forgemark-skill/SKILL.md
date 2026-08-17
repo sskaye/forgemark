@@ -1,11 +1,13 @@
 ---
 name: forgemark
-description: Read or write Forgemark-format markdown — review documents with inline comments, threaded replies, suggested edits, and floating notes stored as a YAML block at the end of the .md file. Use this skill whenever the user asks you to "add a comment", "leave a review note", "address comments", "respond to feedback", "suggest an edit", "reply to a comment", "resolve this", or otherwise work with reviewer markup inside a markdown file. Also trigger when the user mentions "Forgemark", "review notes", "the comments in this doc", or similar; or when an opened markdown file contains paired HTML-comment anchor markers in the form fmc colon N together with a trailing forgemark-comments YAML block. When in doubt and the file is markdown with reviewer-style annotations, prefer this skill over reading the format from scratch.
+description: Read or write Forgemark-format documents — Markdown files or generated HTML reports carrying inline comments, threaded replies, suggested edits, and floating notes stored as a YAML block at the end of the file. Use this skill whenever the user asks you to "add a comment", "leave a review note", "address comments", "respond to feedback", "suggest an edit", "reply to a comment", "resolve this", or otherwise work with reviewer markup inside a Markdown file or an HTML report. Also trigger when the user mentions "Forgemark", "review notes", "the comments in this doc", or similar; or when an opened .md or .html file contains paired HTML-comment anchor markers in the form fmc colon N together with a trailing forgemark-comments YAML block. Also read this before regenerating an HTML report that has been reviewed, so the review survives. When in doubt and the file has reviewer-style annotations, prefer this skill over reading the format from scratch.
 ---
 
 # Forgemark format
 
-You are reading a markdown file produced or consumed by **Forgemark**, a collaborative review tool. Forgemark files are plain markdown with two additions: paired inline HTML-comment markers around commented passages, and a single trailing HTML comment containing a YAML block of comment records.
+You are reading a file produced or consumed by **Forgemark**, a collaborative review tool. Forgemark files are plain Markdown — or a plain HTML report — with two additions: paired inline HTML-comment markers around commented passages, and a single trailing HTML comment containing a YAML block of comment records.
+
+The two additions are HTML comments, so the format is **identical in Markdown and in HTML** and needs no translation between them. What differs is only where a marker may legally sit; see "HTML reports" below.
 
 Both humans and AI agents (you) are first-class participants. Use this spec to read existing comments and write new ones correctly.
 
@@ -49,6 +51,52 @@ Two structural elements:
 
 There is **at most one** trailing comments block per file. If a file has no comments, the block is absent — clean files stay clean.
 
+## HTML reports
+
+Everything above applies unchanged to an `.html` file. The markers are HTML comments, so they are already valid HTML and invisible in a browser; the trailing block goes **after `</html>`**, where browsers ignore it.
+
+```html
+<p>Minimising over the rest is <b><!-- fmc:1 -->variable projection<!-- /fmc:1 --></b>.</p>
+</body></html>
+
+<!-- forgemark-comments
+- id: 1
+  anchor_text: "variable projection"
+  author: Claude
+  timestamp: 2026-08-16T09:14:00Z
+  resolved: false
+  body: |
+    Worth a one-line gloss for readers who don't know the method.
+-->
+```
+
+Four HTML-specific rules:
+
+1. **Never put a marker inside `<script>`, `<style>`, `<textarea>`, `<title>`, or an attribute value.** Text in those places is not parsed as a comment, so a marker there is invented markup with no anchor — the same class of error as splitting a marker pair.
+
+2. **An anchor may cross tags.** `<!-- fmc:1 -->ISF</code> from this record<!-- /fmc:1 -->` is valid and renders normally, because the markers are invisible. Keep it to one pair, as in Markdown.
+
+3. **To comment on a figure, chart, or table, wrap the whole element** and set `anchor_kind: element`. This is the HTML counterpart of a whole-code-block anchor, and it is the only way to comment on something with no text to select:
+
+   ```html
+   <!-- fmc:2 --><figure id="fig-3"><figcaption>Figure 3. Recovery</figcaption><svg>…</svg></figure><!-- /fmc:2 -->
+   ```
+
+   Use the element's caption as `anchor_text`, and record `anchor_selector: "#fig-3"` when the element has an id.
+
+4. **A suggestion must replace text, not markup.** Only add `suggested_edit` when the source between the two markers contains no `<`. Accepting a suggestion replaces everything between the markers, so a suggestion spanning tags would mangle the document.
+
+### Regenerating a report that has been reviewed
+
+This is the case that matters most, and the one that silently destroys work if you get it wrong. HTML reports are usually **rebuilt** rather than edited: you rerun the generator and write a whole new file. That drops every marker, and the comments — which survive in the trailing block — become orphans the reviewer has to reattach by hand.
+
+When you rewrite a reviewed report:
+
+- **Carry the trailing `<!-- forgemark-comments -->` block over verbatim.** Losing it discards the entire review.
+- **Re-insert the marker pairs** around the same passages, wherever the passage still exists.
+- **Give sections, figures, and tables stable `id` attributes, and keep them stable across regenerations.** A comment that recorded `anchor_selector: "#fig-3"` reattaches exactly when that id survives, even if the caption was renumbered. Without it, recovery falls back to matching prose and becomes a guess.
+- If a commented passage is genuinely gone, leave its record in place. Forgemark will surface it as an orphan so the reviewer can decide, which is the right outcome — silently dropping the comment is not.
+
 ## Comment record schema
 
 Each YAML entry under the trailing block is a comment object:
@@ -56,7 +104,9 @@ Each YAML entry under the trailing block is a comment object:
 | Field            | Type    | Required                                              | Notes                                                                                                            |
 | ---------------- | ------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `id`             | integer | yes                                                   | Sequential within the file, starting at 1. Never reused.                                                         |
-| `anchor_text`    | string  | yes (unless `floating: true`)                         | The exact text wrapped between the inline markers.                                                               |
+| `anchor_text`    | string  | yes (unless `floating: true`)                         | The exact text wrapped between the inline markers. For an element anchor, the element's caption.                 |
+| `anchor_kind`    | string  | optional                                              | Only value: `element`, meaning the markers wrap a whole block (figure, chart, table). Omit for text anchors.     |
+| `anchor_selector`| string  | optional                                              | CSS selector identifying an anchored element, e.g. `#fig-3`. Used to reattach exactly after a report is rebuilt. |
 | `context_before` | string  | recommended                                           | ~1 sentence before the anchor — used for orphan recovery.                                                        |
 | `context_after`  | string  | recommended                                           | ~1 sentence after the anchor.                                                                                    |
 | `author`         | string  | yes                                                   | Free-form name. Humans set this in app preferences; AI agents pick their own (e.g., `Claude`, `ChatGPT`).        |
@@ -104,7 +154,7 @@ When you add or modify a comment:
 ## What to do when asked
 
 - **"Address a comment"** — read what the comment says, edit the document body to fix the issue, then add a reply explaining what you changed. Don't mark the comment resolved unless explicitly asked.
-- **"Add a comment"** — pick the right passage, wrap it with markers using the next id, append a YAML record with your `author`, `timestamp`, `body`.
+- **"Add a comment"** — pick the right passage, wrap it with markers using the next id, append a YAML record with your `author`, `timestamp`, `body`. In an HTML report you may instead wrap a whole figure or table; set `anchor_kind: element` and `anchor_selector` if it has an id.
 - **"Suggest an edit"** — same as adding a comment, but include `suggested_edit: { from: "...", to: "..." }`. The `body` field is optional for suggestions.
 - **"Resolve a comment"** — set `resolved: true` on the YAML record. Do not remove the record.
 - **"Delete a comment"** — remove the YAML record AND its inline marker pair from the file.
@@ -121,6 +171,8 @@ The application's parser will reject files that violate any of these:
 - Each id appears as **exactly one** open/close marker pair — never duplicated, split, or nested with another id's pair. Anchors must not overlap.
 - Every marker pair in the body has a matching YAML record.
 - `anchor_text` is present for non-floating comments; absent or empty for floating notes is fine.
+- `anchor_kind`, if present, is exactly `element`.
+- In an HTML file, no marker sits inside `<script>`, `<style>`, `<textarea>`, `<title>`, or an attribute value.
 - `body` is non-empty for plain comments; may be empty for comments that have a `suggested_edit`.
 
 If your output trips one of these, the app surfaces a parse error. (Recent versions fail soft — they recover the comments they can and flag damaged anchors for reattachment rather than hiding everything — but you should still emit a valid file.) Re-check the structure before returning the file.

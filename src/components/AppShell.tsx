@@ -273,6 +273,7 @@ export function AppShell() {
           comments={state.comments}
           fileName={state.fileName}
           options={printOptions}
+          format={state.format}
         />
       )}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
@@ -288,11 +289,11 @@ export function AppShell() {
           onCancel={() => setCleanExportOpen(false)}
           onConfirm={async () => {
             const text = cleanExport(state.body, state.comments);
-            // Default name: "<basename>-clean.md"
-            const baseName = state.fileName.replace(/\.(md|markdown)$/i, "");
-            const defaultPath = baseName + "-clean.md";
+            // Default name: "<basename>-clean.<same extension>"
+            const baseName = state.fileName.replace(/\.(md|markdown|html?|xhtml)$/i, "");
+            const defaultPath = baseName + (state.format === "html" ? "-clean.html" : "-clean.md");
             try {
-              await saveDocument(null, text);
+              await saveDocument(null, text, state.format);
               setCleanExportOpen(false);
               // Hint the OS save dialog name via the fileIO layer's
               // save() — its current signature takes no default name,
