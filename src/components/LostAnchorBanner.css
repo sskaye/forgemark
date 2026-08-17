@@ -44,3 +44,12 @@
 .fm-lost-banner-button:hover {
   filter: brightness(1.05);
 }
+
+/* When the bulk action is present it is the primary one; reviewing each
+   comment in turn becomes the quieter alternative beside it. */
+.fm-lost-banner-button-secondary {
+  color: var(--fm-orphan-text);
+  background: transparent;
+  border-color: var(--fm-orphan-underline);
+  margin-left: 6px;
+}

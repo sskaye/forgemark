@@ -272,6 +272,20 @@ export type DocumentAction =
       context_before: string;
       context_after: string;
     }
+  // Reattach several comments in one step. A regenerated report orphans
+  // every anchor at once, and walking a modal per comment turns a
+  // mechanical recovery into a chore. The caller has already spliced all
+  // the markers, so this is one body and one undo-sized state change.
+  | {
+      type: "reattachComments";
+      body: string;
+      entries: {
+        commentId: number;
+        anchor_text: string;
+        context_before: string;
+        context_after: string;
+      }[];
+    }
   | { type: "convertToFloating"; commentId: number; body: string }
   | { type: "openReattach"; commentId: number }
   | { type: "closeReattach" }
@@ -492,6 +506,30 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
             }
           : c,
       );
+      return {
+        ...state,
+        body: action.body,
+        comments,
+        dirty: true,
+        composer: null,
+        reattachTarget: null,
+        error: null,
+      };
+    }
+    case "reattachComments": {
+      if (action.entries.length === 0) return state;
+      const byId = new Map(action.entries.map((e) => [e.commentId, e]));
+      const comments = state.comments.map((c) => {
+        const entry = byId.get(c.id);
+        if (!entry) return c;
+        return {
+          ...c,
+          floating: undefined,
+          anchor_text: entry.anchor_text,
+          context_before: entry.context_before,
+          context_after: entry.context_after,
+        };
+      });
       return {
         ...state,
         body: action.body,
