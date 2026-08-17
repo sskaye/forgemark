@@ -162,26 +162,22 @@ export function HtmlView({
   const capture = useCallback((): HtmlCapturedSelection | null => {
     const frame = frameRef.current;
     const doc = frame?.contentDocument;
-    const root = doc?.body;
-    if (!frame || !doc || !root) return null;
+    if (!frame || !doc) return null;
     const selection = doc.getSelection();
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
     const range = selection.getRangeAt(0);
 
-    const textRange = selectionTextRange(root, range);
+    // The Document, not <body> — see `walkTextNodes`. The source map
+    // walks the whole tree, and the two coordinate spaces must agree
+    // exactly or every anchor after the first mismatch lands off by one.
+    const textRange = selectionTextRange(doc, range);
     if (!textRange) return null;
 
     const map = latest.current.textMap;
     const text = map.text.slice(textRange.from, textRange.to);
     if (text.trim().length === 0) return null;
 
-    const frameRect = frame.getBoundingClientRect();
-    const rects = range.getClientRects();
-    const last = rects.length > 0 ? rects[rects.length - 1] : range.getBoundingClientRect();
-    const rect = {
-      left: frameRect.left + last.left,
-      bottom: frameRect.top + last.bottom,
-    };
+    const rect = composerAnchorRect(frame, range);
 
     const overlappingAnchorId = overlappingAnchor(range);
 
@@ -254,6 +250,7 @@ export function HtmlView({
       const button = doc.createElement("button");
       button.className = "fm-element-target";
       button.type = "button";
+      button.setAttribute("data-forgemark", "element-target");
       button.textContent = "Comment";
       button.setAttribute("data-visible", "false");
       doc.body?.appendChild(button);
@@ -394,7 +391,15 @@ export function HtmlView({
         const top = el.getBoundingClientRect().top + (doc.defaultView?.scrollY ?? 0);
         const paneRect = pane.getBoundingClientRect();
         const frameTop = frame.getBoundingClientRect().top - paneRect.top + pane.scrollTop;
-        pane.scrollTo({ top: Math.max(0, frameTop + top - 80), behavior: "smooth" });
+        const target = Math.max(0, frameTop + top - 80);
+        // The anchor is inside the frame, which can't scroll its own
+        // host, so the pane is moved instead. `scrollTo` is the smooth
+        // path; assigning scrollTop is the one that always exists.
+        if (typeof pane.scrollTo === "function") {
+          pane.scrollTo({ top: target, behavior: "smooth" });
+        } else {
+          pane.scrollTop = target;
+        }
       },
     };
     return () => {
@@ -413,6 +418,28 @@ export function HtmlView({
       sandbox="allow-same-origin"
     />
   );
+}
+
+// Where to float the composer: just under the end of the selection, in
+// host-viewport coordinates.
+//
+// Layout APIs are the one thing that can be missing or partial in a
+// document we did not create — and this is cosmetic, so it must never be
+// the reason a comment can't be added. A failure here costs the composer
+// its position, not the reviewer their comment.
+function composerAnchorRect(
+  frame: HTMLIFrameElement,
+  range: Range,
+): { left: number; bottom: number } {
+  const frameRect = frame.getBoundingClientRect();
+  try {
+    const rects = typeof range.getClientRects === "function" ? range.getClientRects() : null;
+    const last =
+      rects && rects.length > 0 ? rects[rects.length - 1] : range.getBoundingClientRect();
+    return { left: frameRect.left + last.left, bottom: frameRect.top + last.bottom };
+  } catch {
+    return { left: frameRect.left, bottom: frameRect.top };
+  }
 }
 
 // Which existing anchor, if any, a selection overlaps. The format can't

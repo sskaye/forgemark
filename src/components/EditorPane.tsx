@@ -560,6 +560,27 @@ export function EditorPane({ docId }: Props) {
     sourceRef.current?.scrollToMarker(state.focusedCommentId);
   }, [state.viewMode, state.focusedCommentId]);
 
+  // Whether the pending anchor can carry a suggestion.
+  //
+  // Accepting a suggestion replaces everything between the markers with
+  // the proposed text. In Markdown that region is prose. In an HTML
+  // report it may be markup — a whole figure, or a sentence whose source
+  // runs through `<code>` and `<b>` tags — and replacing markup with a
+  // sentence would mangle the document. Wording changes, which is what
+  // suggestions actually are, pass this test; anything else is offered
+  // as a plain comment instead.
+  const suggestion = useMemo((): { allowed: boolean; reason?: string } => {
+    const c = state.composer;
+    if (!c || c.mode !== "new" || !isHtml) return { allowed: true };
+    if (c.anchorKind === "element") {
+      return { allowed: false, reason: "Comment only — this is a figure" };
+    }
+    if (state.body.slice(c.from, c.to).includes("<")) {
+      return { allowed: false, reason: "Comment only — this passage spans markup" };
+    }
+    return { allowed: true };
+  }, [state.composer, state.body, isHtml]);
+
   // Phase 9: count lost anchors. The banner picks the *first* lost
   // anchor (by id) when the user clicks Recover, then the modal
   // walks remaining orphans on subsequent clicks.
@@ -683,6 +704,8 @@ export function EditorPane({ docId }: Props) {
           onSubmitSuggestion={submitSuggestion}
           onCancel={cancelComposer}
           initialMode={state.composer.initialMode}
+          allowSuggest={suggestion.allowed}
+          suggestUnavailableReason={suggestion.reason}
         />
       )}
       {state.composer?.mode === "overlapPrompt" && state.viewMode === "rendered" && (

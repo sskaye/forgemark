@@ -21,6 +21,14 @@ type Props = {
   // menu's "Suggest edit" path opens the composer in "suggest"
   // mode directly.
   initialMode?: "comment" | "suggest";
+  // Whether a suggestion is representable for this anchor. False when
+  // the anchored region isn't plain text — a figure, or a passage of an
+  // HTML report whose source spans markup. Accepting such a suggestion
+  // would mean replacing markup with prose, so the toggle is hidden
+  // rather than offered and then refused.
+  allowSuggest?: boolean;
+  // Why suggesting is unavailable, shown in place of the toggle.
+  suggestUnavailableReason?: string;
 };
 
 // New-comment composer (Phase 5 + Phase 7).
@@ -44,11 +52,13 @@ export function NewCommentComposer({
   onSubmitSuggestion,
   onCancel,
   initialMode = "comment",
+  allowSuggest = true,
+  suggestUnavailableReason,
 }: Props) {
   const [author] = useAuthorName();
   const [body, setBody] = useState("");
   const [replacement, setReplacement] = useState("");
-  const [suggesting, setSuggesting] = useState(initialMode === "suggest");
+  const [suggesting, setSuggesting] = useState(allowSuggest && initialMode === "suggest");
   const bodyRef = useRef<HTMLTextAreaElement | null>(null);
   const replacementRef = useRef<HTMLTextAreaElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -191,15 +201,21 @@ export function NewCommentComposer({
         />
       )}
       <div className="fm-composer-footer">
-        <button
-          type="button"
-          className={"fm-composer-toggle" + (suggesting ? " is-active" : "")}
-          onClick={() => setSuggesting((s) => !s)}
-          aria-pressed={suggesting}
-          data-testid="fm-composer-suggest-toggle"
-        >
-          Suggest edit
-        </button>
+        {allowSuggest ? (
+          <button
+            type="button"
+            className={"fm-composer-toggle" + (suggesting ? " is-active" : "")}
+            onClick={() => setSuggesting((s) => !s)}
+            aria-pressed={suggesting}
+            data-testid="fm-composer-suggest-toggle"
+          >
+            Suggest edit
+          </button>
+        ) : (
+          <span className="fm-composer-hint" data-testid="fm-composer-suggest-unavailable">
+            {suggestUnavailableReason ?? "Comment only"}
+          </span>
+        )}
         <span className="fm-composer-hint" aria-hidden>
           ⌘↵ to submit
         </span>

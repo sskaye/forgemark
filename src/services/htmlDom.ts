@@ -18,7 +18,17 @@
 
 const SKIP_CONTENT = new Set(["SCRIPT", "STYLE", "TITLE", "TEXTAREA", "NOSCRIPT"]);
 
+// Marks UI that Forgemark injected into the report. Its text is not the
+// report's text and must not shift any coordinate.
+const INJECTED_ATTR = "data-forgemark";
+
 // Walk text nodes in document order, skipping non-prose elements.
+//
+// Callers must pass the Document, not `document.body`: the source map
+// walks the whole parsed tree, and whitespace between `</head>` and
+// `<body>` is parsed as a text node child of `<html>` — outside body, but
+// inside the map. Walking from body drops it and every offset after that
+// point is short by one character.
 export function walkTextNodes(root: Node): Text[] {
   const out: Text[] = [];
   const visit = (node: Node) => {
@@ -26,8 +36,9 @@ export function walkTextNodes(root: Node): Text[] {
       out.push(node as Text);
       return;
     }
-    if (node.nodeType === Node.ELEMENT_NODE && SKIP_CONTENT.has((node as Element).tagName)) {
-      return;
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const el = node as Element;
+      if (SKIP_CONTENT.has(el.tagName) || el.hasAttribute(INJECTED_ATTR)) return;
     }
     for (let child = node.firstChild; child; child = child.nextSibling) visit(child);
   };
