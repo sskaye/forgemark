@@ -208,6 +208,19 @@ character short. UI that Forgemark injects into the frame is tagged
 - Find is off. It is implemented over the editor's document model, which a
   report doesn't have; Source view is searchable.
 
+**Layout is untested by the suite.** jsdom has no layout engine, so iframe
+content-height sizing, the element-comment affordance's position, selection
+rectangles, and scroll-to-anchor cannot be covered by Vitest. They were checked
+by hand against `tests/fixtures/report.html` in a real browser and all behaved:
+the frame sizes to its content with no inner scrollbar, the captured selection
+rect matches the on-screen rectangle to within a pixel, adding an anchor
+preserves scroll position exactly, and the report follows its own dark-theme
+rules while the injected highlight stays legible. Re-check these by hand after
+touching `HtmlView`. One trap when doing so: an automated browser tab reports
+`document.visibilityState === "hidden"`, and Chromium never ticks a
+`behavior: "smooth"` scroll animation in a hidden tab — a smooth scroll that
+appears not to move there is the harness, not the code.
+
 **Regeneration is the dominant workflow.** Reports are replaced, not edited, so
 a rebuild orphans every anchor. `format/html/candidates.ts` tries the recorded
 `anchor_selector` first (exact, and survives a renumbered caption), then locates
