@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWorkspace } from "../state/DocumentProvider";
 import type { DocId } from "../state/workspace";
 import { useAuthorName } from "../state/preferences";
-import { RenderedView, type RenderedSearchMatch, type RenderedViewHandle } from "./RenderedView";
+import {
+  RenderedView,
+  type CapturedSelection,
+  type RenderedSearchMatch,
+  type RenderedViewHandle,
+} from "./RenderedView";
 import { HtmlView, type HtmlCapturedSelection, type HtmlViewHandle } from "./HtmlView";
 import { SourceView, type SourceViewHandle } from "./SourceView";
 import { NewCommentComposer } from "./NewCommentComposer";
@@ -25,6 +30,27 @@ import "./EditorPane.css";
 // found verbatim, or an element resolved by the id the comment recorded.
 // Below it, the ranking is guessing and a human should look.
 const CONFIDENT_SCORE = 0.95;
+
+// Normalise a Markdown capture into the shape the composer path takes.
+// The only real difference is a whole code block, which is still a *text*
+// anchor in Markdown — the markers wrap the fence and no `anchor_kind` is
+// written — so it maps to "inline" rather than "element".
+function fromMarkdownCapture(c: CapturedSelection): HtmlCapturedSelection {
+  return {
+    from: c.from,
+    to: c.to,
+    text: c.text,
+    contextBefore: c.contextBefore,
+    contextAfter: c.contextAfter,
+    kind: "inline",
+    rejectReason:
+      c.selectionKind === "reject"
+        ? (c.rejectReason ?? "This selection can't be commented on.")
+        : undefined,
+    overlappingAnchorId: c.overlappingAnchorId,
+    rect: c.rect,
+  };
+}
 
 type Props = {
   // Which open document this pane shows. Omitted means the active one,
@@ -105,6 +131,11 @@ export function EditorPane({ docId }: Props) {
   const [selectionAffordance, setSelectionAffordance] = useState<HtmlCapturedSelection | null>(
     null,
   );
+  const showAffordance = useCallback((capture: HtmlCapturedSelection | null) => {
+    // A selection that can't be anchored gets no toolbar. The reason is
+    // worth saying when someone acts on it, not as a button that refuses.
+    setSelectionAffordance(capture?.rejectReason ? null : capture);
+  }, []);
 
   // Composer trigger: ⌘⌥M (or the right-click menu) opens the
   // composer at the current selection. Selections inside fenced code
@@ -162,50 +193,11 @@ export function EditorPane({ docId }: Props) {
         openComposerFor(captured, initialMode);
         return;
       }
-      const handle = handleRef.current;
-      if (!handle) return;
-      const captured = handle.captureSelection();
+      const captured = handleRef.current?.captureSelection();
       if (!captured) return; // empty / collapsed selection
-      if (captured.selectionKind === "reject") {
-        // Inline-code-only or a selection straddling a code-block boundary.
-        // Tell the user why instead of silently doing nothing.
-        dispatch({
-          type: "error",
-          message: captured.rejectReason ?? "This selection can't be commented on.",
-        });
-        return;
-      }
-      // The format can't represent overlapping anchors. If the selection
-      // intersects an existing comment, offer a reply instead of writing
-      // a second (corrupting) marker pair over the same text.
-      if (captured.overlappingAnchorId != null) {
-        dispatch({
-          type: "openComposer",
-          composer: {
-            mode: "overlapPrompt",
-            targetCommentId: captured.overlappingAnchorId,
-            x: captured.rect.left,
-            y: captured.rect.bottom + 6,
-          },
-        });
-        return;
-      }
-      dispatch({
-        type: "openComposer",
-        composer: {
-          mode: "new",
-          from: captured.from,
-          to: captured.to,
-          selectionText: captured.text,
-          contextBefore: captured.contextBefore,
-          contextAfter: captured.contextAfter,
-          x: captured.rect.left,
-          y: captured.rect.bottom + 6,
-          initialMode,
-        },
-      });
+      openComposerFor(fromMarkdownCapture(captured), initialMode);
     },
-    [dispatch, isHtml, openComposerFor, state.viewMode],
+    [isHtml, openComposerFor, state.viewMode],
   );
 
   const openFindReplace = useCallback(
@@ -587,6 +579,18 @@ export function EditorPane({ docId }: Props) {
   // sentence would mangle the document. Wording changes, which is what
   // suggestions actually are, pass this test; anything else is offered
   // as a plain comment instead.
+  const canSuggest = useCallback(
+    (anchorKind: "element" | undefined, from: number, to: number) => {
+      // Markdown anchors are always plain text. In a report the markers
+      // may enclose markup, and accepting a suggestion replaces
+      // everything between them — see `suggestion` below.
+      if (!isHtml) return true;
+      if (anchorKind === "element") return false;
+      return !state.body.slice(from, to).includes("<");
+    },
+    [isHtml, state.body],
+  );
+
   const suggestion = useMemo((): { allowed: boolean; reason?: string } => {
     const c = state.composer;
     if (!c || c.mode !== "new" || !isHtml) return { allowed: true };
@@ -754,7 +758,7 @@ export function EditorPane({ docId }: Props) {
             // Background documents stay mounted, and the toolbar is
             // position:fixed — an inactive pane must neither poll nor
             // paint one over the document in front.
-            onSelectionChange={isActive ? setSelectionAffordance : undefined}
+            onSelectionChange={isActive ? showAffordance : undefined}
             handleRef={htmlRef}
           />
         ) : (
@@ -771,11 +775,15 @@ export function EditorPane({ docId }: Props) {
             onAnchorHover={(id) => dispatch({ type: "setHoveredComment", id })}
             onExternalLinkError={(message) => dispatch({ type: "error", message })}
             handleRef={handleRef}
+            onSelectionChange={
+              isActive
+                ? (captured) => showAffordance(captured && fromMarkdownCapture(captured))
+                : undefined
+            }
           />
         )}
       </div>
-      {isHtml &&
-        isActive &&
+      {isActive &&
         state.viewMode === "rendered" &&
         selectionAffordance != null &&
         state.composer == null &&
@@ -783,10 +791,11 @@ export function EditorPane({ docId }: Props) {
           <SelectionToolbar
             x={selectionAffordance.rect.left}
             y={selectionAffordance.rect.top}
-            allowSuggest={
-              selectionAffordance.kind !== "element" &&
-              !state.body.slice(selectionAffordance.from, selectionAffordance.to).includes("<")
-            }
+            allowSuggest={canSuggest(
+              selectionAffordance.kind === "element" ? "element" : undefined,
+              selectionAffordance.from,
+              selectionAffordance.to,
+            )}
             onComment={() => openComposerFor(selectionAffordance, "comment")}
             onSuggest={() => openComposerFor(selectionAffordance, "suggest")}
           />

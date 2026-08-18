@@ -6,7 +6,7 @@ A desktop application for collaborative review of Markdown documents and generat
 
 ## What it is
 
-- **For humans:** a quiet, native macOS / Windows app that feels like Word commenting — select text, type a note, see threads in a sidebar, suggest edits. Open several documents at once in tabs; they reopen where you left them.
+- **For humans:** a quiet, native macOS / Windows app that feels like Word commenting — select text and a **Comment / Suggest edit** bar appears above it, type a note, see threads in a sidebar. Open several documents at once in tabs; they reopen where you left them.
 - **For generated reports:** open an `.html` file and review it the same way. The report renders exactly as its author designed it — its own CSS, its own charts — and you can comment on a passage or on a whole figure. See [HTML reports](#html-reports).
 - **For AI agents:** the same comments are plain markdown. Read existing comments, add new ones, address them — all by editing the file. The bundled [skill package](#ai-agents) teaches Claude / Codex / any other capable LLM the format in one read.
 - **Not** a Google Docs replacement, not a real-time co-editor, not a git client. Specifically a review tool.
@@ -69,7 +69,7 @@ What differs is what you can do with the document:
 | Edit the prose                       | yes      | no                  |
 | Find (⌘F)                            | yes      | Source view only    |
 
-**To comment, select a passage and a Comment / Suggest edit bar appears above it** — or press ⌘⌥M, or hover a figure and click its Comment button. Right-click is not the way in here: inside the report frame the menu belongs to the system webview, which answers it with Look Up / Translate / Copy and does not reliably let the app replace it.
+Commenting works exactly as it does in a Markdown document — select a passage and the **Comment / Suggest edit** bar appears above it, or press ⌘⌥M — with one addition and one subtraction. The addition is figures: hover a chart or table and click its **Comment** button, which is the only way to point at something with no text to select. The subtraction is right-click: inside the report frame that menu belongs to the system webview, which answers it with Look Up / Translate / Copy and does not reliably let the app replace it.
 
 **Reports are review-only by design.** Editing one would mean modelling the document, and any model that round-trips through an editor destroys the `<style>` block, the inline `<svg>`, and every unrecognised attribute a generated report is made of. So Forgemark renders the file verbatim in a sandboxed frame and only ever splices markers into the source at exact byte offsets — the file you save differs from the one you opened by the comments you added, and nothing else.
 

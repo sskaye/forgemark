@@ -12,6 +12,7 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 
 ### Changed
 
+- Commenting starts the same way in every document: select a passage and a **Comment / Suggest edit** bar appears above it. Markdown keeps ⌘⌥M and its right-click menu as well — the bar is an addition, not a replacement — but it is now the one gesture that works everywhere, which matters because right-click cannot be made to work inside a report.
 - HTML reports are review-only: their prose can't be edited in Forgemark, and a chip in the editor says so. Editing them would mean modelling the document, and any model that round-trips through an editor destroys the CSS, inline SVG, and unknown attributes a report is made of. Everything else — commenting, replying, suggesting, accepting a suggestion — still works, because those are edits to the file rather than to a model of it.
 - The Open dialog accepts `.html`, `.htm` and `.xhtml`, and Forgemark registers itself as an editor for HTML files.
 
