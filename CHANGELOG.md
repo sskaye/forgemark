@@ -21,6 +21,7 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 - Find (⌘F) is off for HTML reports; Source view is searchable.
 - Right-click inside a report opens the system webview's own menu (Look Up, Translate, Copy) rather than Forgemark's. The report is rendered in a frame whose input handling the app does not own, so the selection bar and ⌘⌥M are the ways to comment on a passage.
 - Hovering an anchored passage in a report does not highlight its comment card. Hovering the card still highlights the passage.
+- Switching between Rendered and Source in a report does not keep your place, as it does in a Markdown document; it returns to the top.
 - Scripts inside a report never run, so a chart drawn in JavaScript renders empty. Static and inline-SVG charts are unaffected.
 
 ## [1.5.0] — 2026-07-25
