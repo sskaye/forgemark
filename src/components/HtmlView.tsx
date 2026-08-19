@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildHtmlTextMap, insertMarkersIntoBody, textRangeToSource } from "../format";
 import type { Comment } from "../format/types";
 import {
@@ -7,12 +7,7 @@ import {
   applyAnchorState,
   decorateAnchors,
 } from "../services/htmlDecorate";
-import {
-  describeElement,
-  elementAnchorTarget,
-  renderedText,
-  selectionTextRange,
-} from "../services/htmlDom";
+import { describeElement, renderedText, selectionTextRange } from "../services/htmlDom";
 import { useTheme } from "../theme/ThemeProvider";
 import "./HtmlView.css";
 
@@ -102,6 +97,13 @@ export function HtmlView({
   onSelectionChange,
   handleRef,
 }: Props) {
+  // Commentable blocks and where they sit inside the frame, so the host
+  // can put a button over each one. See `readBlocks`.
+  const [blocks, setBlocks] = useState<BlockAffordance[]>([]);
+  // Whether the pane is wide enough to hold the block buttons in the
+  // margin beside the report rather than on top of it.
+  const [gutter, setGutter] = useState(true);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
   // Lets the frame's own listeners nudge the selection watcher, without
@@ -165,7 +167,30 @@ export function HtmlView({
       320,
     );
     frame.style.height = `${height}px`;
+    setBlocks(readBlocks(doc));
+
+    // A report fills the frame edge to edge, so a button placed at a
+    // block's corner lands on top of its caption. The pane is usually
+    // much wider than the document, though, so the buttons go in the
+    // margin — falling back to the corner only when there isn't one.
+    const pane = frame.closest<HTMLElement>(".fm-editor-pane");
+    if (pane) {
+      const room = pane.getBoundingClientRect().right - frame.getBoundingClientRect().right;
+      setGutter(room >= GUTTER_MIN);
+    }
   }, []);
+
+  // Re-measure when the pane changes width — the sidebar being toggled,
+  // the window being resized. The observer inside the frame only sees the
+  // report's own box, so it cannot answer whether there is still a margin
+  // out here to put the block buttons in.
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper || typeof ResizeObserver !== "function") return;
+    const observer = new ResizeObserver(() => syncHeight());
+    observer.observe(wrapper);
+    return () => observer.disconnect();
+  }, [syncHeight]);
 
   // Selection → source offsets. Shared by the ⌘⌥M path and the handle.
   const capture = useCallback((): HtmlCapturedSelection | null => {
@@ -247,9 +272,25 @@ export function HtmlView({
       return;
     }
     let lastKey = "";
+    let lastAnchorId: number | null = null;
     const tick = () => {
       const doc = frameRef.current?.contentDocument;
       const selection = doc?.getSelection();
+
+      // Clicking an anchored passage should focus its card. That normally
+      // rides on the frame's own click event, which an embedder may not
+      // deliver — but the click also moves the caret, and the caret we can
+      // read. This only ever *sets* a focus, never clears one: clearing
+      // from here would fight the sidebar, where clicking a card focuses a
+      // comment whose passage the caret is nowhere near.
+      const caretAnchorId = anchorIdAt(selection?.anchorNode ?? null);
+      if (caretAnchorId == null) {
+        lastAnchorId = null;
+      } else if (caretAnchorId !== lastAnchorId) {
+        lastAnchorId = caretAnchorId;
+        latest.current.onAnchorClick(caretAnchorId);
+      }
+
       if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
         if (lastKey !== "") {
           lastKey = "";
@@ -303,6 +344,8 @@ export function HtmlView({
     const write = () => {
       const doc = frame.contentDocument;
       if (!doc) return;
+      // The elements these point at are about to be discarded.
+      setBlocks([]);
       doc.open();
       doc.write(body);
       doc.close();
@@ -319,31 +362,6 @@ export function HtmlView({
       decorateAnchors(doc);
       applyAnchorState(doc, focusedCommentId, hoveredCommentId, resolvedIds);
 
-      // The affordance for commenting on a chart or table. Injected by
-      // the host because the report's own scripts never run.
-      const button = doc.createElement("button");
-      button.className = "fm-element-target";
-      button.type = "button";
-      button.setAttribute("data-forgemark", "element-target");
-      button.textContent = "Comment";
-      button.setAttribute("data-visible", "false");
-      doc.body?.appendChild(button);
-
-      let armed: Element | null = null;
-      const hideButton = () => {
-        armed = null;
-        button.setAttribute("data-visible", "false");
-      };
-      const showButtonFor = (el: Element) => {
-        armed = el;
-        const rect = el.getBoundingClientRect();
-        const top = rect.top + (doc.defaultView?.scrollY ?? 0);
-        const left = rect.left + (doc.defaultView?.scrollX ?? 0);
-        button.style.top = `${Math.max(0, top + 6)}px`;
-        button.style.left = `${Math.max(0, left + rect.width - 84)}px`;
-        button.setAttribute("data-visible", "true");
-      };
-
       const findAnchorId = (target: EventTarget | null): number | null => {
         if (!(target instanceof doc.defaultView!.Element)) return null;
         const el = (target as Element).closest("[data-anchor-id]");
@@ -353,15 +371,6 @@ export function HtmlView({
       };
 
       const onClick = (e: Event) => {
-        if (e.target === button) {
-          e.preventDefault();
-          if (armed) {
-            const capture = captureElement(armed, frame, latest.current.body);
-            if (capture) latest.current.onRequestElementComment(capture);
-          }
-          hideButton();
-          return;
-        }
         // Links inside a report would navigate the iframe away from the
         // document under review. Nothing here opens them yet, so the
         // safe behaviour is to do nothing rather than lose the report.
@@ -373,9 +382,6 @@ export function HtmlView({
       const onMouseOver = (e: Event) => {
         const id = findAnchorId(e.target);
         if (id !== null) latest.current.onAnchorHover(id);
-        const target = elementAnchorTarget(e.target as Node | null);
-        if (target) showButtonFor(target);
-        else if (e.target !== button) hideButton();
       };
       const onMouseOut = (e: Event) => {
         if (findAnchorId(e.target) !== null) latest.current.onAnchorHover(null);
@@ -460,6 +466,7 @@ export function HtmlView({
       doc.addEventListener("contextmenu", onFrameContextMenu);
 
       syncHeight();
+      setBlocks(readBlocks(doc));
       // Late layout (web fonts, images) can change the height after load.
       const observer = doc.defaultView?.ResizeObserver
         ? new doc.defaultView.ResizeObserver(syncHeight)
@@ -547,16 +554,125 @@ export function HtmlView({
   }, [capture, handleRef]);
 
   return (
-    <iframe
-      ref={frameRef}
-      className="fm-html-view"
-      data-testid="fm-html-view"
-      title="Report under review"
-      // No allow-scripts: the report's own scripts must not run. See the
-      // note at the top of this file for why the pairing matters.
-      sandbox="allow-same-origin"
-    />
+    <div className="fm-html-frame" ref={wrapperRef}>
+      <iframe
+        ref={frameRef}
+        className="fm-html-view"
+        data-testid="fm-html-view"
+        title="Report under review"
+        // No allow-scripts: the report's own scripts must not run. See the
+        // note at the top of this file for why the pairing matters.
+        sandbox="allow-same-origin"
+      />
+      {/* The way to comment on a chart or a table.
+       *
+       * These live in the *host* document, positioned over the frame,
+       * rather than being injected into it. An injected button has to be
+       * reached by a click delivered to a listener the host attached
+       * inside the frame, and an embedder is free not to do that —
+       * WKWebView doesn't, which left this silently dead. Out here the
+       * button is an ordinary part of the app and is clicked normally. */}
+      {blocks.map((block) => (
+        <button
+          key={block.key}
+          type="button"
+          className="fm-block-comment"
+          data-testid="fm-block-comment"
+          data-placement={gutter ? "gutter" : "inset"}
+          style={
+            gutter
+              ? { top: block.top, left: "calc(100% + 10px)" }
+              : { top: block.top, left: block.right - 6, transform: "translateX(-100%)" }
+          }
+          title={`Comment on ${block.label}`}
+          aria-label={`Comment on ${block.label}`}
+          onClick={() => {
+            const capture = captureElement(block.el, frameRef.current, latest.current.body);
+            if (capture) latest.current.onRequestElementComment(capture);
+          }}
+        >
+          Comment
+        </button>
+      ))}
+    </div>
   );
+}
+
+// A block a comment can be anchored to as a unit, and where it sits
+// inside the frame.
+export type BlockAffordance = {
+  key: string;
+  // Offsets from the frame's own top-left. The frame is sized to its
+  // content and so never scrolls internally, which makes an element's
+  // client rect its offset within the document — and the host wrapper
+  // starts at the same origin, so these are usable as-is for positioning.
+  top: number;
+  right: number;
+  label: string;
+  el: Element;
+};
+
+const BLOCK_SELECTOR = "figure, table, blockquote, pre, img, video, svg";
+
+// Room the margin needs before a button is put there: the button's own
+// width plus the gap either side of it.
+const GUTTER_MIN = 96;
+
+// The comment id of the anchor containing a node, if any.
+function anchorIdAt(node: Node | null): number | null {
+  const el =
+    node == null
+      ? null
+      : node.nodeType === Node.ELEMENT_NODE
+        ? (node as Element)
+        : node.parentElement;
+  const anchor = el?.closest?.("[data-anchor-id]");
+  const raw = anchor?.getAttribute("data-anchor-id");
+  const id = raw == null ? NaN : Number(raw);
+  return Number.isFinite(id) ? id : null;
+}
+
+function isHidden(el: Element): boolean {
+  const view = el.ownerDocument?.defaultView;
+  if (!view?.getComputedStyle) return false;
+  try {
+    const style = view.getComputedStyle(el);
+    return style.display === "none" || style.visibility === "hidden";
+  } catch {
+    return false;
+  }
+}
+
+// The outermost commentable blocks in the report.
+//
+// Outermost because a `<figure>` wrapping a chart is the unit a reviewer
+// means when they point at it; offering the figure *and* the `<svg>`
+// inside it would be two buttons for one intent.
+function readBlocks(doc: Document): BlockAffordance[] {
+  const all = Array.from(doc.querySelectorAll(BLOCK_SELECTOR));
+  const outermost = all.filter((el) => !all.some((other) => other !== el && other.contains(el)));
+  const out: BlockAffordance[] = [];
+  outermost.forEach((el, index) => {
+    // Reports sometimes carry a hidden <svg> sprite sheet; nobody wants a
+    // button on that. Asked as a style question rather than a measured
+    // one, so the answer doesn't depend on a layout being available —
+    // "no layout" must not silently mean "no buttons".
+    if (isHidden(el)) return;
+    let rect: { top: number; right: number };
+    try {
+      rect = el.getBoundingClientRect();
+    } catch {
+      rect = { top: 0, right: 0 };
+    }
+    out.push({
+      key: `${index}:${el.tagName}`,
+      top: rect.top,
+      right: rect.right,
+      label: describeElement(el),
+      el,
+    });
+  });
+  return out;
 }
 
 // A range's bounding box, or a zero box when the document doesn't
@@ -633,9 +749,10 @@ function overlappingAnchor(range: Range): number | null {
 // Protein sensitivity is hard to pin…" rather than a tag name.
 function captureElement(
   el: Element,
-  frame: HTMLIFrameElement,
+  frame: HTMLIFrameElement | null,
   body: string,
 ): HtmlCapturedSelection | null {
+  if (!frame) return null;
   const existing = el.closest("[data-anchor-id]");
   const frameRect = frame.getBoundingClientRect();
   const rect = el.getBoundingClientRect();

@@ -6,7 +6,7 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 
 ### Added
 
-- Review of generated HTML reports, alongside Markdown. Open an `.html` file and comment on it: select a passage and a **Comment / Suggest edit** bar appears above it, or press ⌘⌥M, or hover a figure, chart, or table and click **Comment** — the only way to point at something with no text to select. Threads, replies, suggestions, resolve, print and clean export all work as they do for Markdown.
+- Review of generated HTML reports, alongside Markdown. Open an `.html` file and comment on it: select a passage and a **Comment / Suggest edit** bar appears above it, or press ⌘⌥M, or click the **Comment** button beside a figure, chart, or table — the only way to point at something with no text to select. Threads, replies, suggestions, resolve, print and clean export all work as they do for Markdown.
 - Reports survive being regenerated. Rebuilding a report drops every anchor, so the lost-anchor banner now offers to put back the ones it is sure about in a single action, leaving anything ambiguous for you to decide. Comments made on a figure remember its `id`, so they reattach exactly even when the caption has been renumbered.
 - The AI skill covers the HTML variant, including how to rebuild a reviewed report without discarding the review.
 
@@ -19,7 +19,8 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 ### Known limitations
 
 - Find (⌘F) is off for HTML reports; Source view is searchable.
-- Right-click inside a report opens the system webview's own menu (Look Up, Translate, Copy) rather than Forgemark's. The report is rendered in a frame the app does not own the input handling for, so the selection bar, ⌘⌥M, and the figure hover button are the ways to comment.
+- Right-click inside a report opens the system webview's own menu (Look Up, Translate, Copy) rather than Forgemark's. The report is rendered in a frame whose input handling the app does not own, so the selection bar and ⌘⌥M are the ways to comment on a passage.
+- Hovering an anchored passage in a report does not highlight its comment card. Hovering the card still highlights the passage.
 - Scripts inside a report never run, so a chart drawn in JavaScript renders empty. Static and inline-SVG charts are unaffected.
 
 ## [1.5.0] — 2026-07-25

@@ -69,7 +69,7 @@ What differs is what you can do with the document:
 | Edit the prose                       | yes      | no                  |
 | Find (⌘F)                            | yes      | Source view only    |
 
-Commenting works exactly as it does in a Markdown document — select a passage and the **Comment / Suggest edit** bar appears above it, or press ⌘⌥M — with one addition and one subtraction. The addition is figures: hover a chart or table and click its **Comment** button, which is the only way to point at something with no text to select. The subtraction is right-click: inside the report frame that menu belongs to the system webview, which answers it with Look Up / Translate / Copy and does not reliably let the app replace it.
+Commenting works exactly as it does in a Markdown document — select a passage and the **Comment / Suggest edit** bar appears above it, or press ⌘⌥M — with one addition and one subtraction. The addition is figures: every chart, table, and image carries a **Comment** button in the margin beside it, which is the only way to point at something with no text to select. The subtraction is right-click: inside the report frame that menu belongs to the system webview, which answers it with Look Up / Translate / Copy and does not reliably let the app replace it.
 
 **Reports are review-only by design.** Editing one would mean modelling the document, and any model that round-trips through an editor destroys the `<style>` block, the inline `<svg>`, and every unrecognised attribute a generated report is made of. So Forgemark renders the file verbatim in a sandboxed frame and only ever splices markers into the source at exact byte offsets — the file you save differs from the one you opened by the comments you added, and nothing else.
 

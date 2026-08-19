@@ -194,3 +194,115 @@ describe("selection toolbar in a report", () => {
     expect(screen.queryByTestId("fm-selection-toolbar")).toBeNull();
   });
 });
+
+describe("focusing a comment from the report", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  // Clicking an anchored passage normally focuses its card through the
+  // frame's own click event. WKWebView does not deliver that to a
+  // host-attached listener, so the caret — which we can read — stands in.
+  const ANCHORED = `<!doctype html>
+<html><head><title>Meals</title></head>
+<body>
+<p>Minimising is <b><!-- fmc:7 -->variable projection<!-- /fmc:7 --></b>.</p>
+<p>Unanchored prose.</p>
+</body></html>
+`;
+
+  it("focuses the comment whose passage the caret lands in", async () => {
+    render(
+      <ThemeProvider initialPreference="light">
+        <DocumentProvider>
+          <FocusHarness body={ANCHORED} />
+          <AppShell />
+        </DocumentProvider>
+      </ThemeProvider>,
+    );
+    fireEvent.click(screen.getByTestId("probe-load"));
+    await waitFor(() => expect(frameDoc().querySelector("[data-anchor-id='7']")).not.toBeNull());
+    expect(screen.getByTestId("probe-focused").textContent).toBe("none");
+
+    const doc = frameDoc();
+    const span = doc.querySelector("[data-anchor-id='7']")!;
+    const range = doc.createRange();
+    range.setStart(span.firstChild!, 3);
+    range.collapse(true);
+    const selection = doc.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    await settle();
+
+    await waitFor(() => expect(screen.getByTestId("probe-focused").textContent).toBe("7"));
+  });
+
+  it("does not clear a focus when the caret is outside any anchor", async () => {
+    // The sidebar focuses comments too, and the caret is nowhere near
+    // their passages when it does. Clearing from here would undo that.
+    render(
+      <ThemeProvider initialPreference="light">
+        <DocumentProvider>
+          <FocusHarness body={ANCHORED} focusOnLoad={7} />
+          <AppShell />
+        </DocumentProvider>
+      </ThemeProvider>,
+    );
+    fireEvent.click(screen.getByTestId("probe-load"));
+    await waitFor(() => expect(frameDoc().querySelector("[data-anchor-id='7']")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("probe-focus"));
+    expect(screen.getByTestId("probe-focused").textContent).toBe("7");
+
+    const doc = frameDoc();
+    const other = doc.querySelectorAll("p")[1];
+    const range = doc.createRange();
+    range.setStart(other.firstChild!, 2);
+    range.collapse(true);
+    const selection = doc.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    await settle();
+    await settle();
+
+    expect(screen.getByTestId("probe-focused").textContent).toBe("7");
+  });
+});
+
+function FocusHarness({ body, focusOnLoad }: { body: string; focusOnLoad?: number }) {
+  const { state, dispatch } = useDocument();
+  return (
+    <div>
+      <span data-testid="probe-focused">{state.focusedCommentId ?? "none"}</span>
+      <button
+        data-testid="probe-focus"
+        onClick={() => dispatch({ type: "setFocusedComment", id: focusOnLoad ?? null })}
+      />
+      <button
+        data-testid="probe-load"
+        onClick={() =>
+          dispatch({
+            type: "load",
+            filePath: "/tmp/report.html",
+            fileName: "report.html",
+            text: body,
+            body,
+            comments: [
+              {
+                id: 7,
+                anchor_text: "variable projection",
+                author: "Claude",
+                timestamp: "2026-08-16T09:00:00Z",
+                resolved: false,
+                body: "Gloss this.",
+              },
+            ],
+            readOnly: false,
+            format: "html",
+          })
+        }
+      />
+    </div>
+  );
+}

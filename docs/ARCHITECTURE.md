@@ -197,6 +197,27 @@ node child of `<html>`, and starting at body puts every later offset one
 character short. UI that Forgemark injects into the frame is tagged
 `data-forgemark` and skipped for the same reason.
 
+**Nothing may depend on an event reaching the frame.** WKWebView does not
+deliver `contextmenu`, `mouseover`, or `click` to listeners the host attaches
+inside the frame — it answers a right-click with its own Look Up / Translate /
+Copy menu, and never runs ours. Chromium does deliver them, so this is not
+reproducible in a browser harness and was found only by driving the Tauri
+window. Anything the reader must be able to do is therefore built on what the
+host can _read_ across the boundary, which `allow-same-origin` grants and which
+has never failed:
+
+- The Comment / Suggest edit toolbar watches the selection, polling on an
+  interval and nudged by the frame's events where they happen to arrive.
+- The per-block Comment buttons live in the _host_ document, positioned over
+  the frame. They sit in the pane's margin, falling back onto the block itself
+  when the window is too narrow for one.
+- Clicking an anchored passage focuses its card via the caret, which the click
+  moves and which we can read. It only ever _sets_ focus — clearing from there
+  would fight the sidebar.
+
+The in-frame listeners are still attached, because where they do work they are
+immediate. They are an optimisation, never the mechanism.
+
 **Consequences that are deliberate, not gaps:**
 
 - HTML documents are review-only. Commenting, replying, suggesting and

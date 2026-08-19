@@ -165,15 +165,12 @@ describe("reviewing an HTML report", () => {
 
   it("anchors a whole figure, captioned and with its id kept as a hint", async () => {
     await loadReport();
-    const doc = frameDoc();
-    const figure = doc.querySelector("figure")!;
-    // Hovering a block raises the affordance; clicking it opens the
-    // composer. This is the only way to comment on a chart, which has no
-    // text to select.
-    figure.dispatchEvent(new doc.defaultView!.MouseEvent("mouseover", { bubbles: true }));
-    const button = doc.querySelector<HTMLElement>(".fm-element-target")!;
-    expect(button.getAttribute("data-visible")).toBe("true");
-    button.dispatchEvent(new doc.defaultView!.MouseEvent("click", { bubbles: true }));
+    // Every commentable block carries a button, in the *host* document
+    // rather than inside the frame. This is the only way to comment on a
+    // chart, which has no text to select.
+    const button = await screen.findByTestId("fm-block-comment");
+    expect(button.getAttribute("aria-label")).toContain("Figure 1. Control holds");
+    fireEvent.click(button);
 
     await waitFor(() => expect(screen.getByTestId("fm-composer-textarea")).toBeTruthy());
     fireEvent.change(screen.getByTestId("fm-composer-textarea"), {
