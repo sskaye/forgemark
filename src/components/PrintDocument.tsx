@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
@@ -11,7 +11,7 @@ import { TaskList } from "@tiptap/extension-task-list";
 import { TaskItem } from "@tiptap/extension-task-item";
 import { Markdown } from "tiptap-markdown";
 import { bodyWithAnchorSpans } from "../format";
-import type { Comment, Reply } from "../format/types";
+import type { Comment, DocFormat, Reply } from "../format/types";
 import { AnchorMark } from "./AnchorMark";
 import type { PrintOptions } from "./PrintOptionsModal";
 import "./PrintDocument.css";
@@ -21,44 +21,14 @@ type Props = {
   comments: Comment[];
   fileName: string;
   options: PrintOptions | null;
+  format?: DocFormat;
 };
 
-export function PrintDocument({ body, comments, fileName, options }: Props) {
-  const initialMarkdown = useMemo(() => bodyWithAnchorSpans(body), [body]);
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ link: false }),
-      Link.configure({ openOnClick: false }),
-      AnchorMark,
-      Image,
-      Table.configure({ resizable: false }),
-      TableRow,
-      TableHeader,
-      TableCell,
-      TaskList,
-      TaskItem.configure({ nested: true }),
-      Markdown.configure({
-        html: true,
-        tightLists: true,
-        bulletListMarker: "-",
-        linkify: true,
-        breaks: false,
-      }),
-    ],
-    content: initialMarkdown,
-    editable: false,
-    editorProps: {
-      attributes: {
-        class: "fm-print-prose",
-      },
-    },
-  });
-
-  useEffect(() => {
-    if (!editor) return;
-    editor.commands.setContent(initialMarkdown, { emitUpdate: false });
-  }, [editor, initialMarkdown]);
-
+// Printing renders the document into a hidden article and then prints the
+// whole webview. The review-notes appendix is the same either way; only
+// the body differs, and it has to, because a report printed through the
+// Markdown editor would come out as its own source code.
+export function PrintDocument({ body, comments, fileName, options, format = "markdown" }: Props) {
   const printOptions = options ?? { includeComments: true, includeSuggestions: true };
   const reviewItems = comments.filter((comment) =>
     comment.suggested_edit ? printOptions.includeSuggestions : printOptions.includeComments,
@@ -69,7 +39,7 @@ export function PrintDocument({ body, comments, fileName, options }: Props) {
       <header className="fm-print-header">
         <h1>{fileName}</h1>
       </header>
-      <EditorContent editor={editor} className="fm-print-rendered" />
+      {format === "html" ? <PrintHtmlBody body={body} /> : <PrintMarkdownBody body={body} />}
       {reviewItems.length > 0 && (
         <section className="fm-print-review" data-testid="fm-print-review">
           <h2>Review notes</h2>
@@ -108,6 +78,74 @@ export function PrintDocument({ body, comments, fileName, options }: Props) {
       )}
     </article>
   );
+}
+
+// An HTML report prints itself. The frame carries the report's own CSS,
+// so what comes out of the printer is the document its author designed
+// rather than an approximation of it.
+function PrintHtmlBody({ body }: { body: string }) {
+  const frameRef = useRef<HTMLIFrameElement | null>(null);
+
+  useEffect(() => {
+    const frame = frameRef.current;
+    const doc = frame?.contentDocument;
+    if (!frame || !doc) return;
+    doc.open();
+    doc.write(body);
+    doc.close();
+    // No scrollbars on paper: the frame has to be as tall as its content
+    // or printing would clip everything past the first screen.
+    frame.style.height = `${Math.max(doc.documentElement?.scrollHeight ?? 0, 320)}px`;
+  }, [body]);
+
+  return (
+    <iframe
+      ref={frameRef}
+      className="fm-print-html"
+      data-testid="fm-print-html"
+      title="Report"
+      sandbox="allow-same-origin"
+    />
+  );
+}
+
+function PrintMarkdownBody({ body }: { body: string }) {
+  const initialMarkdown = useMemo(() => bodyWithAnchorSpans(body), [body]);
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({ link: false }),
+      Link.configure({ openOnClick: false }),
+      AnchorMark,
+      Image,
+      Table.configure({ resizable: false }),
+      TableRow,
+      TableHeader,
+      TableCell,
+      TaskList,
+      TaskItem.configure({ nested: true }),
+      Markdown.configure({
+        html: true,
+        tightLists: true,
+        bulletListMarker: "-",
+        linkify: true,
+        breaks: false,
+      }),
+    ],
+    content: initialMarkdown,
+    editable: false,
+    editorProps: {
+      attributes: {
+        class: "fm-print-prose",
+      },
+    },
+  });
+
+  useEffect(() => {
+    if (!editor) return;
+    editor.commands.setContent(initialMarkdown, { emitUpdate: false });
+  }, [editor, initialMarkdown]);
+
+  return <EditorContent editor={editor} className="fm-print-rendered" />;
 }
 
 function PrintReply({ reply }: { reply: Reply }) {

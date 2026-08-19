@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Modelling meals: B2 and B3</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface: #fcfcfb;
+  --plane: #f9f9f7;
+  --ink: #0b0b0b;
+  --ink2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --border: rgba(11,11,11,0.10);
+  --series: #2a78d6;
+  --band-severe-low: #0d366b;
+  --band-low: #3987e5;
+  --band-target: #dedcd3;
+  --band-elevated: #c9522e;
+  --band-high: #7d1f1f;
+  --ink-severe-low: #ffffff;
+  --ink-low: #ffffff;
+  --ink-target: #0b0b0b;
+  --ink-elevated: #ffffff;
+  --ink-high: #ffffff;
+  --ins-basal: #2a78d6;
+  --ins-meal: #eb6834;
+  --ins-correction: #1baf7a;
+  --ins-ink-basal: #ffffff;
+  --ins-ink-meal: #ffffff;
+  --ins-ink-correction: #ffffff;
+  --cat-1: #2a78d6;
+  --cat-2: #eb6834;
+  --cat-3: #1baf7a;
+  --cat-ink-1: #ffffff;
+  --cat-ink-2: #ffffff;
+  --cat-ink-3: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+  --surface: #1a1a19;
+  --plane: #0d0d0d;
+  --ink: #ffffff;
+  --ink2: #c3c2b7;
+  --muted: #898781;
+  --grid: #2c2c2a;
+  --border: rgba(255,255,255,0.10);
+  --series: #3987e5;
+  --band-severe-low: #b7d3f6;
+  --band-low: #2a78d6;
+  --band-target: #3a3a37;
+  --band-elevated: #b8502e;
+  --band-high: #f5adad;
+  --ink-severe-low: #0b0b0b;
+  --ink-low: #ffffff;
+  --ink-target: #ffffff;
+  --ink-elevated: #ffffff;
+  --ink-high: #0b0b0b;
+  --ins-basal: #3987e5;
+  --ins-meal: #d95926;
+  --ins-correction: #199e70;
+  --ins-ink-basal: #ffffff;
+  --ins-ink-meal: #ffffff;
+  --ins-ink-correction: #ffffff;
+  --cat-1: #3987e5;
+  --cat-2: #d95926;
+  --cat-3: #199e70;
+  --cat-ink-1: #ffffff;
+  --cat-ink-2: #ffffff;
+  --cat-ink-3: #ffffff;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface: #1a1a19;
+  --plane: #0d0d0d;
+  --ink: #ffffff;
+  --ink2: #c3c2b7;
+  --muted: #898781;
+  --grid: #2c2c2a;
+  --border: rgba(255,255,255,0.10);
+  --series: #3987e5;
+  --band-severe-low: #b7d3f6;
+  --band-low: #2a78d6;
+  --band-target: #3a3a37;
+  --band-elevated: #b8502e;
+  --band-high: #f5adad;
+  --ink-severe-low: #0b0b0b;
+  --ink-low: #ffffff;
+  --ink-target: #ffffff;
+  --ink-elevated: #ffffff;
+  --ink-high: #0b0b0b;
+  --ins-basal: #3987e5;
+  --ins-meal: #d95926;
+  --ins-correction: #199e70;
+  --ins-ink-basal: #ffffff;
+  --ins-ink-meal: #ffffff;
+  --ins-ink-correction: #ffffff;
+  --cat-1: #3987e5;
+  --cat-2: #d95926;
+  --cat-3: #199e70;
+  --cat-ink-1: #ffffff;
+  --cat-ink-2: #ffffff;
+  --cat-ink-3: #ffffff;
+}
+* { box-sizing: border-box; }
+body { margin:0 auto; max-width:840px; padding:32px 26px 70px;
+  font:15.5px/1.68 ui-serif,Georgia,serif; background:var(--surface); color:var(--ink); }
+h1 { font:600 27px/1.28 ui-sans-serif,system-ui,sans-serif; margin:0 0 14px; }
+h2 { font:600 20px/1.3 ui-sans-serif,system-ui,sans-serif; margin:44px 0 10px;
+  padding-bottom:7px; border-bottom:1px solid var(--grid); }
+h3 { font:600 16.5px/1.35 ui-sans-serif,system-ui,sans-serif; margin:32px 0 8px; }
+p { margin:0 0 14px; }
+.lede { font-size:17px; color:var(--ink2); }
+.eq { font:15px ui-monospace,SFMono-Regular,monospace; text-align:center;
+  background:var(--plane); border:1px solid var(--grid); border-radius:7px;
+  padding:13px; margin:16px 0; }
+code { font:0.92em ui-monospace,SFMono-Regular,monospace;
+  background:var(--plane); padding:1px 4px; border-radius:3px; }
+figure { margin:24px 0 26px; padding:15px 16px 8px; background:var(--plane);
+  border:1px solid var(--grid); border-radius:9px; }
+figcaption { font:13.5px/1.45 ui-sans-serif,system-ui,sans-serif; margin-bottom:9px; }
+.cap { font:12.8px/1.5 ui-sans-serif,system-ui,sans-serif; color:var(--ink2);
+  margin:9px 0 4px; }
+.chart { width:100%; height:auto; overflow:visible; display:block; }
+.plot { fill:var(--surface); stroke:var(--grid); }
+.grid { stroke:var(--grid); stroke-width:1; opacity:.8; }
+.rule { stroke:var(--ink2); stroke-dasharray:5 4; stroke-width:1.3; opacity:.85; }
+.ln { fill:none; stroke-width:2.1; }
+.tick { font:11px ui-sans-serif,system-ui,sans-serif; fill:var(--ink2); }
+.axis { font:11.5px ui-sans-serif,system-ui,sans-serif; fill:var(--ink2); }
+.mid { text-anchor:middle; } .end { text-anchor:end; } .start { text-anchor:start; }
+.legend { display:flex; flex-wrap:wrap; gap:11px; margin:0 0 8px;
+  font:11.5px ui-sans-serif,system-ui,sans-serif; color:var(--ink2); }
+.legend .sw { display:inline-flex; align-items:center; gap:5px; }
+.legend i { width:11px; height:11px; border-radius:2px; display:inline-block; }
+.empty { color:var(--ink2); }
+ul, ol { margin:0 0 14px; padding-left:22px; } li { margin-bottom:9px; }
+.tw { overflow-x:auto; margin:16px 0 20px; }
+table { border-collapse:collapse; width:100%;
+  font:13px/1.5 ui-sans-serif,system-ui,sans-serif; }
+th { text-align:left; vertical-align:bottom; padding:7px 10px;
+  border-bottom:2px solid var(--grid); color:var(--ink); font-weight:600; }
+td { vertical-align:top; padding:7px 10px; border-bottom:1px solid var(--grid);
+  color:var(--ink2); }
+td:first-child { color:var(--ink); }
+</style></head><body>
+
+<h1>Modelling meals: the simulated protein term and the estimator built on it</h1>
+<p class="lede">Phases B2 and B3 of <code>docs/plans/08-modelling-meals.md</code>.
+What was built, what it was checked against, what the checks said, and what is
+still not established. This is a build report: unlike
+<code>05-fitting-ba-and-isf.html</code> it keeps the defects found on the way,
+because a scenario library is a measuring instrument and how it was found to be
+wrong is part of what says whether to trust it now.</p>
+
+<h2>Why these phases exist</h2>
+<p>Phase 5 established that the fasting formulation cannot determine
+<code>ISF</code> from this record. The exclusion window moves the answer from 7.6
+to 67.6, the estimate never plateaus, and every route to removing the meal bias
+runs through discarding the data that carries the meal. The response is to model
+meals rather than exclude them:</p>
+<p class="eq">dbg_per_h(t) &nbsp;=&nbsp; BA(h) &nbsp;&minus;&nbsp; ISF &times; IA(t)
+&nbsp;+&nbsp; CSF_c &times; CA_c(t) &nbsp;+&nbsp; CSF_p &times; CA_p(t) &nbsp;+&nbsp; e(t)</p>
+<p>fitted on <b>every</b> row rather than on the 13% a 4 h / 8 h filter allows.
+<b>B2</b> gives the simulator a protein term so there is a truth to check that
+against; <b>B3</b> builds the estimator and measures what it can and cannot
+recover.</p>
+
+<h2>B2 — the simulator's protein term</h2>
+<p>Before this, protein was absorbed on the carbohydrate path at its
+<em>entered</em> grams with the carbohydrate sensitivity. Protein is entered at
+half its weight, so that is a protein-to-carbohydrate equivalence of exactly
+<b>0.50</b> — the owner's dosing convention, asserted as physiology. His own
+whey-isolate measurements put it nearer 0.20. It is now a parameter.</p>
+<div class="tw"><table style="min-width:420px"><thead><tr><th>parameter</th><th>meaning</th><th>default</th></tr></thead><tbody><tr><td><code>csf_ratio</code></td><td>CSF_p / CSF_c, per <b>real</b> gram</td><td>0.50</td></tr><tr><td><code>delay_min</code></td><td>minutes before any protein appears</td><td>10</td></tr><tr><td><code>absorption_multiplier</code></td><td>true duration ÷ the entered time</td><td>1.00</td></tr><tr><td><code>kappa</code></td><td>carbohydrate suppresses how much protein converts</td><td>0</td></tr><tr><td><code>delta</code></td><td>carbohydrate delays protein's onset</td><td>0</td></tr><tr><td><code>tau</code></td><td>carbohydrate stretches protein's duration</td><td>0</td></tr><tr><td><code>rho</code></td><td>protein slows carbohydrate down</td><td>0</td></tr></tbody></table></div>
+
+<h3>The defaults reproduce the old simulator exactly</h3>
+<p>Not approximately: a 90-day scenario built before the change and one built
+after agree on <b>all 25,790 glucose readings</b>, with identical entries,
+boluses and temp basals. That is what lets the 61 scenarios already on disk stay
+valid instead of being regenerated, and it is pinned by a test rather than
+trusted. Scenarios written before the block existed are scored by defaulting it,
+which is not a guess — those runs <em>were</em> the defaults.</p>
+
+<h3>The families</h3>
+<p>18 families in the library. The nine added or rebuilt by these
+phases:</p>
+<div class="tw"><table style="min-width:560px"><thead><tr><th>family</th><th>sweeps</th><th>values</th></tr></thead><tbody><tr><td><code>protein_sensitivity</code></td><td>true sensitivity <em>and</em> the entry convention, together</td><td>r = 0.15–0.80 across two conventions</td></tr><tr><td><code>protein_timing</code></td><td>protein onset delay</td><td>10, 30, 45, 60, 90 min</td></tr><tr><td><code>carb_timing</code></td><td>carbohydrate onset delay</td><td>5, 10, 20, 30 min</td></tr><tr><td><code>interaction_amount</code></td><td><code>kappa</code></td><td>0, 0.25, 0.5, 1, 2</td></tr><tr><td><code>interaction_delay</code></td><td><code>delta</code></td><td>0, 15, 30, 60 min</td></tr><tr><td><code>interaction_rate</code></td><td><code>tau</code></td><td>0, 0.25, 0.5, 1</td></tr><tr><td><code>interaction_carb</code></td><td><code>rho</code></td><td>0, 0.25, 0.5, 1</td></tr><tr><td><code>bolus_coupling</code></td><td>share of meals given no bolus</td><td>0, 0.10, 0.25, 0.50</td></tr><tr><td><code>meal_composition</code></td><td>the carbohydrate / protein / mixed mixture</td><td>as measured, all mixed, carb heavy, protein heavy</td></tr></tbody></table></div>
+
+<h3>Why <code>protein_sensitivity</code> had to be designed three times</h3>
+<p>This is the most useful thing B2 learned, and it is a constraint on what the
+record can ever say.</p>
+<p><b>First attempt — sweep the ratio, hold the convention.</b> The loop doses
+insulin for protein glucose that never arrives, and on a pure integrator with no
+glucose-dependent disposal that accumulates without bound. Measured: 54.5% time
+in range at ratio 0.30, 35.3% at 0.20, 17.2% at 0.10, with 30–73% of readings
+pinned at the clamp. A clamped series cannot move, so a fit on it measures the
+clamp. Scaling the protein bolus down proportionally took ratio 0.10 from 0.0% to
+17.2% and no further — the deficit is far larger than the bolus — and the oracle
+controller was <em>worse</em>.</p>
+<p><b>Second attempt — move the convention with the truth.</b> Control is then
+perfect and the sweep measures nothing. The fit sees <code>r/(2c)</code>, so a
+convention that tracks the sensitivity returns <code>CSF_c/2</code> at every
+level. <b>A record identifies the product — true glucose per entered gram — and
+not the sensitivity and the convention separately.</b> That is not a limitation
+of this estimator; it is what the data contains.</p>
+<p><b>Third and current — move both, keeping the mismatch controllable.</b> Two
+blocks at different conventions, each spanning the same mismatch, reach true
+ratios from 0.15 to 0.80 where a fixed convention stops at 0.35. The owner's
+measured 0.20 is inside. The blocks look nearly identical to the fit and differ
+in physiology, which is what makes running both worth the scenarios.</p>
+<p>One consequence for B5: the fit's output is directly the number the entry
+convention needs, and is <b>not</b> the absolute protein sensitivity. Any
+statement about the latter has to come from the fasted tests.</p>
+
+<h3>Control quality is validated, and it is not a formality</h3>
+<p>Every level is checked for at least 25% of readings in 60–140 mg/dL and at
+most 10% at the plausibility clamp. Four scenarios failed that check during
+development and were redesigned rather than fitted.</p>
+<figure><figcaption><b>Figure 1.</b> Every family holds control, measured at its worst level</figcaption><svg viewBox="0 0 620 314" class="chart"><line x1="247.6" y1="14" x2="247.6" y2="284" class="rule"/><text x="247.6" y="298" class="tick mid">usable</text><text x="140" y="32" class="tick end">protein_sensitivity   n=6</text><rect x="150" y="18" width="274.8" height="18" fill="#1baf7a" rx="2"/><text x="431.8" y="32" class="tick start">70%</text><text x="140" y="62" class="tick end">protein_timing   n=5</text><rect x="150" y="48" width="271.2" height="18" fill="#1baf7a" rx="2"/><text x="428.2" y="62" class="tick start">69%</text><text x="140" y="92" class="tick end">carb_timing   n=4</text><rect x="150" y="78" width="349.6" height="18" fill="#1baf7a" rx="2"/><text x="506.6" y="92" class="tick start">90%</text><text x="140" y="122" class="tick end">interaction_amount   n=5</text><rect x="150" y="108" width="330.2" height="18" fill="#1baf7a" rx="2"/><text x="487.2" y="122" class="tick start">85%</text><text x="140" y="152" class="tick end">interaction_delay   n=4</text><rect x="150" y="138" width="353.2" height="18" fill="#1baf7a" rx="2"/><text x="510.2" y="152" class="tick start">91%</text><text x="140" y="182" class="tick end">interaction_rate   n=4</text><rect x="150" y="168" width="340.2" height="18" fill="#1baf7a" rx="2"/><text x="497.2" y="182" class="tick start">87%</text><text x="140" y="212" class="tick end">interaction_carb   n=4</text><rect x="150" y="198" width="312.6" height="18" fill="#1baf7a" rx="2"/><text x="469.6" y="212" class="tick start">80%</text><text x="140" y="242" class="tick end">bolus_coupling   n=4</text><rect x="150" y="228" width="347.0" height="18" fill="#1baf7a" rx="2"/><text x="504.0" y="242" class="tick start">89%</text><text x="140" y="272" class="tick end">meal_composition   n=4</text><rect x="150" y="258" width="357.1" height="18" fill="#1baf7a" rx="2"/><text x="514.1" y="272" class="tick start">92%</text><text x="350" y="310" class="axis mid">worst time in 60–140 mg/dL within the family, %</text></svg><p class="cap">The worst level in each family. Below the line the series is pinned against the clamp and cannot move, so any fit on it measures the clamp rather than the body. Currently <b>3 of 101 scenarios</b> in the whole library fail.</p></figure>
+
+<h2>B3 — the estimator</h2>
+<p>The parameters split cleanly, and the split is the whole design.</p>
+<div class="tw"><table style="min-width:520px"><thead><tr><th>kind</th><th>parameters</th><th>how they are solved</th></tr></thead><tbody><tr><td><b>linear</b></td><td>24 &times; <code>BA(h)</code>, <code>ISF</code>, <code>CSF_c</code>, <code>CSF_p</code> — 27 in all</td><td>least squares, exactly, in about 3 ms</td></tr><tr><td><b>non-linear</b></td><td>two delays, two durations, <code>kappa</code>, <code>delta</code>, <code>tau</code>, <code>rho</code></td><td>searched over: they change a regressor's <em>shape</em> rather than scaling it</td></tr></tbody></table></div>
+<p>Eliminating the linear block analytically and minimising over the rest is
+<b>variable projection</b> (Golub &amp; Pereyra, 1973). Because the inner solve is
+exact, the reduced objective is the <b>profile likelihood</b> under Gaussian
+errors — so the surfaces below are profile likelihoods, and their curvature is
+the uncertainty rather than a diagnostic bolted on afterwards.</p>
+<p>The outer loop is a <b>grid, then a golden-section polish</b> from the grid
+minimum. A gradient method is the usual partner for variable projection and is
+the wrong choice here: Loop's absorption curve is piecewise linear, so the
+objective is kinked and its gradient jumps at the breakpoints. The grid also
+produces the surfaces as a by-product, which an optimiser would make extra work,
+and the whole search costs about 18 seconds per scenario.</p>
+<p>Interaction channels are added one at a time, in the order <code>kappa →
+delta → tau → rho</code>, and each is <b>kept only if it beats its own null</b> —
+an extra parameter always fits the training data at least as well, so improving
+the fit is not on its own a reason to carry one.</p>
+
+<h3>What it was validated against</h3>
+<div class="tw"><table style="min-width:480px"><thead><tr><th>check</th><th>result</th></tr></thead><tbody><tr><td>Recovers every parameter on data built exactly from the model</td><td>exact, to 1e-6</td></tr><tr><td>Reduces to the Phase 5 fasting fit when the meal terms are absent</td><td>identical to 1e-12, on <code>ISF</code> and every <code>BA(h)</code></td></tr><tr><td>Recovers under realistic noise</td><td><code>ISF</code> within 1.5%, <code>CSF_c</code> within 3.2%</td></tr><tr><td>The <code>BA(h)</code> penalty leaves the sensitivities alone</td><td><b>failed</b> — see below</td></tr><tr><td>Every interaction is exactly off at zero</td><td>asserted by array equality</td></tr></tbody></table></div>
+
+<h2>Results</h2>
+
+<h3>Recovery across the library</h3>
+<figure><figcaption><b>Figure 2.</b> All three sensitivities come back, across every scenario that holds control</figcaption><svg viewBox="0 0 620 134" class="chart"><line x1="500.9" y1="14" x2="500.9" y2="104" class="rule"/><text x="500.9" y="118" class="tick mid">exact</text><text x="140" y="32" class="tick end">ISF   n=101</text><rect x="150" y="18" width="353.5" height="18" fill="#1baf7a" rx="2"/><text x="510.5" y="32" class="tick start">1.01</text><text x="140" y="62" class="tick end">CSF_c (carbohydrate)   n=101</text><rect x="150" y="48" width="357.1" height="18" fill="#1baf7a" rx="2"/><text x="514.1" y="62" class="tick start">1.02</text><text x="140" y="92" class="tick end">CSF_p (protein)   n=101</text><rect x="150" y="78" width="350.8" height="18" fill="#1baf7a" rx="2"/><text x="507.8" y="92" class="tick start">1.00</text><text x="350" y="130" class="axis mid">median fitted / true across the library</text></svg><p class="cap">Medians over 101 scenarios. <code>ISF</code> 1.007, <code>CSF_c</code> 1.018, <code>CSF_p</code> 1.000 of truth. Median mean-relative-error across the three is 0.025.</p></figure>
+<p>An earlier draft of this report claimed <code>CSF_p</code> was much the
+hardest of the three to pin, on the strength of a synthetic test where it ranged
+0.48 to 1.36 across seeds. The library says otherwise — the three spreads are
+0.168, 0.171 and 0.179 — and the disagreement turned out to be about the test,
+not the parameter.</p>
+<figure><figcaption><b>Figure 3.</b> Protein sensitivity is hard to pin only when meals happen at the same time every day</figcaption><svg viewBox="0 0 620 224" class="chart"><text x="140" y="32" class="tick end">ISF — meals at fixed hours</text><rect x="150" y="18" width="8.1" height="18" fill="#6b7280" rx="2"/><text x="165.1" y="32" class="tick start">0.02</text><text x="140" y="62" class="tick end">ISF — meal times jittered</text><rect x="150" y="48" width="8.1" height="18" fill="#1baf7a" rx="2"/><text x="165.1" y="62" class="tick start">0.02</text><text x="140" y="92" class="tick end">CSF_c — meals at fixed hours</text><rect x="150" y="78" width="20.3" height="18" fill="#6b7280" rx="2"/><text x="177.3" y="92" class="tick start">0.05</text><text x="140" y="122" class="tick end">CSF_c — meal times jittered</text><rect x="150" y="108" width="4.1" height="18" fill="#1baf7a" rx="2"/><text x="161.1" y="122" class="tick start">0.01</text><text x="140" y="152" class="tick end">CSF_p — meals at fixed hours</text><rect x="150" y="138" width="357.1" height="18" fill="#d9694a" rx="2"/><text x="514.1" y="152" class="tick start">0.88</text><text x="140" y="182" class="tick end">CSF_p — meal times jittered</text><rect x="150" y="168" width="101.5" height="18" fill="#1baf7a" rx="2"/><text x="258.5" y="182" class="tick start">0.25</text><text x="350" y="220" class="axis mid">spread of fitted / true across eight seeds</text></svg><p class="cap">Spread of fitted/true across eight seeds, on synthetic data. The synthetic test ate at 7, 13 and 19 <em>every day</em>, which makes the protein regressor nearly a copy of the hour indicators — and protein's curve is the slowest and broadest of the three, so it is the one that collapses into <code>BA(h)</code>. Jittering the meal times by up to three hours, changing nothing else, brings it back in line with the other two. The scenario library uses the empirical meal profile with realistic timing, which is why the library-wide spreads agree. <b>The record's own meal timing is irregular enough that it should behave like the jittered case</b>, and Phase B1 measured that directly: the protein regressor's R² on the hour dummies is 0.43, against 0.22 for insulin activity, which is identifiable.</p></figure>
+
+<h3>The BA(h) smoothness penalty had to be abandoned</h3>
+<p>Plan 08's decision 3 was to keep plan 07's penalty on the hourly profile. That
+is now reversed, on measurement.</p>
+<figure><figcaption><b>Figure 4.</b> The penalty displaces structure into CSF_p, and touches nothing else</figcaption><div class="legend"><span class="sw"><i style="background:#2a78d6"></i>ISF</span><span class="sw"><i style="background:#1baf7a"></i>CSF_c</span><span class="sw"><i style="background:#eb6834"></i>CSF_p</span></div><svg viewBox="0 0 620 300" class="chart"><rect x="64" y="16" width="540" height="232" class="plot"/><line x1="64" y1="236.7" x2="604" y2="236.7" class="grid"/><text x="56" y="240.7" class="tick end">0.9</text><line x1="64" y1="188.3" x2="604" y2="188.3" class="grid"/><text x="56" y="192.3" class="tick end">1.2</text><line x1="64" y1="139.9" x2="604" y2="139.9" class="grid"/><text x="56" y="143.9" class="tick end">1.5</text><line x1="64" y1="91.5" x2="604" y2="91.5" class="grid"/><text x="56" y="95.5" class="tick end">1.8</text><line x1="64" y1="43.1" x2="604" y2="43.1" class="grid"/><text x="56" y="47.1" class="tick end">2.1</text><text x="64.0" y="266" class="tick mid">0</text><text x="203.8" y="266" class="tick mid">0.2</text><text x="328.5" y="266" class="tick mid">1</text><text x="464.9" y="266" class="tick mid">5</text><text x="604.0" y="266" class="tick mid">25</text><line x1="64" y1="220.5" x2="604" y2="220.5" class="rule"/><text x="600" y="214.5" class="tick end">exact</text><text x="334" y="292" class="axis mid">penalty strength  (λ / samples per hour)</text><text transform="translate(14,132) rotate(-90)" class="axis mid">fitted / true</text><polyline points="64.0,220.5 203.8,220.7 328.5,220.9 464.9,221.0 604.0,221.4" class="ln" style="stroke:#2a78d6;"/><circle cx="64.0" cy="220.5" r="3.6" style="fill:#2a78d6"><title>ISF: 1</title></circle><circle cx="203.8" cy="220.7" r="3.6" style="fill:#2a78d6"><title>ISF: 0.999</title></circle><circle cx="328.5" cy="220.9" r="3.6" style="fill:#2a78d6"><title>ISF: 0.998</title></circle><circle cx="464.9" cy="221.0" r="3.6" style="fill:#2a78d6"><title>ISF: 0.997</title></circle><circle cx="604.0" cy="221.4" r="3.6" style="fill:#2a78d6"><title>ISF: 0.995</title></circle><polyline points="64.0,220.5 203.8,224.4 328.5,225.5 464.9,223.9 604.0,222.2" class="ln" style="stroke:#1baf7a;"/><circle cx="64.0" cy="220.5" r="3.6" style="fill:#1baf7a"><title>CSF_c: 1</title></circle><circle cx="203.8" cy="224.4" r="3.6" style="fill:#1baf7a"><title>CSF_c: 0.976</title></circle><circle cx="328.5" cy="225.5" r="3.6" style="fill:#1baf7a"><title>CSF_c: 0.969</title></circle><circle cx="464.9" cy="223.9" r="3.6" style="fill:#1baf7a"><title>CSF_c: 0.979</title></circle><circle cx="604.0" cy="222.2" r="3.6" style="fill:#1baf7a"><title>CSF_c: 0.99</title></circle><polyline points="64.0,220.5 203.8,147.6 328.5,117.3 464.9,90.5 604.0,38.5" class="ln" style="stroke:#eb6834;"/><circle cx="64.0" cy="220.5" r="3.6" style="fill:#eb6834"><title>CSF_p: 1</title></circle><circle cx="203.8" cy="147.6" r="3.6" style="fill:#eb6834"><title>CSF_p: 1.45</title></circle><circle cx="328.5" cy="117.3" r="3.6" style="fill:#eb6834"><title>CSF_p: 1.64</title></circle><circle cx="464.9" cy="90.5" r="3.6" style="fill:#eb6834"><title>CSF_p: 1.81</title></circle><circle cx="604.0" cy="38.5" r="3.6" style="fill:#eb6834"><title>CSF_p: 2.13</title></circle></svg><p class="cap">On synthetic data built exactly from the model, so the only thing that can move a coefficient is the penalty. At the strength plan 07 chose (λ/n = 0.2) <code>ISF</code> and <code>CSF_c</code> are untouched and <code>CSF_p</code> inflates by <b>45%</b>. Protein's regressor is the slowest and broadest of the three, so it is the most hour-of-day-like — and when the penalty stops <code>BA(h)</code> carrying its own structure, <code>CSF_p</code> is what absorbs it. The penalty's original justification was thin per-hour data under the fasting filter; this model fits every row, so that argument was weakening as this one appeared.</p></figure>
+
+<h3>Decision 1: what should the search optimise?</h3>
+<p>Selection has to be on <b>held-out predictive error</b>, because that is the
+only objective the real record offers. Plan 07 found that objective diverging
+from parameter recovery, so the same search was run twice on every scenario —
+once on held-out error, once against declared truth — and both were compared to
+the <em>true value</em>.</p>
+<figure><figcaption><b>Figure 5.</b> Held-out prediction picks the true value at least as well as an objective that can see it</figcaption><svg viewBox="0 0 620 524" class="chart"><text x="140" y="32" class="tick end">carb_delay   n=3</text><rect x="150" y="18" width="62.4" height="18" fill="#d6a02a" rx="2"/><text x="219.4" y="32" class="tick start">0.087</text><text x="140" y="62" class="tick end">carb_delay — scored on truth</text><rect x="150" y="48" width="42.6" height="18" fill="#6b7280" rx="2"/><text x="199.6" y="62" class="tick start">0.060</text><text x="140" y="92" class="tick end">carb_duration   n=2</text><rect x="150" y="78" width="50.8" height="18" fill="#1baf7a" rx="2"/><text x="207.8" y="92" class="tick start">0.071</text><text x="140" y="122" class="tick end">carb_duration — scored on truth</text><rect x="150" y="108" width="164.6" height="18" fill="#6b7280" rx="2"/><text x="321.6" y="122" class="tick start">0.230</text><text x="140" y="152" class="tick end">protein_delay   n=4</text><rect x="150" y="138" width="13.0" height="18" fill="#1baf7a" rx="2"/><text x="170.0" y="152" class="tick start">0.018</text><text x="140" y="182" class="tick end">protein_delay — scored on truth</text><rect x="150" y="168" width="313.6" height="18" fill="#6b7280" rx="2"/><text x="470.6" y="182" class="tick start">0.439</text><text x="140" y="212" class="tick end">protein_duration   n=5</text><rect x="150" y="198" width="55.3" height="18" fill="#d6a02a" rx="2"/><text x="212.3" y="212" class="tick start">0.077</text><text x="140" y="242" class="tick end">protein_duration — scored on truth</text><rect x="150" y="228" width="25.9" height="18" fill="#6b7280" rx="2"/><text x="182.9" y="242" class="tick start">0.036</text><text x="140" y="272" class="tick end">kappa   n=4</text><rect x="150" y="258" width="71.5" height="18" fill="#1baf7a" rx="2"/><text x="228.5" y="272" class="tick start">0.100</text><text x="140" y="302" class="tick end">kappa — scored on truth</text><rect x="150" y="288" width="190.9" height="18" fill="#6b7280" rx="2"/><text x="347.9" y="302" class="tick start">0.267</text><text x="140" y="332" class="tick end">delta   n=3</text><rect x="150" y="318" width="353.1" height="18" fill="#d6a02a" rx="2"/><text x="510.1" y="332" class="tick start">0.494</text><text x="140" y="362" class="tick end">delta — scored on truth</text><rect x="150" y="348" width="343.2" height="18" fill="#6b7280" rx="2"/><text x="500.2" y="362" class="tick start">0.480</text><text x="140" y="392" class="tick end">tau   n=3</text><rect x="150" y="378" width="356.9" height="18" fill="#1baf7a" rx="2"/><text x="513.9" y="392" class="tick start">0.500</text><text x="140" y="422" class="tick end">tau — scored on truth</text><rect x="150" y="408" width="357.1" height="18" fill="#6b7280" rx="2"/><text x="514.1" y="422" class="tick start">0.500</text><text x="140" y="452" class="tick end">rho   n=3</text><rect x="150" y="438" width="296.7" height="18" fill="#1baf7a" rx="2"/><text x="453.7" y="452" class="tick start">0.415</text><text x="140" y="482" class="tick end">rho — scored on truth</text><rect x="150" y="468" width="357.1" height="18" fill="#6b7280" rx="2"/><text x="514.1" y="482" class="tick start">0.500</text><text x="350" y="520" class="axis mid">median |chosen − true|, as a share of the swept range</text></svg><p class="cap">Median distance from the chosen value to the truth, as a share of each swept range; 0.5 is what guessing produces. Green is the held-out choice where it wins or ties, amber where it loses. It wins decisively on <code>protein_delay</code> (0.018 against 0.439), <code>carb_duration</code> (0.071 against 0.230) and <code>kappa</code> (0.100 against 0.267); loses modestly on <code>carb_delay</code> (0.087 against 0.060) and <code>protein_duration</code> (0.077 against 0.036), both still inside a tenth of their range; and ties on <code>delta</code> and <code>tau</code>, where neither works. <b>So the constants are fitted on the record rather than fixed from measurement</b> — but the two losses are real and worth remembering when a duration comes back from the record looking precise. The reason prediction wins where it does is that the truth objective is mean relative error in the three sensitivities, and a <em>delay</em> barely moves those, so it has almost nothing to steer by.</p></figure>
+
+<h3>What is actually identifiable</h3>
+<p>The core result of these two phases, and the one that constrains B5.</p>
+<div class="tw"><table style="min-width:620px"><thead><tr><th>axis</th><th>family that varies it</th><th>scenarios</th><th>median error</th><th>flatness</th><th>verdict</th></tr></thead><tbody><tr><td><code>carb_delay</code></td><td>carb_timing</td><td>3</td><td>0.087</td><td>0.25</td><td>recovered</td></tr><tr><td><code>carb_duration</code></td><td>absorption_time</td><td>2</td><td>0.071</td><td>0.30</td><td>recovered</td></tr><tr><td><code>protein_delay</code></td><td>protein_timing</td><td>4</td><td>0.018</td><td>0.60</td><td>recovered</td></tr><tr><td><code>protein_duration</code></td><td>absorption_time</td><td>5</td><td>0.077</td><td>0.20</td><td>recovered</td></tr><tr><td><code>kappa</code></td><td>interaction_amount</td><td>4</td><td>0.100</td><td>1.00</td><td>weak</td></tr><tr><td><code>delta</code></td><td>interaction_delay</td><td>3</td><td>0.494</td><td>0.75</td><td><b>not identifiable</b></td></tr><tr><td><code>tau</code></td><td>interaction_rate</td><td>3</td><td>0.500</td><td>0.50</td><td><b>not identifiable</b></td></tr><tr><td><code>rho</code></td><td>interaction_carb</td><td>3</td><td>0.415</td><td>0.50</td><td><b>not identifiable</b></td></tr></tbody></table></div>
+<p>Error is the distance from the held-out choice to the truth, as a share of the
+swept range; 0.5 is what guessing produces. Flatness is the share of the swept
+range scoring within 1% of the minimum — near 1 means the data did not choose.</p>
+<figure><figcaption><b>Figure 6.</b> A fitted value means nothing without the surface under it</figcaption><div class="legend"><span class="sw"><i style="background:#2a78d6"></i>protein_delay (in protein_timing)</span><span class="sw"><i style="background:#eb6834"></i>kappa (in interaction_amount)</span></div><svg viewBox="0 0 620 300" class="chart"><rect x="64" y="16" width="540" height="232" class="plot"/><line x1="64" y1="225.5" x2="604" y2="225.5" class="grid"/><text x="56" y="229.5" class="tick end">0</text><line x1="64" y1="178.8" x2="604" y2="178.8" class="grid"/><text x="56" y="182.8" class="tick end">0.25</text><line x1="64" y1="132.0" x2="604" y2="132.0" class="grid"/><text x="56" y="136.0" class="tick end">0.5</text><line x1="64" y1="85.2" x2="604" y2="85.2" class="grid"/><text x="56" y="89.2" class="tick end">0.75</text><line x1="64" y1="38.5" x2="604" y2="38.5" class="grid"/><text x="56" y="42.5" class="tick end">1</text><text x="64.0" y="266" class="tick mid">0%</text><text x="199.0" y="266" class="tick mid">25%</text><text x="334.0" y="266" class="tick mid">50%</text><text x="469.0" y="266" class="tick mid">75%</text><text x="604.0" y="266" class="tick mid">100%</text><text x="334" y="292" class="axis mid">position along the swept range</text><text transform="translate(14,132) rotate(-90)" class="axis mid">held-out error, normalised per axis</text><polyline points="64.0,52.6 199.0,195.7 300.2,225.5 401.5,201.8 604.0,38.5" class="ln" style="stroke:#2a78d6;"/><circle cx="64.0" cy="52.6" r="3.6" style="fill:#2a78d6"><title>protein_delay (in protein_timing): 0.924</title></circle><circle cx="199.0" cy="195.7" r="3.6" style="fill:#2a78d6"><title>protein_delay (in protein_timing): 0.159</title></circle><circle cx="300.2" cy="225.5" r="3.6" style="fill:#2a78d6"><title>protein_delay (in protein_timing): 0</title></circle><circle cx="401.5" cy="201.8" r="3.6" style="fill:#2a78d6"><title>protein_delay (in protein_timing): 0.127</title></circle><circle cx="604.0" cy="38.5" r="3.6" style="fill:#2a78d6"><title>protein_delay (in protein_timing): 1</title></circle><polyline points="64.0,177.5 131.5,221.1 199.0,225.5 334.0,183.1 604.0,38.5" class="ln" style="stroke:#eb6834;"/><circle cx="64.0" cy="177.5" r="3.6" style="fill:#eb6834"><title>kappa (in interaction_amount): 0.257</title></circle><circle cx="131.5" cy="221.1" r="3.6" style="fill:#eb6834"><title>kappa (in interaction_amount): 0.024</title></circle><circle cx="199.0" cy="225.5" r="3.6" style="fill:#eb6834"><title>kappa (in interaction_amount): 0</title></circle><circle cx="334.0" cy="183.1" r="3.6" style="fill:#eb6834"><title>kappa (in interaction_amount): 0.227</title></circle><circle cx="604.0" cy="38.5" r="3.6" style="fill:#eb6834"><title>kappa (in interaction_amount): 1</title></circle></svg><p class="cap">Held-out error along each axis, normalised so the two are comparable. <code>protein_delay</code> sits in a valley — the data chose it. <code>kappa</code> is nearly flat, so its minimum is wherever noise put it, and reporting the number alone would hide that. This is why the phase reports whole surfaces rather than minima.</p></figure>
+
+<h2>Defects found, and what they say about the instrument</h2>
+<div class="tw"><table style="min-width:620px"><thead><tr><th>what was wrong</th><th>how it showed</th><th>consequence had it stood</th></tr></thead><tbody><tr><td><code>add_carbs</code> inferred macro from the duration it was handed</td><td>the duration is the <em>true</em> one, and a scenario halving protein's absorption passes 240 min, which does not look like protein</td><td>protein moved silently onto the carbohydrate path in exactly the families built to vary duration</td></tr><tr><td><code>_continuous_rate</code> omitted the protein term</td><td>the integrator was short by exactly the protein contribution while the closed form was right</td><td>every simulated glucose series wrong, caught only because a closed-form test existed</td></tr><tr><td>protein truth was never written to <code>simulation_run</code></td><td>the audit had nothing to score against</td><td>B3 would have scored against defaults and reported them as recoveries</td></tr><tr><td><code>kind_weights</code> popped after the unknown-key check</td><td>three <code>meal_composition</code> levels failed outright</td><td>caught immediately; the unit test passed because it bypassed <code>generate()</code></td></tr><tr><td><code>delta</code>, <code>tau</code> and <code>rho</code> were never swept</td><td>the stop-at-first-failure rule is right for the record and wrong for an identifiability study</td><td>the three families built to validate them validated nothing, and said &ldquo;not reached&rdquo;, which reads like a considered result</td></tr><tr><td>the audit's verdict was arithmetic on zeros</td><td>most scenarios have every interaction at zero, so both objectives &ldquo;agreed&rdquo; by picking zero</td><td>a library-wide &ldquo;fit everything on the record&rdquo; that meant nothing</td></tr><tr><td>duration truth read from the wrong field</td><td><code>absorption_time</code> sets it in <code>meals</code>, not in <code>truth.protein</code></td><td>three axes reported as having no informative scenario when seven sat in <code>absorption_time</code></td></tr><tr><td><code>carb_delay</code> had no truth knob at all</td><td>the search grid included it and nothing in the library could move it</td><td>a parameter fitted on the record with no way to check it</td></tr></tbody></table></div>
+
+<h2>What is established, and what is not</h2>
+<p><b>Established.</b> The estimator recovers <code>ISF</code>,
+<code>CSF_c</code> and <code>CSF_p</code> across the library; it reduces exactly
+to the Phase 5 fit when the meal terms are absent, so the comparison B5 rests on
+is like-for-like; held-out prediction is a sound objective for choosing the
+shape; and the <code>BA(h)</code> penalty must be off when the meal terms are
+present.</p>
+<p><b>Not established.</b> <code>delta</code> and <code>tau</code> are not
+identifiable by any objective tried, even in the families built to isolate them —
+both sit where guessing sits. <code>rho</code> is marginal and <code>kappa</code>
+weak with a flat surface, which means plan 08's prediction 4 is heading for a
+qualified answer rather than a clean one. Nothing here has touched the real
+record: every number on this page is simulated, and B5 is where that changes.</p>
+<p><b>Deferred.</b> Fat is not recorded and its attenuating effect on protein
+cannot be fitted; the <code>protein_6h</code> versus <code>protein_8h</code>
+contrast that was the only read on it has been dropped by the decision to fit one
+pooled protein class. Prediction 6 is untestable until a four-class A/B runs.</p>
+
+</body></html>

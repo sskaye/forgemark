@@ -2,16 +2,55 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWorkspace } from "../state/DocumentProvider";
 import type { DocId } from "../state/workspace";
 import { useAuthorName } from "../state/preferences";
-import { RenderedView, type RenderedSearchMatch, type RenderedViewHandle } from "./RenderedView";
+import {
+  RenderedView,
+  type CapturedSelection,
+  type RenderedSearchMatch,
+  type RenderedViewHandle,
+} from "./RenderedView";
+import { HtmlView, type HtmlCapturedSelection, type HtmlViewHandle } from "./HtmlView";
 import { SourceView, type SourceViewHandle } from "./SourceView";
 import { NewCommentComposer } from "./NewCommentComposer";
+import { SelectionToolbar } from "./SelectionToolbar";
 import { OverlapPrompt } from "./OverlapPrompt";
 import { FindReplaceBar } from "./FindReplaceBar";
 import { LostAnchorBanner } from "./LostAnchorBanner";
 import { ContextMenu } from "./ContextMenu";
-import { classifyAnchors, nextCommentId, serializeForgemarkFile } from "../format";
+import {
+  classifyAnchors,
+  contextSnippet,
+  insertMarkersIntoBody,
+  nextCommentId,
+  serializeForgemarkFile,
+} from "../format";
 import type { ViewSyncAnchor } from "../services/viewSync";
 import "./EditorPane.css";
+
+// A candidate at or above this score is an exact match — the anchor text
+// found verbatim, or an element resolved by the id the comment recorded.
+// Below it, the ranking is guessing and a human should look.
+const CONFIDENT_SCORE = 0.95;
+
+// Normalise a Markdown capture into the shape the composer path takes.
+// The only real difference is a whole code block, which is still a *text*
+// anchor in Markdown — the markers wrap the fence and no `anchor_kind` is
+// written — so it maps to "inline" rather than "element".
+function fromMarkdownCapture(c: CapturedSelection): HtmlCapturedSelection {
+  return {
+    from: c.from,
+    to: c.to,
+    text: c.text,
+    contextBefore: c.contextBefore,
+    contextAfter: c.contextAfter,
+    kind: "inline",
+    rejectReason:
+      c.selectionKind === "reject"
+        ? (c.rejectReason ?? "This selection can't be commented on.")
+        : undefined,
+    overlappingAnchorId: c.overlappingAnchorId,
+    rect: c.rect,
+  };
+}
 
 type Props = {
   // Which open document this pane shows. Omitted means the active one,
@@ -50,11 +89,20 @@ export function EditorPane({ docId }: Props) {
   // document only, and classifyAnchors is a pure pass over data already
   // in memory. Hoist into the workspace if it ever shows up in a profile.
   const anchorStatuses = useMemo(
-    () => classifyAnchors(state.body, state.comments),
-    [state.body, state.comments],
+    () => classifyAnchors(state.body, state.comments, state.format),
+    [state.body, state.comments, state.format],
   );
+  // HTML documents are review-only: the prose can't be edited, because
+  // editing means modelling the document and any editor model destroys
+  // the CSS, inline SVG, and unknown attributes a generated report is
+  // made of. Commenting, replying, suggesting and accepting a suggestion
+  // all still work — they are splices on the source, not edits through a
+  // model. Find/replace is off for the same reason replace is: there is
+  // nothing to type into.
+  const isHtml = state.format === "html";
   const [author] = useAuthorName();
   const handleRef = useRef<RenderedViewHandle | null>(null);
+  const htmlRef = useRef<HtmlViewHandle | null>(null);
   const sourceRef = useRef<SourceViewHandle | null>(null);
   const paneRef = useRef<HTMLElement | null>(null);
   const pendingViewSyncRef = useRef<ViewSyncAnchor | null>(null);
@@ -77,31 +125,33 @@ export function EditorPane({ docId }: Props) {
     x: number;
     y: number;
   } | null>(null);
+  // The live selection in an HTML report, as the toolbar's anchor. Held
+  // here rather than in document state because it is a transient view
+  // concern that must not survive a tab switch or a reload.
+  const [selectionAffordance, setSelectionAffordance] = useState<HtmlCapturedSelection | null>(
+    null,
+  );
+  const showAffordance = useCallback((capture: HtmlCapturedSelection | null) => {
+    // A selection that can't be anchored gets no toolbar. The reason is
+    // worth saying when someone acts on it, not as a button that refuses.
+    setSelectionAffordance(capture?.rejectReason ? null : capture);
+  }, []);
 
   // Composer trigger: ⌘⌥M (or the right-click menu) opens the
   // composer at the current selection. Selections inside fenced code
   // blocks or inline code spans are refused, mirroring the
   // parser-level rule from Phase 3. In Source view the trigger is a
   // no-op — Source is read-only review.
-  const openComposer = useCallback(
-    (initialMode: "comment" | "suggest" = "comment") => {
-      if (state.viewMode !== "rendered") return;
-      const handle = handleRef.current;
-      if (!handle) return;
-      const captured = handle.captureSelection();
-      if (!captured) return; // empty / collapsed selection
-      if (captured.selectionKind === "reject") {
-        // Inline-code-only or a selection straddling a code-block boundary.
-        // Tell the user why instead of silently doing nothing.
-        dispatch({
-          type: "error",
-          message: captured.rejectReason ?? "This selection can't be commented on.",
-        });
+  // Open the composer for whatever the reader has selected. Both views
+  // capture the same shape — a source range, the selected text, and the
+  // surrounding context — so everything downstream of this point is
+  // shared: the composer, the reducer action, and the YAML record.
+  const openComposerFor = useCallback(
+    (captured: HtmlCapturedSelection, initialMode: "comment" | "suggest" = "comment") => {
+      if (captured.rejectReason) {
+        dispatch({ type: "error", message: captured.rejectReason });
         return;
       }
-      // The format can't represent overlapping anchors. If the selection
-      // intersects an existing comment, offer a reply instead of writing
-      // a second (corrupting) marker pair over the same text.
       if (captured.overlappingAnchorId != null) {
         dispatch({
           type: "openComposer",
@@ -123,17 +173,39 @@ export function EditorPane({ docId }: Props) {
           selectionText: captured.text,
           contextBefore: captured.contextBefore,
           contextAfter: captured.contextAfter,
+          ...(captured.kind === "element" ? { anchorKind: "element" as const } : {}),
+          ...(captured.anchorSelector ? { anchorSelector: captured.anchorSelector } : {}),
           x: captured.rect.left,
           y: captured.rect.bottom + 6,
           initialMode,
         },
       });
     },
-    [dispatch, state.viewMode],
+    [dispatch],
+  );
+
+  const openComposer = useCallback(
+    (initialMode: "comment" | "suggest" = "comment") => {
+      if (state.viewMode !== "rendered") return;
+      if (isHtml) {
+        const captured = htmlRef.current?.captureSelection();
+        if (!captured) return;
+        openComposerFor(captured, initialMode);
+        return;
+      }
+      const captured = handleRef.current?.captureSelection();
+      if (!captured) return; // empty / collapsed selection
+      openComposerFor(fromMarkdownCapture(captured), initialMode);
+    },
+    [isHtml, openComposerFor, state.viewMode],
   );
 
   const openFindReplace = useCallback(
     (replaceVisible: boolean) => {
+      // Find is implemented over the editor's document model, which an
+      // HTML report doesn't have. Rather than half-wire it, it stays off
+      // here; Source view is searchable and is one keystroke away.
+      if (isHtml) return;
       if (state.viewMode !== "rendered") {
         setViewMode("rendered");
       }
@@ -146,7 +218,7 @@ export function EditorPane({ docId }: Props) {
         activeIndex: selected && selected.length > 0 ? 0 : prev.activeIndex,
       }));
     },
-    [setViewMode, state.viewMode],
+    [isHtml, setViewMode, state.viewMode],
   );
 
   const closeFindReplace = useCallback(() => {
@@ -222,7 +294,7 @@ export function EditorPane({ docId }: Props) {
 
   useEffect(() => {
     if (!findState.open) return;
-    if (state.viewMode !== "rendered") return;
+    if (state.viewMode !== "rendered" || isHtml) return;
     const handle = handleRef.current;
     if (!handle) return;
     if (findState.query.length === 0) {
@@ -252,6 +324,7 @@ export function EditorPane({ docId }: Props) {
     findState.matches,
     findState.open,
     findState.query,
+    isHtml,
     state.body,
     state.viewMode,
   ]);
@@ -290,22 +363,49 @@ export function EditorPane({ docId }: Props) {
     return () => window.removeEventListener("contextmenu", onCtx);
   }, [state.viewMode]);
 
+  // Both views expose `applyAnchor(from, to, id) -> new body`. For
+  // Markdown that runs through the editor's mark system; for HTML it is
+  // a byte splice into the source, which is the only way to add an
+  // anchor without re-serializing (and so rewriting) the file.
+  const applyAnchor = useCallback(
+    (from: number, to: number, id: number): string | null => {
+      if (isHtml) return htmlRef.current?.applyAnchor(from, to, id) ?? null;
+      return handleRef.current?.applyAnchor(from, to, id) ?? null;
+    },
+    [isHtml],
+  );
+
+  // Anchor metadata common to a new comment and a new suggestion.
+  const anchorFields = useCallback(
+    (c: {
+      selectionText: string;
+      contextBefore: string;
+      contextAfter: string;
+      anchorKind?: "element";
+      anchorSelector?: string;
+    }) => ({
+      anchor_text: c.selectionText,
+      ...(c.anchorKind ? { anchor_kind: c.anchorKind } : {}),
+      ...(c.anchorSelector ? { anchor_selector: c.anchorSelector } : {}),
+      context_before: c.contextBefore,
+      context_after: c.contextAfter,
+    }),
+    [],
+  );
+
   const submitComment = useCallback(
     (commentBody: string) => {
       const c = state.composer;
       if (!c || c.mode !== "new") return;
-      const handle = handleRef.current;
-      if (!handle) return;
       const id = nextCommentId(state.comments);
-      const newBody = handle.applyAnchor(c.from, c.to, id);
+      const newBody = applyAnchor(c.from, c.to, id);
+      if (newBody == null) return;
       dispatch({
         type: "addComment",
         body: newBody,
         comment: {
           id,
-          anchor_text: c.selectionText,
-          context_before: c.contextBefore,
-          context_after: c.contextAfter,
+          ...anchorFields(c),
           author,
           timestamp: new Date().toISOString(),
           resolved: false,
@@ -313,7 +413,7 @@ export function EditorPane({ docId }: Props) {
         },
       });
     },
-    [state.composer, state.comments, author, dispatch],
+    [state.composer, state.comments, author, dispatch, applyAnchor, anchorFields],
   );
 
   // Phase 7: suggested-edit submission. The composer captures both the
@@ -324,18 +424,15 @@ export function EditorPane({ docId }: Props) {
     (replacement: string, optionalBody: string) => {
       const c = state.composer;
       if (!c || c.mode !== "new") return;
-      const handle = handleRef.current;
-      if (!handle) return;
       const id = nextCommentId(state.comments);
-      const newBody = handle.applyAnchor(c.from, c.to, id);
+      const newBody = applyAnchor(c.from, c.to, id);
+      if (newBody == null) return;
       dispatch({
         type: "addComment",
         body: newBody,
         comment: {
           id,
-          anchor_text: c.selectionText,
-          context_before: c.contextBefore,
-          context_after: c.contextAfter,
+          ...anchorFields(c),
           author,
           timestamp: new Date().toISOString(),
           resolved: false,
@@ -346,7 +443,7 @@ export function EditorPane({ docId }: Props) {
         },
       });
     },
-    [state.composer, state.comments, author, dispatch],
+    [state.composer, state.comments, author, dispatch, applyAnchor, anchorFields],
   );
 
   const cancelComposer = useCallback(() => dispatch({ type: "closeComposer" }), [dispatch]);
@@ -453,12 +550,18 @@ export function EditorPane({ docId }: Props) {
   useEffect(() => {
     if (state.viewMode !== "rendered") return;
     if (state.focusedCommentId == null) return;
+    // The anchor lives inside the report's iframe, which the pane can't
+    // reach with a querySelector and which can't scroll its own host.
+    if (isHtml) {
+      htmlRef.current?.scrollToComment(state.focusedCommentId);
+      return;
+    }
     const pane = paneRef.current;
     if (!pane) return;
     const span = pane.querySelector<HTMLElement>(`[data-anchor-id="${state.focusedCommentId}"]`);
     if (!span || typeof span.scrollIntoView !== "function") return;
     span.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [state.focusedCommentId, state.viewMode]);
+  }, [state.focusedCommentId, state.viewMode, isHtml]);
 
   // Source mode has its own scrollToMarker handle.
   useEffect(() => {
@@ -466,6 +569,39 @@ export function EditorPane({ docId }: Props) {
     if (state.focusedCommentId == null) return;
     sourceRef.current?.scrollToMarker(state.focusedCommentId);
   }, [state.viewMode, state.focusedCommentId]);
+
+  // Whether the pending anchor can carry a suggestion.
+  //
+  // Accepting a suggestion replaces everything between the markers with
+  // the proposed text. In Markdown that region is prose. In an HTML
+  // report it may be markup — a whole figure, or a sentence whose source
+  // runs through `<code>` and `<b>` tags — and replacing markup with a
+  // sentence would mangle the document. Wording changes, which is what
+  // suggestions actually are, pass this test; anything else is offered
+  // as a plain comment instead.
+  const canSuggest = useCallback(
+    (anchorKind: "element" | undefined, from: number, to: number) => {
+      // Markdown anchors are always plain text. In a report the markers
+      // may enclose markup, and accepting a suggestion replaces
+      // everything between them — see `suggestion` below.
+      if (!isHtml) return true;
+      if (anchorKind === "element") return false;
+      return !state.body.slice(from, to).includes("<");
+    },
+    [isHtml, state.body],
+  );
+
+  const suggestion = useMemo((): { allowed: boolean; reason?: string } => {
+    const c = state.composer;
+    if (!c || c.mode !== "new" || !isHtml) return { allowed: true };
+    if (c.anchorKind === "element") {
+      return { allowed: false, reason: "Comment only — this is a figure" };
+    }
+    if (state.body.slice(c.from, c.to).includes("<")) {
+      return { allowed: false, reason: "Comment only — this passage spans markup" };
+    }
+    return { allowed: true };
+  }, [state.composer, state.body, isHtml]);
 
   // Phase 9: count lost anchors. The banner picks the *first* lost
   // anchor (by id) when the user clicks Recover, then the modal
@@ -475,6 +611,56 @@ export function EditorPane({ docId }: Props) {
     const st = anchorStatuses.get(c.id);
     if (st && st.kind === "orphaned") lostAnchorIds.push(c.id);
   }
+
+  // Orphans whose top candidate is unambiguous. An exact text match, or
+  // an element found by the id the comment recorded, needs no decision
+  // from the reviewer — and after a report is regenerated there may be a
+  // dozen of them at once.
+  const confidentReattachments = useMemo(() => {
+    const out: { commentId: number; from: number; to: number; text: string }[] = [];
+    for (const c of state.comments) {
+      const st = anchorStatuses.get(c.id);
+      if (st?.kind !== "orphaned") continue;
+      const [best, runnerUp] = st.candidates;
+      if (!best || best.score < CONFIDENT_SCORE) continue;
+      // Two equally good matches is exactly the case a human should look
+      // at: the passage appears twice and only they know which one.
+      if (runnerUp && runnerUp.score >= CONFIDENT_SCORE) continue;
+      out.push({ commentId: c.id, from: best.from, to: best.to, text: best.text });
+    }
+    return out;
+  }, [state.comments, anchorStatuses]);
+
+  const reattachConfident = useCallback(() => {
+    if (confidentReattachments.length === 0) return;
+    // Splice from the end backwards so each insertion leaves the offsets
+    // of the ones still to come untouched.
+    const ordered = [...confidentReattachments].sort((a, b) => b.from - a.from);
+    let body = state.body;
+    let lastStart = Infinity;
+    const entries: {
+      commentId: number;
+      anchor_text: string;
+      context_before: string;
+      context_after: string;
+    }[] = [];
+    for (const item of ordered) {
+      // Candidates for different comments can overlap; the format can't
+      // represent that, so the later one is left for the modal.
+      if (item.to > lastStart) continue;
+      lastStart = item.from;
+      const before = body.slice(Math.max(0, item.from - 200), item.from);
+      const after = body.slice(item.to, item.to + 200);
+      body = insertMarkersIntoBody(body, item.from, item.to, item.commentId);
+      entries.push({
+        commentId: item.commentId,
+        anchor_text: item.text,
+        context_before: contextSnippet(before, "before"),
+        context_after: contextSnippet(after, "after"),
+      });
+    }
+    dispatch({ type: "reattachComments", body, entries });
+  }, [confidentReattachments, state.body, dispatch]);
 
   return (
     <main
@@ -526,6 +712,21 @@ export function EditorPane({ docId }: Props) {
           <span>Source view · read-only review</span>
         </aside>
       )}
+      {/* An HTML report can be commented on but not rewritten. Saying so
+          up front is better than letting someone discover it by trying
+          to type — the editing they can't do is the only thing that
+          differs from a Markdown document. */}
+      {state.viewMode === "rendered" && isHtml && (
+        <aside
+          className="fm-source-chip"
+          data-testid="fm-html-chip"
+          title="Select any passage to comment, or hover a figure or table. The report's own text isn't editable here."
+          aria-label="HTML report, review only"
+        >
+          <span className="fm-source-chip-dot" aria-hidden="true" />
+          <span>HTML report · review only</span>
+        </aside>
+      )}
       <div className="fm-document">
         <LostAnchorBanner
           count={lostAnchorIds.length}
@@ -533,8 +734,34 @@ export function EditorPane({ docId }: Props) {
             if (lostAnchorIds.length === 0) return;
             dispatch({ type: "openReattach", commentId: lostAnchorIds[0] });
           }}
+          confidentCount={confidentReattachments.length}
+          onReattachConfident={reattachConfident}
         />
-        {state.viewMode === "rendered" ? (
+        {state.viewMode === "source" ? (
+          <SourceView ref={sourceRef} text={sourceText} format={state.format} />
+        ) : isHtml ? (
+          <HtmlView
+            key={state.loadGeneration}
+            body={state.body}
+            comments={state.comments}
+            focusedCommentId={state.focusedCommentId}
+            hoveredCommentId={state.hoveredCommentId}
+            onAnchorClick={(id) => {
+              // A click inside the frame never reaches the host window,
+              // so the menu's own click-away listener can't see it.
+              setContextMenu(null);
+              dispatch({ type: "setFocusedComment", id });
+            }}
+            onAnchorHover={(id) => dispatch({ type: "setHoveredComment", id })}
+            onRequestElementComment={(capture) => openComposerFor(capture)}
+            onContextMenu={(at) => setContextMenu({ x: at.x, y: at.y })}
+            // Background documents stay mounted, and the toolbar is
+            // position:fixed — an inactive pane must neither poll nor
+            // paint one over the document in front.
+            onSelectionChange={isActive ? showAffordance : undefined}
+            handleRef={htmlRef}
+          />
+        ) : (
           <RenderedView
             // Remount on every content-replacing load so the Tiptap undo
             // stack can't outlive the document it belongs to.
@@ -548,11 +775,31 @@ export function EditorPane({ docId }: Props) {
             onAnchorHover={(id) => dispatch({ type: "setHoveredComment", id })}
             onExternalLinkError={(message) => dispatch({ type: "error", message })}
             handleRef={handleRef}
+            onSelectionChange={
+              isActive
+                ? (captured) => showAffordance(captured && fromMarkdownCapture(captured))
+                : undefined
+            }
           />
-        ) : (
-          <SourceView ref={sourceRef} text={sourceText} />
         )}
       </div>
+      {isActive &&
+        state.viewMode === "rendered" &&
+        selectionAffordance != null &&
+        state.composer == null &&
+        contextMenu == null && (
+          <SelectionToolbar
+            x={selectionAffordance.rect.left}
+            y={selectionAffordance.rect.top}
+            allowSuggest={canSuggest(
+              selectionAffordance.kind === "element" ? "element" : undefined,
+              selectionAffordance.from,
+              selectionAffordance.to,
+            )}
+            onComment={() => openComposerFor(selectionAffordance, "comment")}
+            onSuggest={() => openComposerFor(selectionAffordance, "suggest")}
+          />
+        )}
       {state.composer?.mode === "new" && state.viewMode === "rendered" && (
         <NewCommentComposer
           x={state.composer.x}
@@ -562,6 +809,8 @@ export function EditorPane({ docId }: Props) {
           onSubmitSuggestion={submitSuggestion}
           onCancel={cancelComposer}
           initialMode={state.composer.initialMode}
+          allowSuggest={suggestion.allowed}
+          suggestUnavailableReason={suggestion.reason}
         />
       )}
       {state.composer?.mode === "overlapPrompt" && state.viewMode === "rendered" && (

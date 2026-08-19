@@ -14,6 +14,7 @@ import { Markdown } from "tiptap-markdown";
 import { useEffect, useMemo, useRef } from "react";
 import { Extension } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import type { EditorView } from "@tiptap/pm/view";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration as PMDecoration, DecorationSet } from "@tiptap/pm/view";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -81,9 +82,10 @@ export type CapturedSelection = {
   // overlapping marker pair. Ties broken toward the anchor that starts
   // earliest in the document.
   overlappingAnchorId: number | null;
-  // Editor-local viewport coordinates of the selection's *end* — handy
-  // for positioning the composer just below the highlighted text.
-  rect: { left: number; bottom: number };
+  // Editor-local viewport coordinates. `left`/`bottom` describe the
+  // selection's *end*, for floating the composer just below it; `top` is
+  // the top of its *first* line, for floating the toolbar just above.
+  rect: { left: number; top: number; bottom: number };
 };
 
 export type RenderedViewHandle = {
@@ -130,6 +132,12 @@ type Props = {
   // Phase 5 composer trigger handle. The parent attaches this and calls
   // `current.captureSelection()` from the ⌘⌥M shortcut handler.
   handleRef?: React.MutableRefObject<RenderedViewHandle | null>;
+  // Fires as the reader selects and deselects, so the host can float a
+  // Comment / Suggest edit affordance at the selection — the same
+  // affordance an HTML report gets, so the two document kinds behave
+  // alike. ProseMirror announces selection changes directly here, so
+  // unlike the report frame this needs no polling.
+  onSelectionChange?: (capture: CapturedSelection | null) => void;
 };
 
 // Phase 4 rendered view. Inline anchor spans are pre-rendered into the
@@ -152,6 +160,7 @@ export function RenderedView({
   onExternalLinkError,
   onOpenExternalLink = openUrl,
   handleRef,
+  onSelectionChange,
 }: Props) {
   const initialMarkdown = useMemo(() => bodyWithAnchorSpans(body), [body]);
   // Seeded with the same value handed to `content:` below, so the sync
@@ -169,6 +178,11 @@ export function RenderedView({
   // Untitled buffer — leaving the gate shut forever, swallowing every
   // keystroke, so the document never went dirty and never auto-saved.
   const editorReadyRef = useRef(false);
+
+  // useEditor captures its options once, so the live callback goes through
+  // a ref rather than being closed over.
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  onSelectionChangeRef.current = onSelectionChange;
 
   const editor = useEditor({
     extensions: [
@@ -212,6 +226,14 @@ export function RenderedView({
     // gate themselves in the sync effect below.
     onCreate: () => {
       editorReadyRef.current = true;
+    },
+    onSelectionUpdate: ({ editor }) => {
+      onSelectionChangeRef.current?.(captureFrom(editor));
+    },
+    onBlur: () => {
+      // Leaving the editor takes the affordance with it; the selection it
+      // pointed at is no longer what the reader is acting on.
+      onSelectionChangeRef.current?.(null);
     },
     editorProps: {
       attributes: {
@@ -342,49 +364,7 @@ export function RenderedView({
   useEffect(() => {
     if (!handleRef) return;
     handleRef.current = {
-      captureSelection: () => {
-        if (!editor) return null;
-        const { state, view } = editor;
-        const { from: selFrom, to: selTo, empty } = state.selection;
-        if (empty) return null;
-
-        const cls = classifyCodeSelection(state.doc, selFrom, selTo);
-        // For a whole-block anchor, expand the range and text to cover the
-        // entire code block (the comment is on the block, not a sub-span).
-        const from = cls.kind === "block" ? cls.from : selFrom;
-        const to = cls.kind === "block" ? cls.to : selTo;
-        const text = cls.kind === "block" ? cls.text : state.doc.textBetween(from, to, " ", " ");
-        if (cls.kind !== "reject" && text.trim().length === 0) return null;
-
-        // Overlap: inline anchors are detected via the anchor mark; a block
-        // that already carries an anchorId is itself the overlap target.
-        const overlappingAnchorId =
-          cls.kind === "block" && cls.existingAnchorId != null
-            ? cls.existingAnchorId
-            : bestOverlappingAnchorId(state.doc, from, to);
-
-        const beforeLen = Math.min(120, from);
-        const afterLen = Math.min(120, state.doc.content.size - to);
-        const contextBefore = state.doc.textBetween(Math.max(0, from - beforeLen), from, " ", " ");
-        const contextAfter = state.doc.textBetween(
-          to,
-          Math.min(state.doc.content.size, to + afterLen),
-          " ",
-          " ",
-        );
-        const coords = view.coordsAtPos(to);
-        return {
-          from,
-          to,
-          text,
-          contextBefore,
-          contextAfter,
-          selectionKind: cls.kind,
-          rejectReason: cls.kind === "reject" ? cls.reason : undefined,
-          overlappingAnchorId,
-          rect: { left: coords.left, bottom: coords.bottom },
-        };
-      },
+      captureSelection: () => captureFrom(editor),
       applyAnchor: (from: number, to: number, id: number) => {
         if (!editor) return body;
         // Whole code blocks carry the anchor as a node attribute (so it
@@ -500,6 +480,74 @@ export function RenderedView({
   return (
     <EditorContent editor={editor} className="fm-rendered-view" data-testid="fm-rendered-view" />
   );
+}
+
+// The current selection, as everything downstream needs it. Shared by the
+// imperative handle (⌘⌥M, the context menu) and the selection watcher that
+// floats the toolbar, so the two can never disagree about what is selected.
+export function captureFrom(editor: ReturnType<typeof useEditor> | null): CapturedSelection | null {
+  if (!editor) return null;
+  const { state, view } = editor;
+  const { from: selFrom, to: selTo, empty } = state.selection;
+  if (empty) return null;
+
+  const cls = classifyCodeSelection(state.doc, selFrom, selTo);
+  // For a whole-block anchor, expand the range and text to cover the
+  // entire code block (the comment is on the block, not a sub-span).
+  const from = cls.kind === "block" ? cls.from : selFrom;
+  const to = cls.kind === "block" ? cls.to : selTo;
+  const text = cls.kind === "block" ? cls.text : state.doc.textBetween(from, to, " ", " ");
+  if (cls.kind !== "reject" && text.trim().length === 0) return null;
+
+  // Overlap: inline anchors are detected via the anchor mark; a block
+  // that already carries an anchorId is itself the overlap target.
+  const overlappingAnchorId =
+    cls.kind === "block" && cls.existingAnchorId != null
+      ? cls.existingAnchorId
+      : bestOverlappingAnchorId(state.doc, from, to);
+
+  const beforeLen = Math.min(120, from);
+  const afterLen = Math.min(120, state.doc.content.size - to);
+  const contextBefore = state.doc.textBetween(Math.max(0, from - beforeLen), from, " ", " ");
+  const contextAfter = state.doc.textBetween(
+    to,
+    Math.min(state.doc.content.size, to + afterLen),
+    " ",
+    " ",
+  );
+  const rect = selectionRect(view, from, to);
+  return {
+    from,
+    to,
+    text,
+    contextBefore,
+    contextAfter,
+    selectionKind: cls.kind,
+    rejectReason: cls.kind === "reject" ? cls.reason : undefined,
+    overlappingAnchorId,
+    rect,
+  };
+}
+
+// Where the selection sits, for floating the composer and the toolbar.
+//
+// Purely cosmetic, and the only part of a capture that can fail: measuring
+// requires a layout, and the selection watcher now runs on *every*
+// selection change rather than only when someone asks to comment. A
+// position we cannot measure must cost the affordance its placement, never
+// the reader their comment.
+function selectionRect(
+  view: EditorView,
+  from: number,
+  to: number,
+): { left: number; top: number; bottom: number } {
+  try {
+    const end = view.coordsAtPos(to);
+    const start = view.coordsAtPos(from);
+    return { left: end.left, top: start.top, bottom: end.bottom };
+  } catch {
+    return { left: 0, top: 0, bottom: 0 };
+  }
 }
 
 function findExternalLink(target: EventTarget | null): HTMLElement | null {

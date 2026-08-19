@@ -10,7 +10,7 @@
 // and lazy continuation. None affects correctness of marker discovery for
 // the cases the proposal cares about.
 
-import { MARKER_OPEN_RE, MARKER_CLOSE_RE } from "./types";
+import { MARKER_OPEN_RE, MARKER_CLOSE_RE, DEFAULT_FORMAT, type DocFormat } from "./types";
 
 export type Marker = {
   type: "open" | "close";
@@ -20,7 +20,14 @@ export type Marker = {
   end: number;
 };
 
-export function findMarkers(body: string): Marker[] {
+// Entry point. Dispatches to the scanner for the body's language; the
+// Markdown one is the historical default so existing callers and tests
+// are unaffected.
+export function findMarkers(body: string, format: DocFormat = DEFAULT_FORMAT): Marker[] {
+  return format === "html" ? findMarkersHtml(body) : findMarkersMarkdown(body);
+}
+
+export function findMarkersMarkdown(body: string): Marker[] {
   const out: Marker[] = [];
   const lines = body.split("\n");
   let cursor = 0; // running byte offset to start of current line
@@ -124,6 +131,151 @@ export function findMarkers(body: string): Marker[] {
   }
 
   return out;
+}
+
+// HTML marker walker.
+//
+// A Forgemark marker *is* an HTML comment, so on the face of it a plain
+// regex sweep would do. It won't: two regions of an HTML file contain
+// text that looks like markup but isn't parsed as it. Both were measured
+// against a real generated report before this scanner was written.
+//
+//   1. Raw-text elements — `<script>`, `<style>`, `<textarea>`, `<title>`.
+//      Their content is CDATA-ish: `<!-- fmc:1 -->` inside a script is a
+//      string literal, not a comment. Treating it as an anchor invents a
+//      marker with no YAML record, which the parser reports as corruption
+//      and which blanks every comment in the file.
+//   2. Attribute values — `<p title="<!-- fmc:1 -->">`. Same failure.
+//
+// Conversely, none of the Markdown scanner's skip rules apply here, and
+// one of them is actively harmful: its indented-code rule (4+ leading
+// spaces after a blank line) makes markers invisible in HTML, which is
+// indented as a matter of course.
+//
+// This is a scanner, not a parser — it needs to know where a marker may
+// legally sit, not what the tree looks like. Element nesting, implied
+// tags, and foreign content are all irrelevant to that question.
+const RAW_TEXT_ELEMENTS = new Set(["script", "style", "textarea", "title"]);
+
+export function findMarkersHtml(body: string): Marker[] {
+  const out: Marker[] = [];
+  const len = body.length;
+  let i = 0;
+
+  while (i < len) {
+    if (body[i] !== "<") {
+      i++;
+      continue;
+    }
+
+    // Comment, declaration, or CDATA.
+    if (body.startsWith("<!", i)) {
+      if (body.startsWith("<!--", i)) {
+        const remainder = body.slice(i);
+        const openMatch = remainder.match(/^<!--\s*fmc:(\d+)\s*-->/);
+        if (openMatch) {
+          out.push({
+            type: "open",
+            id: Number(openMatch[1]),
+            start: i,
+            end: i + openMatch[0].length,
+          });
+          i += openMatch[0].length;
+          continue;
+        }
+        const closeMatch = remainder.match(/^<!--\s*\/fmc:(\d+)\s*-->/);
+        if (closeMatch) {
+          out.push({
+            type: "close",
+            id: Number(closeMatch[1]),
+            start: i,
+            end: i + closeMatch[0].length,
+          });
+          i += closeMatch[0].length;
+          continue;
+        }
+        // Some other comment — skip it whole. An unterminated comment
+        // runs to EOF, per the HTML spec's EOF-in-comment rule.
+        const end = body.indexOf("-->", i + 4);
+        i = end < 0 ? len : end + 3;
+        continue;
+      }
+      if (body.startsWith("<![CDATA[", i)) {
+        const end = body.indexOf("]]>", i + 9);
+        i = end < 0 ? len : end + 3;
+        continue;
+      }
+      // `<!DOCTYPE …>` and any other bogus declaration.
+      const end = body.indexOf(">", i + 2);
+      i = end < 0 ? len : end + 1;
+      continue;
+    }
+
+    // Start or end tag. Anything else after `<` is literal text.
+    const tag = readTag(body, i);
+    if (!tag) {
+      i++;
+      continue;
+    }
+    i = tag.end;
+
+    // A raw-text element's content is skipped wholesale, up to its own
+    // end tag (a `</script>` inside a JS string would end it in a real
+    // parser too, so matching the spec here costs nothing).
+    if (!tag.isEnd && !tag.selfClosing && RAW_TEXT_ELEMENTS.has(tag.name)) {
+      const closeIdx = indexOfEndTag(body, tag.name, i);
+      i = closeIdx < 0 ? len : closeIdx;
+    }
+  }
+
+  return out;
+}
+
+type TagRead = { name: string; end: number; isEnd: boolean; selfClosing: boolean };
+
+// Read a start/end tag beginning at `start` (which must point at `<`).
+// Returns null when this isn't a tag at all. Quoted attribute values are
+// tracked so a `>` inside one doesn't end the tag early.
+function readTag(s: string, start: number): TagRead | null {
+  let i = start + 1;
+  const isEnd = s[i] === "/";
+  if (isEnd) i++;
+  const nameStart = i;
+  while (i < s.length && /[A-Za-z0-9:_-]/.test(s[i])) i++;
+  if (i === nameStart) return null; // `<` followed by something else
+  const name = s.slice(nameStart, i).toLowerCase();
+
+  let quote: string | null = null;
+  let selfClosing = false;
+  while (i < s.length) {
+    const ch = s[i];
+    if (quote) {
+      if (ch === quote) quote = null;
+      i++;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      i++;
+      continue;
+    }
+    if (ch === ">") {
+      selfClosing = s[i - 1] === "/";
+      return { name, end: i + 1, isEnd, selfClosing };
+    }
+    i++;
+  }
+  // Unterminated tag — consume to EOF so the caller makes progress.
+  return { name, end: s.length, isEnd, selfClosing };
+}
+
+// Offset of `</name` at or after `from`, case-insensitively. Returns the
+// offset of the `<`, so the caller resumes scanning *at* the end tag and
+// reads it normally.
+function indexOfEndTag(s: string, name: string, from: number): number {
+  const needle = "</" + name;
+  const lower = s.toLowerCase();
+  return lower.indexOf(needle, from);
 }
 
 // Pair markers by id. Returns two outputs: matched pairs (open + close in

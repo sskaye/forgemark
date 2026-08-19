@@ -3,13 +3,13 @@ import { render, screen, waitFor, act, fireEvent } from "@testing-library/react"
 import { ThemeProvider } from "../../src/theme/ThemeProvider";
 import { DocumentProvider, useWorkspace } from "../../src/state/DocumentProvider";
 import { AppShell } from "../../src/components/AppShell";
-import { saveMarkdownFile, readMarkdownFile } from "../../src/services/fileIO";
+import { saveDocument, readDocument } from "../../src/services/fileIO";
 import { invoke } from "@tauri-apps/api/core";
 
 vi.mock("../../src/services/fileIO", () => ({
-  openMarkdownFile: vi.fn(),
-  readMarkdownFile: vi.fn(),
-  saveMarkdownFile: vi.fn(),
+  openDocument: vi.fn(),
+  readDocument: vi.fn(),
+  saveDocument: vi.fn(),
 }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn(), ask: vi.fn() }));
 vi.mock("@tauri-apps/plugin-fs", () => ({
@@ -53,7 +53,7 @@ const click = async (id: string) => {
 };
 
 const openFile = async (path: string, name: string, body: string) => {
-  vi.mocked(readMarkdownFile).mockResolvedValue({
+  vi.mocked(readDocument).mockResolvedValue({
     path,
     fileName: name,
     text: body,
@@ -66,7 +66,7 @@ const openFile = async (path: string, name: string, body: string) => {
 
 describe("tab bar", () => {
   beforeEach(() => {
-    vi.mocked(saveMarkdownFile).mockReset().mockResolvedValue("/tmp/x.md");
+    vi.mocked(saveDocument).mockReset().mockResolvedValue("/tmp/x.md");
     vi.mocked(invoke).mockClear();
   });
 
@@ -118,7 +118,7 @@ describe("tab bar", () => {
 
 describe("opening files into tabs", () => {
   beforeEach(() => {
-    vi.mocked(saveMarkdownFile).mockReset();
+    vi.mocked(saveDocument).mockReset();
     vi.mocked(invoke).mockClear();
   });
 
@@ -157,7 +157,7 @@ describe("opening files into tabs", () => {
 
 describe("quitting with several documents", () => {
   beforeEach(() => {
-    vi.mocked(saveMarkdownFile).mockReset().mockResolvedValue("/tmp/x.md");
+    vi.mocked(saveDocument).mockReset().mockResolvedValue("/tmp/x.md");
     vi.mocked(invoke).mockClear();
   });
 

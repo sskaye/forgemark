@@ -35,15 +35,30 @@ export function ContextMenu({ x, y, items, onDismiss }: Props) {
       onDismiss();
     };
     const onScroll = () => onDismiss();
+    // Blur means "the app was left" for a document rendered in this
+    // window — but an HTML report is rendered in an iframe, and focusing
+    // an iframe blurs the top-level window while the app is still very
+    // much in front. Right-clicking a report does exactly that, so
+    // without this the menu dismissed itself the instant it opened.
+    //
+    // `hasFocus()` counts descendant browsing contexts, so the pair
+    // distinguishes the two cases: focus inside our own frame keeps the
+    // menu, focus genuinely elsewhere still closes it.
+    const onBlur = () => {
+      const focusMovedIntoAFrame =
+        document.hasFocus() && document.activeElement instanceof HTMLIFrameElement;
+      if (focusMovedIntoAFrame) return;
+      onDismiss();
+    };
     window.addEventListener("keydown", onKey);
     window.addEventListener("mousedown", onClickAway, true);
     window.addEventListener("scroll", onScroll, true);
-    window.addEventListener("blur", onDismiss);
+    window.addEventListener("blur", onBlur);
     return () => {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("mousedown", onClickAway, true);
       window.removeEventListener("scroll", onScroll, true);
-      window.removeEventListener("blur", onDismiss);
+      window.removeEventListener("blur", onBlur);
     };
   }, [onDismiss]);
 

@@ -4,7 +4,9 @@ A small bundle that teaches an AI coding agent how to read and write Forgemark f
 
 ## What this is
 
-Forgemark is a desktop app for collaborative review of markdown documents by humans and AI agents working as peers. Comments live inside the `.md` file itself: paired `<!-- fmc:N -->...<!-- /fmc:N -->` markers wrap anchored passages, and a single trailing `<!-- forgemark-comments ... -->` HTML comment holds a YAML list of comment records (id, anchor_text, author, body, replies, suggested edits, floating notes).
+Forgemark is a desktop app for collaborative review of Markdown documents and generated HTML reports by humans and AI agents working as peers. Comments live inside the file itself: paired `<!-- fmc:N -->...<!-- /fmc:N -->` markers wrap anchored passages, and a single trailing `<!-- forgemark-comments ... -->` HTML comment holds a YAML list of comment records (id, anchor_text, author, body, replies, suggested edits, floating notes).
+
+Both additions are HTML comments, so the format is the same in a `.md` file and in an `.html` report. The spec covers what differs — where a marker may sit in HTML, how to anchor a figure, and how to rebuild a reviewed report without discarding the review.
 
 If you don't ship this skill to your AI tool, the agent has to re-derive the format from sample files — fine for reading, error-prone for writing.
 
@@ -13,6 +15,7 @@ If you don't ship this skill to your AI tool, the agent has to re-derive the for
 - `SKILL.md` — the canonical format spec. Single file, ~9 KB. Read this first.
 - `AGENTS.md` — a thin pointer for tools that read `AGENTS.md` but not `SKILL.md`.
 - `examples/` — three annotated `.md` files of varying complexity. They are all valid Forgemark documents that round-trip through the parser.
+- The HTML variant is documented in `SKILL.md` rather than shipped as an example: a realistic report is mostly CSS, which would crowd out the format it is meant to illustrate.
 - `README.md` — this file.
 
 ## How to install

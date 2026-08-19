@@ -28,6 +28,7 @@
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
+    "@codemirror/lang-html": "^6.4.9",
     "@codemirror/lang-markdown": "^6.5.0",
     "@codemirror/language": "^6.12.3",
     "@codemirror/state": "^6.6.0",
@@ -50,6 +51,8 @@
     "@tiptap/react": "^3.22.5",
     "@tiptap/starter-kit": "^3.22.5",
     "codemirror": "^6.0.2",
+    "entities": "^6.0.1",
+    "parse5": "^7.3.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tiptap-markdown": "^0.9.0",

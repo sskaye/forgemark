@@ -44,6 +44,17 @@ export default [
         StorageEvent: "readonly",
         Element: "readonly",
         Node: "readonly",
+        // The HTML review path works directly against a parsed document
+        // in the report's iframe, so these come up outside React.
+        Document: "readonly",
+        DOMParser: "readonly",
+        Text: "readonly",
+        Comment: "readonly",
+        Range: "readonly",
+        DOMRect: "readonly",
+        NodeFilter: "readonly",
+        HTMLIFrameElement: "readonly",
+        ResizeObserver: "readonly",
         Event: "readonly",
         EventTarget: "readonly",
         MouseEvent: "readonly",

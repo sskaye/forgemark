@@ -3,13 +3,13 @@ import { render, screen, waitFor, act } from "@testing-library/react";
 import { ThemeProvider } from "../../src/theme/ThemeProvider";
 import { DocumentProvider, useWorkspace } from "../../src/state/DocumentProvider";
 import { AppShell } from "../../src/components/AppShell";
-import { readMarkdownFile } from "../../src/services/fileIO";
+import { readDocument } from "../../src/services/fileIO";
 
 vi.mock("../../src/services/fileIO", () => ({
-  openMarkdownFile: vi.fn(),
-  openMarkdownFiles: vi.fn(),
-  readMarkdownFile: vi.fn(),
-  saveMarkdownFile: vi.fn(),
+  openDocument: vi.fn(),
+  openDocuments: vi.fn(),
+  readDocument: vi.fn(),
+  saveDocument: vi.fn(),
 }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn(), ask: vi.fn() }));
 vi.mock("@tauri-apps/plugin-fs", () => ({
@@ -51,7 +51,7 @@ function launch() {
 }
 
 const handOverFile = async (path: string, name: string, body: string) => {
-  vi.mocked(readMarkdownFile).mockResolvedValue({
+  vi.mocked(readDocument).mockResolvedValue({
     path,
     fileName: name,
     text: body,
@@ -64,7 +64,7 @@ const handOverFile = async (path: string, name: string, body: string) => {
 
 describe("cold start", () => {
   beforeEach(() => {
-    vi.mocked(readMarkdownFile).mockReset();
+    vi.mocked(readDocument).mockReset();
   });
 
   it("opens on a single blank document when launched on its own", async () => {
@@ -94,6 +94,6 @@ describe("cold start", () => {
     await waitFor(() => expect(screen.getByTestId("tab-count").textContent).toBe("1"));
     expect(screen.getByTestId("active-name").textContent).toBe("Untitled");
     // The files were never re-read, so nothing tried to restore them.
-    expect(vi.mocked(readMarkdownFile)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(readDocument)).toHaveBeenCalledTimes(2);
   });
 });

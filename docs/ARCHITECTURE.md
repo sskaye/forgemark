@@ -6,8 +6,8 @@ Forgemark is; this file explains how the code is put together.
 
 ## Product shape
 
-Forgemark is a Tauri desktop app for reviewing Markdown documents. Review data
-lives inside the Markdown file itself:
+Forgemark is a Tauri desktop app for reviewing documents — Markdown files and
+generated HTML reports. Review data lives inside the file itself:
 
 - Inline marker comments wrap anchored passages: `<!-- fmc:N -->...<!-- /fmc:N -->`.
 - A trailing `<!-- forgemark-comments ... -->` block stores comment records as
@@ -15,8 +15,13 @@ lives inside the Markdown file itself:
 - The AI-facing format spec lives in `assets/forgemark-skill/SKILL.md`.
 
 The app treats the parsed document as two values: `body` and `comments[]`.
-Opening a file parses raw Markdown into that shape. Saving serializes the shape
-back to a single Markdown file.
+Opening a file parses it into that shape. Saving serializes the shape back to a
+single file.
+
+`DocumentState.format` is `"markdown"` or `"html"`, decided from the extension
+at open time and fixed for the document's life. See "HTML documents" below —
+the short version is that the storage format is identical in both, and only
+marker _scanning_ and the rendered view differ.
 
 ## Runtime stack
 
@@ -141,22 +146,129 @@ the ones you didn't want was not.
 The deliberate consequence: closing the app is how you clear the desk. Tabs mean
 "what I'm working on now", not "what I have ever worked on".
 
+## HTML documents
+
+`<!-- fmc:N -->` and the trailing `<!-- forgemark-comments -->` block are both
+valid HTML, so the storage format transfers with no syntax change: the parser,
+serializer, YAML emitter, and splice helpers are language-blind and take no
+`format` argument. Three things do differ.
+
+**Where a marker may sit.** `findMarkers` dispatches on `DocFormat`. The
+Markdown scanner is wrong for HTML in two ways, both measured against a real
+report before the HTML scanner was written: its indented-code rule makes
+markers invisible (HTML is indented as a matter of course), and it reads
+marker-shaped text inside `<script>` or an attribute value as a real anchor —
+which invents a marker with no YAML record, an error that blanks every comment
+in the file.
+
+**How the document is rendered.** `HtmlView` writes the source verbatim into an
+iframe. It is _not_ parsed into an editor model, and can't be: a generated
+report is a `<style>` block, inline `<svg>`, and a pile of CSS classes, none of
+which survives a round trip through a ProseMirror schema. Two details carry
+weight:
+
+- `sandbox="allow-same-origin"` **without** `allow-scripts`. The report's own
+  scripts never run, while the host can still reach `contentDocument` to
+  decorate anchors and read selections. The two flags together would be
+  equivalent to no sandbox, so `allow-scripts` is not offered.
+- An iframe rather than a shadow root. The example report defines its whole
+  palette on `:root` with a `prefers-color-scheme` block, and `:root` does not
+  resolve inside a shadow root.
+
+The document is written with `document.write` rather than handed over as
+`srcdoc`: writing is synchronous, so there is no load event to race, and it is
+the only one of the two that jsdom implements.
+
+**How a selection becomes an anchor.** The source is never re-serialized —
+the browser's serializer re-quotes attributes and re-encodes entities, so
+saving would rewrite the whole file and the round-trip guarantee would die on
+the first comment. Instead `format/html/textmap.ts` builds a per-character map
+from the rendered text to source bytes (parse5 for a spec-correct tree with
+source spans; its decoded text doubles as an oracle for our own entity decode),
+and markers are spliced at exact offsets.
+
+The DOM side (`services/htmlDom.ts`) and the source map meet on one shared
+coordinate: an index into the concatenated rendered text. Going through a
+character index rather than node identity is what keeps it valid after
+decoration wraps anchored passages in spans and splits those very nodes. **Both
+walks must cover the same tree** — the DOM walk starts at the Document, not
+`<body>`, because whitespace between `</head>` and `<body>` is parsed as a text
+node child of `<html>`, and starting at body puts every later offset one
+character short. UI that Forgemark injects into the frame is tagged
+`data-forgemark` and skipped for the same reason.
+
+**Nothing may depend on an event reaching the frame.** WKWebView does not
+deliver `contextmenu`, `mouseover`, or `click` to listeners the host attaches
+inside the frame — it answers a right-click with its own Look Up / Translate /
+Copy menu, and never runs ours. Chromium does deliver them, so this is not
+reproducible in a browser harness and was found only by driving the Tauri
+window. Anything the reader must be able to do is therefore built on what the
+host can _read_ across the boundary, which `allow-same-origin` grants and which
+has never failed:
+
+- The Comment / Suggest edit toolbar watches the selection, polling on an
+  interval and nudged by the frame's events where they happen to arrive.
+- The per-block Comment buttons live in the _host_ document, positioned over
+  the frame. They sit in the pane's margin, falling back onto the block itself
+  when the window is too narrow for one.
+- Clicking an anchored passage focuses its card via the caret, which the click
+  moves and which we can read. It only ever _sets_ focus — clearing from there
+  would fight the sidebar.
+
+The in-frame listeners are still attached, because where they do work they are
+immediate. They are an optimisation, never the mechanism.
+
+**Consequences that are deliberate, not gaps:**
+
+- HTML documents are review-only. Commenting, replying, suggesting and
+  accepting a suggestion all still work, because those are splices on the
+  source rather than edits through a model.
+- Suggestions are offered only when the source between the markers contains no
+  `<`. Accepting replaces everything between them, so a suggestion spanning
+  markup would replace tags with a sentence.
+- Find is off. It is implemented over the editor's document model, which a
+  report doesn't have; Source view is searchable.
+
+**Layout is untested by the suite.** jsdom has no layout engine, so iframe
+content-height sizing, the element-comment affordance's position, selection
+rectangles, and scroll-to-anchor cannot be covered by Vitest. They were checked
+by hand against `tests/fixtures/report.html` in a real browser and all behaved:
+the frame sizes to its content with no inner scrollbar, the captured selection
+rect matches the on-screen rectangle to within a pixel, adding an anchor
+preserves scroll position exactly, and the report follows its own dark-theme
+rules while the injected highlight stays legible. Re-check these by hand after
+touching `HtmlView`. One trap when doing so: an automated browser tab reports
+`document.visibilityState === "hidden"`, and Chromium never ticks a
+`behavior: "smooth"` scroll animation in a hidden tab — a smooth scroll that
+appears not to move there is the harness, not the code.
+
+**Regeneration is the dominant workflow.** Reports are replaced, not edited, so
+a rebuild orphans every anchor. `format/html/candidates.ts` tries the recorded
+`anchor_selector` first (exact, and survives a renumbered caption), then locates
+an element anchor by its caption widened to the enclosing block, then falls back
+to ranking over rendered text. The lost-anchor banner offers a bulk reattach for
+unambiguous matches only — a passage that appears twice is exactly the case a
+human should look at.
+
 ## Core modules
 
-| Area            | Files                                                                                              | Notes                                                                                                                                                                                                                                 |
-| --------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Document model  | `src/state/document.ts`, `src/state/DocumentProvider.tsx`                                          | Pure reducer and context. Keeps file path, raw original text, body, comments, dirty state, composer state, lost-anchor state, conflict state, sidebar controls, and `loadGeneration` (see below).                                     |
-| Workspace       | `src/state/workspace.ts`                                                                           | The open documents: `docs`, tab `order`, `activeId`. Routes document actions to one document; owns tab open/close/activate/reorder, path dedupe, and Untitled numbering. Wraps `reduceDocument` untouched.                            |
-| Side effects    | `src/state/DocumentBindings.tsx`                                                                   | Mounted once per OPEN document. Opens/saves files, runs autosave, watches external file changes, consumes pending save requests, and guards unsaved work. Window listeners inside are gated on `isActive`.                            |
-| Shell layout    | `src/components/AppShell.tsx`, `src/components/TabBar.tsx`                                         | Assembles the app and hosts modals/banners. Renders one `DocumentBindings` and one `EditorPane` per open document. The tab strip hides itself when only one document is open.                                                         |
-| Rendered editor | `src/components/EditorPane.tsx`, `src/components/RenderedView.tsx`, `src/components/AnchorMark.ts` | Rendered view converts Forgemark markers to Tiptap anchor spans and back. New comments and suggestions are created here because this layer has selection access. One pane per open document; inactive ones are hidden, not unmounted. |
-| Source view     | `src/components/SourceView.tsx`                                                                    | Read-only CodeMirror view of the exact serialized Markdown, with decorations for markers and the trailing comments block.                                                                                                             |
-| Sidebar         | `src/components/Sidebar.tsx`, `src/components/FMCard.tsx`, `src/components/InlineComposer.tsx`     | Thread lifecycle: reply, edit, resolve, delete, accept/reject suggestions, reattach orphaned comments, filter, and sort.                                                                                                              |
-| Format layer    | `src/format/*`                                                                                     | Parser, deterministic YAML emitter, serializer, marker scanning/pairing, marker insertion/removal, lost-anchor candidate ranking, clean export, escaping. This is the domain core and is heavily tested.                              |
-| File services   | `src/services/fileIO.ts`, `src/services/fileWatcher.ts`, `src/services/conflict.ts`                | Tauri wrappers, parent-directory watcher for atomic saves, and fingerprint comparison for external-change detection.                                                                                                                  |
-| Preferences     | `src/state/preferences.ts`                                                                         | LocalStorage-backed author, theme, font size, default view, recent files, and first-run flag.                                                                                                                                         |
-| Native shell    | `src-tauri/src/lib.rs`, `src/state/menuBridge.ts`, `src/services/windowActions.ts`                 | Rust builds native menus and file-open events, then emits Tauri events. The frontend routes them into existing command paths.                                                                                                         |
-| Skill bundles   | `assets/forgemark-skill/*`, `scripts/build-skill.mjs`, `src/services/skillDownload.ts`             | AI-agent instructions are packaged as both `.skill` and `.zip`; Settings downloads them through the Tauri save dialog.                                                                                                                |
+| Area            | Files                                                                                              | Notes                                                                                                                                                                                                                                                                                                      |
+| --------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Document model  | `src/state/document.ts`, `src/state/DocumentProvider.tsx`                                          | Pure reducer and context. Keeps file path, raw original text, body, comments, dirty state, composer state, lost-anchor state, conflict state, sidebar controls, and `loadGeneration` (see below).                                                                                                          |
+| Workspace       | `src/state/workspace.ts`                                                                           | The open documents: `docs`, tab `order`, `activeId`. Routes document actions to one document; owns tab open/close/activate/reorder, path dedupe, and Untitled numbering. Wraps `reduceDocument` untouched.                                                                                                 |
+| Side effects    | `src/state/DocumentBindings.tsx`                                                                   | Mounted once per OPEN document. Opens/saves files, runs autosave, watches external file changes, consumes pending save requests, and guards unsaved work. Window listeners inside are gated on `isActive`.                                                                                                 |
+| Shell layout    | `src/components/AppShell.tsx`, `src/components/TabBar.tsx`                                         | Assembles the app and hosts modals/banners. Renders one `DocumentBindings` and one `EditorPane` per open document. The tab strip hides itself when only one document is open.                                                                                                                              |
+| Selection UI    | `src/components/SelectionToolbar.tsx`                                                              | The Comment / Suggest edit bar that floats above a selection, in both document kinds. Markdown drives it from ProseMirror's `onSelectionUpdate`; a report has no such guarantee and drives it by reading the frame's selection on an interval, nudged by the frame's own events where those are delivered. |
+| Rendered editor | `src/components/EditorPane.tsx`, `src/components/RenderedView.tsx`, `src/components/AnchorMark.ts` | Rendered view converts Forgemark markers to Tiptap anchor spans and back. New comments and suggestions are created here because this layer has selection access. One pane per open document; inactive ones are hidden, not unmounted.                                                                      |
+| Source view     | `src/components/SourceView.tsx`                                                                    | Read-only CodeMirror view of the exact serialized Markdown, with decorations for markers and the trailing comments block.                                                                                                                                                                                  |
+| Sidebar         | `src/components/Sidebar.tsx`, `src/components/FMCard.tsx`, `src/components/InlineComposer.tsx`     | Thread lifecycle: reply, edit, resolve, delete, accept/reject suggestions, reattach orphaned comments, filter, and sort.                                                                                                                                                                                   |
+| Format layer    | `src/format/*`                                                                                     | Parser, deterministic YAML emitter, serializer, marker scanning/pairing, marker insertion/removal, lost-anchor candidate ranking, clean export, escaping. This is the domain core and is heavily tested.                                                                                                   |
+| HTML format     | `src/format/html/*`, `src/format/matching.ts`                                                      | Source ↔ rendered-text offset map, element location by selector or caption, HTML reattachment candidates. `matching.ts` holds the ranking policy both languages share.                                                                                                                                     |
+| HTML view       | `src/components/HtmlView.tsx`, `src/services/htmlDom.ts`, `src/services/htmlDecorate.ts`           | The sandboxed report frame, the DOM half of the shared text coordinate, and display-time anchor decoration. Replaces `RenderedView` for HTML documents; the sidebar and threads are unchanged.                                                                                                             |
+| File services   | `src/services/fileIO.ts`, `src/services/fileWatcher.ts`, `src/services/conflict.ts`                | Tauri wrappers, parent-directory watcher for atomic saves, and fingerprint comparison for external-change detection.                                                                                                                                                                                       |
+| Preferences     | `src/state/preferences.ts`                                                                         | LocalStorage-backed author, theme, font size, default view, recent files, and first-run flag.                                                                                                                                                                                                              |
+| Native shell    | `src-tauri/src/lib.rs`, `src/state/menuBridge.ts`, `src/services/windowActions.ts`                 | Rust builds native menus and file-open events, then emits Tauri events. The frontend routes them into existing command paths.                                                                                                                                                                              |
+| Skill bundles   | `assets/forgemark-skill/*`, `scripts/build-skill.mjs`, `src/services/skillDownload.ts`             | AI-agent instructions are packaged as both `.skill` and `.zip`; Settings downloads them through the Tauri save dialog.                                                                                                                                                                                     |
 
 ## Important workflows
 

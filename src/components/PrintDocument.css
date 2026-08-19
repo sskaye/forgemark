@@ -111,3 +111,12 @@
     padding: 0;
   }
 }
+
+/* An HTML report prints itself, carrying its own CSS. The frame is sized
+   to its content by PrintHtmlBody — an iframe that scrolls on screen
+   would print only its first screenful. */
+.fm-print-html {
+  display: block;
+  width: 100%;
+  border: 0;
+}

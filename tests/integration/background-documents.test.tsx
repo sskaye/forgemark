@@ -4,12 +4,12 @@ import { watch } from "@tauri-apps/plugin-fs";
 import { ThemeProvider } from "../../src/theme/ThemeProvider";
 import { DocumentProvider, useWorkspace } from "../../src/state/DocumentProvider";
 import { AppShell } from "../../src/components/AppShell";
-import { saveMarkdownFile } from "../../src/services/fileIO";
+import { saveDocument } from "../../src/services/fileIO";
 
 vi.mock("../../src/services/fileIO", () => ({
-  openMarkdownFile: vi.fn(),
-  readMarkdownFile: vi.fn(),
-  saveMarkdownFile: vi.fn(),
+  openDocument: vi.fn(),
+  readDocument: vi.fn(),
+  saveDocument: vi.fn(),
 }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn(), ask: vi.fn() }));
 vi.mock("@tauri-apps/plugin-fs", () => ({
@@ -87,7 +87,7 @@ const click = async (id: string) => {
 
 describe("background documents keep their own side effects", () => {
   beforeEach(() => {
-    vi.mocked(saveMarkdownFile).mockReset().mockResolvedValue("/docs/first.md");
+    vi.mocked(saveDocument).mockReset().mockResolvedValue("/docs/first.md");
     vi.mocked(watch).mockClear();
   });
 
@@ -107,7 +107,7 @@ describe("background documents keep their own side effects", () => {
 
     await waitFor(
       () =>
-        expect(vi.mocked(saveMarkdownFile)).toHaveBeenCalledWith(
+        expect(vi.mocked(saveDocument)).toHaveBeenCalledWith(
           "/docs/first.md",
           "edited in background\n",
         ),
@@ -133,7 +133,7 @@ describe("background documents keep their own side effects", () => {
 
 describe("window-level listeners stay single", () => {
   beforeEach(() => {
-    vi.mocked(saveMarkdownFile).mockReset().mockResolvedValue("/other/second.md");
+    vi.mocked(saveDocument).mockReset().mockResolvedValue("/other/second.md");
     vi.mocked(watch).mockClear();
   });
 
@@ -151,8 +151,12 @@ describe("window-level listeners stay single", () => {
       fireEvent.keyDown(window, { key: "s", metaKey: true });
     });
 
-    await waitFor(() => expect(vi.mocked(saveMarkdownFile)).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(saveMarkdownFile)).toHaveBeenCalledWith("/other/second.md", "second body\n");
+    await waitFor(() => expect(vi.mocked(saveDocument)).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(saveDocument)).toHaveBeenCalledWith(
+      "/other/second.md",
+      "second body\n",
+      "markdown",
+    );
   });
 
   it("⌘N opens exactly one new tab, not one per open document", async () => {

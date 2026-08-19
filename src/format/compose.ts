@@ -2,8 +2,8 @@
 // computing the new comment's metadata. Used by the new-comment composer
 // (Phase 5) and reused by future state-change actions (Phase 6+).
 
-import type { Comment } from "./types";
-import { openMarker, closeMarker } from "./types";
+import type { Comment, DocFormat } from "./types";
+import { openMarker, closeMarker, DEFAULT_FORMAT } from "./types";
 
 // Pick the next sequential integer id. Always one greater than the max
 // existing id, so gaps in the comment list are tolerated (delete leaves
@@ -58,8 +58,9 @@ export function replaceAnchoredText(
   body: string,
   id: number,
   replacement: string,
+  format: DocFormat = DEFAULT_FORMAT,
 ): { body: string; previousText: string } | null {
-  const markers = findMarkers(body);
+  const markers = findMarkers(body, format);
   const { pairs } = pairMarkers(markers);
   const pair = pairs.find((p) => p.id === id);
   if (!pair) return null;
@@ -72,8 +73,12 @@ export function replaceAnchoredText(
 // Strip the marker pair for `id` from the body without touching the
 // anchored text. Used by reject-suggestion (the prose stays exactly as
 // it was; only the markers and YAML record are removed).
-export function stripAnchoredMarkers(body: string, id: number): string | null {
-  const markers = findMarkers(body);
+export function stripAnchoredMarkers(
+  body: string,
+  id: number,
+  format: DocFormat = DEFAULT_FORMAT,
+): string | null {
+  const markers = findMarkers(body, format);
   const { pairs } = pairMarkers(markers);
   const pair = pairs.find((p) => p.id === id);
   if (!pair) return null;

@@ -18,7 +18,8 @@
 // editComment / editReply) and adds reducer cases for replies, edits,
 // resolve toggling, deletion, and sidebar filter / sort.
 
-import type { Comment, Reply } from "../format/types";
+import type { Comment, DocFormat, Reply } from "../format/types";
+import { DEFAULT_FORMAT } from "../format/types";
 import type { FileFingerprint } from "../services/conflict";
 
 export type DocumentState = {
@@ -27,6 +28,16 @@ export type DocumentState = {
   originalText: string;
   body: string;
   comments: Comment[];
+  // Which language `body` is written in, decided from the file extension
+  // at open time and fixed for the document's life. Marker scanning,
+  // anchor classification, and which editor gets mounted all key off it.
+  //
+  // HTML documents are review-only: their prose can't be edited, because
+  // editing means modelling the document and any model that round-trips
+  // through an editor schema destroys the CSS, inline SVG, and unknown
+  // attributes a generated report is made of. Comments, replies,
+  // suggestions, and accepting a suggestion all still work.
+  format: DocFormat;
   dirty: boolean;
   // Bumped whenever `body` is replaced by something other than a user
   // keystroke — opening a file, or reloading it from disk. The rendered
@@ -128,6 +139,14 @@ export type NewComposerState = {
   selectionText: string;
   contextBefore: string;
   contextAfter: string;
+  // Set when the anchor wraps a whole block rather than a run of text —
+  // a figure, chart, or table in an HTML report. Recorded on the comment
+  // so the sidebar and the reattach flow can tell the two apart.
+  anchorKind?: "element";
+  // A stable CSS selector for an element anchor, when the report gave
+  // the element an id. Used as an exact reattachment hint after the
+  // report is regenerated.
+  anchorSelector?: string;
   x: number;
   y: number;
   // Optional initial composer mode. Defaults to "comment". The
@@ -180,6 +199,7 @@ export const INITIAL_STATE: DocumentState = {
   originalText: "",
   body: "",
   comments: [],
+  format: DEFAULT_FORMAT,
   dirty: false,
   loadGeneration: 0,
   viewMode: "rendered",
@@ -210,6 +230,9 @@ export type DocumentAction =
       body: string;
       comments: Comment[];
       readOnly: boolean;
+      // Omitted by callers that only ever load Markdown (and by Save As,
+      // which is rebinding a path rather than changing the language).
+      format?: DocFormat;
       // Save As re-dispatches `load` purely to rebind path/filename —
       // the content is the same buffer the user has been editing, so
       // their undo history must survive. Set this to keep
@@ -249,6 +272,20 @@ export type DocumentAction =
       context_before: string;
       context_after: string;
     }
+  // Reattach several comments in one step. A regenerated report orphans
+  // every anchor at once, and walking a modal per comment turns a
+  // mechanical recovery into a chore. The caller has already spliced all
+  // the markers, so this is one body and one undo-sized state change.
+  | {
+      type: "reattachComments";
+      body: string;
+      entries: {
+        commentId: number;
+        anchor_text: string;
+        context_before: string;
+        context_after: string;
+      }[];
+    }
   | { type: "convertToFloating"; commentId: number; body: string }
   | { type: "openReattach"; commentId: number }
   | { type: "closeReattach" }
@@ -283,6 +320,7 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
         originalText: action.text,
         body: action.body,
         comments: action.comments,
+        format: action.format ?? state.format,
         dirty: false,
         loadGeneration: action.rebindOnly ? state.loadGeneration : state.loadGeneration + 1,
         viewMode: "rendered",
@@ -468,6 +506,30 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
             }
           : c,
       );
+      return {
+        ...state,
+        body: action.body,
+        comments,
+        dirty: true,
+        composer: null,
+        reattachTarget: null,
+        error: null,
+      };
+    }
+    case "reattachComments": {
+      if (action.entries.length === 0) return state;
+      const byId = new Map(action.entries.map((e) => [e.commentId, e]));
+      const comments = state.comments.map((c) => {
+        const entry = byId.get(c.id);
+        if (!entry) return c;
+        return {
+          ...c,
+          floating: undefined,
+          anchor_text: entry.anchor_text,
+          context_before: entry.context_before,
+          context_after: entry.context_after,
+        };
+      });
       return {
         ...state,
         body: action.body,

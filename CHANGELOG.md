@@ -2,6 +2,28 @@
 
 All notable changes to Forgemark are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Review of generated HTML reports, alongside Markdown. Open an `.html` file and comment on it: select a passage and a **Comment / Suggest edit** bar appears above it, or press ⌘⌥M, or click the **Comment** button beside a figure, chart, or table — the only way to point at something with no text to select. Threads, replies, suggestions, resolve, print and clean export all work as they do for Markdown.
+- Reports survive being regenerated. Rebuilding a report drops every anchor, so the lost-anchor banner now offers to put back the ones it is sure about in a single action, leaving anything ambiguous for you to decide. Comments made on a figure remember its `id`, so they reattach exactly even when the caption has been renumbered.
+- The AI skill covers the HTML variant, including how to rebuild a reviewed report without discarding the review.
+
+### Changed
+
+- Commenting starts the same way in every document: select a passage and a **Comment / Suggest edit** bar appears above it. Markdown keeps ⌘⌥M and its right-click menu as well — the bar is an addition, not a replacement — but it is now the one gesture that works everywhere, which matters because right-click cannot be made to work inside a report.
+- HTML reports are review-only: their prose can't be edited in Forgemark, and a chip in the editor says so. Editing them would mean modelling the document, and any model that round-trips through an editor destroys the CSS, inline SVG, and unknown attributes a report is made of. Everything else — commenting, replying, suggesting, accepting a suggestion — still works, because those are edits to the file rather than to a model of it.
+- The Open dialog accepts `.html`, `.htm` and `.xhtml`, and Forgemark registers itself as an editor for HTML files.
+
+### Known limitations
+
+- Find (⌘F) is off for HTML reports; Source view is searchable.
+- Right-click inside a report opens the system webview's own menu (Look Up, Translate, Copy) rather than Forgemark's. The report is rendered in a frame whose input handling the app does not own, so the selection bar and ⌘⌥M are the ways to comment on a passage.
+- Hovering an anchored passage in a report does not highlight its comment card. Hovering the card still highlights the passage.
+- Switching between Rendered and Source in a report does not keep your place, as it does in a Markdown document; it returns to the top.
+- Scripts inside a report never run, so a chart drawn in JavaScript renders empty. Static and inline-SVG charts are unaffected.
+
 ## [1.5.0] — 2026-07-25
 
 ### Changed
