@@ -137,14 +137,20 @@ run(`spctl --assess --type open --context context:primary-signature --verbose=4 
 step("Done");
 console.log(`  App: ${APP}`);
 console.log(`  DMG: ${DMG}`);
+// One command tags and publishes. `--target main` makes gh create the tag on
+// the remote itself, which both publishes the release and starts
+// windows-release.yml. Creating the tag locally and pushing it first would
+// start that workflow early, and the workflow creates the release when one
+// doesn't exist yet — so you'd race it for ownership of the release.
 console.log("\nNext steps (manual):");
 console.log(`  1. Smoke-test the .dmg on a fresh macOS user account.`);
-console.log(`  2. Tag and push:`);
-console.log(`       git tag -a v${VERSION} -m "Forgemark v${VERSION}"`);
-console.log(`       git push origin v${VERSION}`);
-console.log(`  3. Publish on GitHub:`);
+console.log(`  2. Tag and publish in one step (do NOT push a tag first):`);
 console.log(
-  `       gh release create v${VERSION} --title "Forgemark v${VERSION}" \\\n` +
+  `       gh release create v${VERSION} --target main \\\n` +
+    `         --title "Forgemark v${VERSION}" \\\n` +
     `         --notes-file CHANGELOG.md \\\n` +
     `         "${DMG}#Forgemark ${VERSION} — universal macOS"`,
 );
+console.log(`  3. Pull the tag gh just created back down:`);
+console.log(`       git fetch origin --tags`);
+console.log(`\n  The Windows installers attach to the release a few minutes later.`);

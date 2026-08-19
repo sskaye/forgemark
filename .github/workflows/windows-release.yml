@@ -34,13 +34,13 @@ jobs:
     name: Build Windows installers
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # Tag push → the pushed tag. Manual dispatch → the `ref` input if
           # given (e.g. main), else the tag input.
           ref: ${{ github.event.inputs.ref || github.event.inputs.tag || github.ref }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "20"
           cache: "npm"
