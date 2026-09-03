@@ -1,0 +1,86 @@
+import { describe, it, expect } from "vitest";
+import { readFileSync, readdirSync } from "node:fs";
+import { resolve } from "node:path";
+import { Editor } from "@tiptap/core";
+import { renderedExtensions } from "../../src/components/editorExtensions";
+import { bodyWithAnchorSpans, bodyFromAnchorSpans, splitFrontmatter } from "../../src/format";
+
+// What the rendered editor does to a Markdown body on the way through.
+//
+// The format layer's round trip is byte-exact and gated elsewhere; this
+// is the *editor's* round trip, which is what a save writes after a
+// keystroke. It is the characterization test the lossless-Markdown work
+// is measured against: the first block lists constructs that must come
+// back byte-identical, the second lists the ones the editor still
+// normalizes — each marked `it.fails`, so when one starts surviving the
+// test says so and the case moves up.
+
+const FIXTURES = resolve(__dirname, "..", "ai", "fixtures");
+
+function roundTrip(body: string, editor: Editor): string {
+  const { front, rest } = splitFrontmatter(body);
+  editor.commands.setContent(bodyWithAnchorSpans(rest), { emitUpdate: false });
+  const md = (
+    editor.storage as unknown as { markdown: { getMarkdown(): string } }
+  ).markdown.getMarkdown();
+  return front + bodyFromAnchorSpans(md);
+}
+
+// The editor drops trailing newlines; compare without them.
+const trimEnd = (s: string) => s.replace(/\n+$/, "");
+
+const editor = new Editor({ extensions: renderedExtensions(), content: "" });
+
+describe("editor round trip: must be byte-identical", () => {
+  const cases: Record<string, string> = {
+    "front matter": "---\nname: x\ndescription: y\n---\n\n# Title\n\nBody.\n",
+    "bare filename and address": "See SKILL.md and www.example.com for more.\n",
+    "bold around inline code": "- **Keep every `<!-- fmc:N -->` pair.** Yes.\n",
+    "anchor around inline code":
+      "Call <!-- fmc:1 -->`foo()`<!-- /fmc:1 --> here and <!-- fmc:2 -->call `bar()`<!-- /fmc:2 --> there.\n",
+    "markers quoted inside a fence":
+      "Example:\n\n```\nSome <!-- fmc:1 -->anchored<!-- /fmc:1 --> text\n```\n",
+    "nested fences": "````md\n```js\nx()\n```\n````\n",
+    "code block in a list": "- item\n\n  ```js\n  x()\n  ```\n\n- next\n",
+    "whole-block anchor": '<!-- fmc:3 -->\n```python\nprint("hi")\n```\n<!-- /fmc:3 -->\n',
+    "plain constructs":
+      "# H1\n\nA paragraph with *em* and **strong**.\n\n- one\n- two\n\n1. first\n2. second\n\n> quote\n\n---\n\n![alt](a.png)\n",
+  };
+  for (const [name, body] of Object.entries(cases)) {
+    it(name, () => {
+      expect(trimEnd(roundTrip(body, editor))).toBe(trimEnd(body));
+    });
+  }
+
+  for (const name of readdirSync(FIXTURES).filter((n) => n.endsWith(".md"))) {
+    it(`fixture ${name}`, () => {
+      const text = readFileSync(resolve(FIXTURES, name), "utf8");
+      const body = text.slice(0, text.indexOf("\n<!-- forgemark-comments\n") + 1);
+      expect(trimEnd(roundTrip(body, editor))).toBe(trimEnd(body));
+    });
+  }
+});
+
+describe("editor round trip: still normalized (known, pending the typing work)", () => {
+  const cases: Record<string, string> = {
+    "hard-wrapped paragraph": "A paragraph\nwrapped across\nlines.\n",
+    // The anchor is a mark ranked outside bold, so its markers land
+    // inside the `**` on the way out and the anchor shrinks on the next
+    // pass. Needs the anchor to become an inline node.
+    "anchor across emphasis": "Text <!-- fmc:1 -->**bold** and *em*<!-- /fmc:1 --> end.\n",
+    "reference link": "See [the docs][d].\n\n[d]: https://x.y\n",
+    "HTML block": '<div align="center">\n<img src="x.png">\n</div>\n\nText.\n',
+    "HTML comment": "Text.\n\n<!-- a note to editors -->\n\nMore.\n",
+    "setext heading": "Title\n=====\n\nText.\n",
+    "star bullets": "* one\n* two\n",
+    "table alignment": "| a | b |\n|:--|--:|\n| 1 | 2 |\n",
+    footnote: "Claim[^1].\n\n[^1]: Note.\n",
+    "backslash escapes": "Not \\*emphasis\\* and 1\\. not a list\n",
+    "indented code": "    indented code\n\nafter\n",
+  };
+  for (const [name, body] of Object.entries(cases)) {
+    it.fails(name, () => {
+      expect(trimEnd(roundTrip(body, editor))).toBe(trimEnd(body));
+    });
+  }
+});

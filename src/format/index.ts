@@ -15,6 +15,15 @@ export {
 } from "./serializer";
 export { normalizeAnchorText, anchorTextMatches } from "./anchor-text";
 export {
+  locateAnchor,
+  locateElement,
+  applyPlacement,
+  AnchorError,
+  type Placement,
+  type LocateOptions,
+} from "./locate";
+export { splitFrontmatter, type SplitBody } from "./frontmatter";
+export {
   findMarkers,
   findMarkersMarkdown,
   findMarkersHtml,

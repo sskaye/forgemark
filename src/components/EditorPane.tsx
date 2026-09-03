@@ -22,6 +22,9 @@ import {
   insertMarkersIntoBody,
   nextCommentId,
   serializeForgemarkFile,
+  locateAnchor,
+  applyPlacement,
+  type Placement,
 } from "../format";
 import type { ViewSyncAnchor } from "../services/viewSync";
 import "./EditorPane.css";
@@ -363,16 +366,40 @@ export function EditorPane({ docId }: Props) {
     return () => window.removeEventListener("contextmenu", onCtx);
   }, [state.viewMode]);
 
-  // Both views expose `applyAnchor(from, to, id) -> new body`. For
-  // Markdown that runs through the editor's mark system; for HTML it is
-  // a byte splice into the source, which is the only way to add an
-  // anchor without re-serializing (and so rewriting) the file.
+  // Both views expose `applyAnchor(from, to, id) -> new body`. For HTML
+  // it is a byte splice into the source; for Markdown it runs through the
+  // editor's mark system, which re-serializes the whole document in the
+  // editor's dialect — the fallback, not the first choice (see below).
   const applyAnchor = useCallback(
     (from: number, to: number, id: number): string | null => {
       if (isHtml) return htmlRef.current?.applyAnchor(from, to, id) ?? null;
       return handleRef.current?.applyAnchor(from, to, id) ?? null;
     },
     [isHtml],
+  );
+
+  // The lossless way to anchor a Markdown comment: find the selected
+  // passage in the untouched source and splice the two markers in. The
+  // rest of the file is byte-identical afterwards, which is the promise
+  // the format makes. The selection's surroundings disambiguate a phrase
+  // that appears more than once. Returns null when the passage can't be
+  // located exactly, and the editor path takes over.
+  const spliceAnchor = useCallback(
+    (
+      c: { selectionText: string; contextBefore: string; contextAfter: string },
+      id: number,
+    ): { body: string; placement: Placement } | null => {
+      if (isHtml) return null;
+      try {
+        const placement = locateAnchor(state.body, c.selectionText, "markdown", {
+          near: { before: c.contextBefore, after: c.contextAfter },
+        });
+        return { body: applyPlacement(state.body, placement, id), placement };
+      } catch {
+        return null;
+      }
+    },
+    [isHtml, state.body],
   );
 
   // Anchor metadata common to a new comment and a new suggestion.
@@ -393,19 +420,29 @@ export function EditorPane({ docId }: Props) {
     [],
   );
 
+  // The same fields, from a placement the locator made in the source.
+  const placementFields = (p: Placement) => ({
+    anchor_text: p.anchor_text,
+    ...(p.anchor_kind ? { anchor_kind: p.anchor_kind } : {}),
+    ...(p.anchor_selector ? { anchor_selector: p.anchor_selector } : {}),
+    context_before: p.context_before,
+    context_after: p.context_after,
+  });
+
   const submitComment = useCallback(
     (commentBody: string) => {
       const c = state.composer;
       if (!c || c.mode !== "new") return;
       const id = nextCommentId(state.comments);
-      const newBody = applyAnchor(c.from, c.to, id);
+      const spliced = spliceAnchor(c, id);
+      const newBody = spliced?.body ?? applyAnchor(c.from, c.to, id);
       if (newBody == null) return;
       dispatch({
         type: "addComment",
         body: newBody,
         comment: {
           id,
-          ...anchorFields(c),
+          ...(spliced ? placementFields(spliced.placement) : anchorFields(c)),
           author,
           timestamp: new Date().toISOString(),
           resolved: false,
@@ -413,7 +450,7 @@ export function EditorPane({ docId }: Props) {
         },
       });
     },
-    [state.composer, state.comments, author, dispatch, applyAnchor, anchorFields],
+    [state.composer, state.comments, author, dispatch, applyAnchor, spliceAnchor, anchorFields],
   );
 
   // Phase 7: suggested-edit submission. The composer captures both the
@@ -425,25 +462,41 @@ export function EditorPane({ docId }: Props) {
       const c = state.composer;
       if (!c || c.mode !== "new") return;
       const id = nextCommentId(state.comments);
-      const newBody = applyAnchor(c.from, c.to, id);
+      const spliced = spliceAnchor(c, id);
+      const newBody = spliced?.body ?? applyAnchor(c.from, c.to, id);
       if (newBody == null) return;
+      // Accepting replaces the exact source between the markers, so
+      // `from` is that source when we have it — the selection's rendered
+      // text differs from it whenever the passage carries formatting.
+      const from = spliced
+        ? state.body.slice(spliced.placement.start, spliced.placement.end)
+        : c.selectionText;
       dispatch({
         type: "addComment",
         body: newBody,
         comment: {
           id,
-          ...anchorFields(c),
+          ...(spliced ? placementFields(spliced.placement) : anchorFields(c)),
           author,
           timestamp: new Date().toISOString(),
           resolved: false,
           // body is optional for suggestions per the schema; only
           // include it when the user typed something.
           ...(optionalBody.length > 0 ? { body: optionalBody } : {}),
-          suggested_edit: { from: c.selectionText, to: replacement },
+          suggested_edit: { from, to: replacement },
         },
       });
     },
-    [state.composer, state.comments, author, dispatch, applyAnchor, anchorFields],
+    [
+      state.composer,
+      state.comments,
+      state.body,
+      author,
+      dispatch,
+      applyAnchor,
+      spliceAnchor,
+      anchorFields,
+    ],
   );
 
   const cancelComposer = useCallback(() => dispatch({ type: "closeComposer" }), [dispatch]);

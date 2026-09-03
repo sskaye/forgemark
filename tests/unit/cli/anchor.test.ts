@@ -68,6 +68,13 @@ describe("locateAnchor (Markdown)", () => {
     expect(() => locateAnchor(MD, "kickoff retained", "markdown")).toThrow(/comment 1/);
   });
 
+  it("takes surrounding emphasis with it after widening to a code span", () => {
+    const md = "- another with `code` and **bold `code`** end\n";
+    const p = locateAnchor(md, "bold code", "markdown");
+    expect(md.slice(p.start, p.end)).toBe("**bold `code`**");
+    expect(p.anchor_text).toBe("bold code");
+  });
+
   it("widens a match inside inline code to the whole code span", () => {
     const p = locateAnchor(MD, "npm test", "markdown");
     expect(MD.slice(p.start, p.end)).toBe("`npm test`");

@@ -78,11 +78,20 @@ export const CodeBlockAnchor = CodeBlock.extend({
       markdown: {
         serialize(state: SerializerState, node: CodeBlockNode) {
           const id = node.attrs.anchorId;
+          // markdown-it hands the block its content with a trailing
+          // newline. Writing it and then ensuring another produced a
+          // blank line before the closing fence, which inside a list
+          // item grew by one on every save.
+          const text = node.textContent.replace(/\n$/, "");
+          // A fence must be longer than any backtick run inside it, or a
+          // block that quotes a fence is cut short at the quoted one.
+          const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length));
+          const fence = "`".repeat(Math.max(3, longest + 1));
           if (id != null) state.write(`<!-- fmc:${id} -->\n`);
-          state.write("```" + (node.attrs.language || "") + "\n");
-          state.text(node.textContent, false);
+          state.write(fence + (node.attrs.language || "") + "\n");
+          state.text(text, false);
           state.ensureNewLine();
-          state.write("```");
+          state.write(fence);
           if (id != null) {
             state.ensureNewLine();
             state.write(`<!-- /fmc:${id} -->`);

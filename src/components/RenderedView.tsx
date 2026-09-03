@@ -1,16 +1,4 @@
 import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Link from "@tiptap/extension-link";
-import Subscript from "@tiptap/extension-subscript";
-import Superscript from "@tiptap/extension-superscript";
-import Image from "@tiptap/extension-image";
-import { Table } from "@tiptap/extension-table";
-import { TableRow } from "@tiptap/extension-table-row";
-import { TableHeader } from "@tiptap/extension-table-header";
-import { TableCell } from "@tiptap/extension-table-cell";
-import { TaskList } from "@tiptap/extension-task-list";
-import { TaskItem } from "@tiptap/extension-task-item";
-import { Markdown } from "tiptap-markdown";
 import { useEffect, useMemo, useRef } from "react";
 import { Extension } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
@@ -18,7 +6,8 @@ import type { EditorView } from "@tiptap/pm/view";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration as PMDecoration, DecorationSet } from "@tiptap/pm/view";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { bodyFromAnchorSpans, bodyWithAnchorSpans } from "../format";
+import { bodyFromAnchorSpans, bodyWithAnchorSpans, splitFrontmatter } from "../format";
+import { renderedExtensions } from "./editorExtensions";
 import { normalizeExternalUrl } from "../services/externalLinks";
 import { findLiteralMatches } from "../services/findReplace";
 import {
@@ -29,36 +18,7 @@ import {
   scrollRatio,
   type ViewSyncAnchor,
 } from "../services/viewSync";
-import { AnchorMark } from "./AnchorMark";
-import { CodeBlockAnchor } from "./CodeBlockAnchor";
 import "./RenderedView.css";
-
-// Subscript / superscript marks. StarterKit ships neither, so `<sub>` /
-// `<sup>` tags would otherwise be dropped to plain text on parse and lost
-// on the next save. Parsing is handled by `html: true` plus each mark's
-// built-in `parseHTML` tag matcher; we add an explicit markdown serialize
-// spec (mirroring how tiptap-markdown serializes Strike's `~~`) so the
-// HTML tags round-trip byte-for-byte.
-const SubscriptMark = Subscript.extend({
-  addStorage() {
-    return {
-      markdown: {
-        serialize: { open: "<sub>", close: "</sub>", expelEnclosingWhitespace: true },
-        parse: {},
-      },
-    };
-  },
-});
-const SuperscriptMark = Superscript.extend({
-  addStorage() {
-    return {
-      markdown: {
-        serialize: { open: "<sup>", close: "</sup>", expelEnclosingWhitespace: true },
-        parse: {},
-      },
-    };
-  },
-});
 
 // Captured selection metadata used by the new-comment composer. Phase 5.
 export type CapturedSelection = {
@@ -162,7 +122,13 @@ export function RenderedView({
   handleRef,
   onSelectionChange,
 }: Props) {
-  const initialMarkdown = useMemo(() => bodyWithAnchorSpans(body), [body]);
+  // Front matter never reaches the editor: it would be read as a rule
+  // and a heading, and come back rewritten. It is split off here and put
+  // back on every edit, so the editor only ever sees the prose.
+  const { front, rest } = useMemo(() => splitFrontmatter(body), [body]);
+  const frontRef = useRef(front);
+  frontRef.current = front;
+  const initialMarkdown = useMemo(() => bodyWithAnchorSpans(rest), [rest]);
   // Seeded with the same value handed to `content:` below, so the sync
   // effect correctly treats the mount as already-applied and skips a
   // redundant setContent.
@@ -185,40 +151,7 @@ export function RenderedView({
   onSelectionChangeRef.current = onSelectionChange;
 
   const editor = useEditor({
-    extensions: [
-      // StarterKit ships its own Link in v3; we use the standalone with
-      // openOnClick disabled so clicks are the host's to handle. Its
-      // codeBlock is disabled in favour of CodeBlockAnchor, which adds
-      // whole-block comment anchoring.
-      StarterKit.configure({ link: false, codeBlock: false }),
-      CodeBlockAnchor,
-      Link.configure({ openOnClick: false }),
-      SubscriptMark,
-      SuperscriptMark,
-      AnchorMark,
-      SearchHighlightExtension,
-      Image,
-      Table.configure({ resizable: false }),
-      TableRow,
-      TableHeader,
-      TableCell,
-      TaskList,
-      TaskItem.configure({ nested: true }),
-      Markdown.configure({
-        // html: true is what allows the anchor `<span>` wrappers we inject
-        // to survive the markdown→ProseMirror round-trip. Markdown bodies
-        // we receive are from our own format layer; arbitrary user-typed
-        // HTML still flows through, which is acceptable inside the local
-        // Tauri webview.
-        html: true,
-        tightLists: true,
-        bulletListMarker: "-",
-        linkify: true,
-        breaks: false,
-        transformPastedText: true,
-        transformCopiedText: true,
-      }),
-    ],
+    extensions: renderedExtensions([SearchHighlightExtension]),
     content: initialMarkdown,
     editable: !readOnly,
     // The editor is constructed with the right content already, so it's
@@ -257,14 +190,14 @@ export function RenderedView({
       // always holds the format-layer source of truth. This is the
       // single editor → state boundary; the inverse
       // `bodyWithAnchorSpans` is applied on the way back in.
-      const newBody = bodyFromAnchorSpans(md);
+      const restBody = bodyFromAnchorSpans(md);
       // Pre-emptively update the ref so the upcoming setContent
       // useEffect (triggered when the new state.body propagates back
       // as initialMarkdown) sees a match and skips the rewrite —
       // otherwise every keystroke would re-render the editor and
       // reset the cursor.
-      lastInitialRef.current = bodyWithAnchorSpans(newBody);
-      onEdit(newBody);
+      lastInitialRef.current = bodyWithAnchorSpans(restBody);
+      onEdit(frontRef.current + restBody);
     },
   });
 
@@ -391,7 +324,7 @@ export function RenderedView({
         const md = storage.markdown?.getMarkdown?.() ?? "";
         // Inline anchors serialize as `<span data-anchor-id>`; convert back
         // to markers. Block anchors already serialize as markers.
-        return bodyFromAnchorSpans(md);
+        return frontRef.current + bodyFromAnchorSpans(md);
       },
       selectedText: () => {
         if (!editor) return null;
