@@ -3,6 +3,7 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { ThemeProvider } from "../../src/theme/ThemeProvider";
 import { DocumentProvider, useDocument } from "../../src/state/DocumentProvider";
 import { AppShell } from "../../src/components/AppShell";
+import { typeIntoEditor } from "../utils/typing";
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn(), ask: vi.fn() }));
 vi.mock("@tauri-apps/plugin-fs", () => ({
@@ -107,8 +108,27 @@ describe("undo isolation across documents", () => {
 
   it("undo still works within a single document", async () => {
     // Guard against the trivial way to pass the test above: breaking
-    // undo entirely. A programmatic body replacement (the same path
-    // accept-suggestion uses) must remain undoable.
+    // undo entirely. Typing must remain undoable.
+    const { container } = mount();
+
+    fireEvent.click(screen.getByTestId("load-a"));
+    await waitFor(() => expect(proseMirror(container).textContent).toContain("AAA original"));
+
+    typeIntoEditor(container, " typed");
+    await waitFor(() => expect(proseMirror(container).textContent).toContain("typed"));
+
+    pressUndo(container);
+
+    await waitFor(() => expect(proseMirror(container).textContent).not.toContain("typed"));
+    expect(proseMirror(container).textContent).toContain("AAA original");
+  });
+
+  it("a programmatic body replacement is not an undo step", async () => {
+    // Deleting a comment, accepting a suggestion, or reattaching all
+    // replace the body from state. ⌘Z used to revert the *text* of such
+    // a change while the comment records stayed put, leaving markers
+    // for a comment that no longer existed. Those changes have their
+    // own way back; the editor's undo is for typing.
     const { container } = mount();
 
     fireEvent.click(screen.getByTestId("load-a"));
@@ -119,8 +139,9 @@ describe("undo isolation across documents", () => {
 
     pressUndo(container);
 
-    await waitFor(() => expect(proseMirror(container).textContent).not.toContain("edited"));
-    expect(proseMirror(container).textContent).toContain("AAA original");
+    // Still there: nothing to undo.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(proseMirror(container).textContent).toContain("edited");
   });
 
   it("Save As rebinds the path without remounting the editor", async () => {

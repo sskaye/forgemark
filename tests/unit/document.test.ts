@@ -107,6 +107,52 @@ describe("document reducer", () => {
     expect(saved.originalText).toBe("serialized form");
   });
 
+  it("deleteComment remembers the deletion and undoDelete restores it exactly", () => {
+    const loaded = reduceDocument(INITIAL_STATE, {
+      ...baseLoad,
+      body: "x <!-- fmc:1 -->a<!-- /fmc:1 --> y",
+      comments: [
+        {
+          id: 1,
+          anchor_text: "a",
+          author: "A",
+          timestamp: "2026-05-07T09:00:00Z",
+          resolved: false,
+          body: "b\n",
+          replies: [{ author: "B", timestamp: "2026-05-07T10:00:00Z", body: "r\n" }],
+        },
+      ],
+    });
+    const deleted = reduceDocument(loaded, { type: "deleteComment", commentId: 1, body: "x a y" });
+    expect(deleted.comments).toEqual([]);
+    expect(deleted.lastDeleted?.comment.id).toBe(1);
+
+    const restored = reduceDocument(deleted, { type: "undoDelete" });
+    expect(restored.body).toBe(loaded.body);
+    expect(restored.comments).toEqual(loaded.comments);
+    expect(restored.lastDeleted).toBeNull();
+    expect(restored.dirty).toBe(true);
+    expect(restored.focusedCommentId).toBe(1);
+  });
+
+  it("any other change to the body or comments forfeits the undo", () => {
+    const loaded = reduceDocument(INITIAL_STATE, {
+      ...baseLoad,
+      body: "x <!-- fmc:1 -->a<!-- /fmc:1 --> y",
+      comments: [
+        { id: 1, anchor_text: "a", author: "A", timestamp: "t", resolved: false, body: "b\n" },
+      ],
+    });
+    const deleted = reduceDocument(loaded, { type: "deleteComment", commentId: 1, body: "x a y" });
+    const typed = reduceDocument(deleted, { type: "edit", body: "x a y z" });
+    expect(typed.lastDeleted).toBeNull();
+    // Restoring the old body over the new text would lose the text.
+    expect(reduceDocument(typed, { type: "undoDelete" })).toBe(typed);
+    // Resolving a comment changes no body: the undo survives it.
+    const other = reduceDocument(deleted, { type: "setFilter", filter: { kind: "open" } });
+    expect(other.lastDeleted).not.toBeNull();
+  });
+
   it("setViewMode toggles the per-document mode", () => {
     const next = reduceDocument(INITIAL_STATE, { type: "setViewMode", viewMode: "source" });
     expect(next.viewMode).toBe("source");

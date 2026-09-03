@@ -85,6 +85,14 @@ export type DocumentState = {
   // executing effect knows both what to do and what was asked; cleared
   // together via `clearIntent`.
   intentResolution: "save" | "discard" | null;
+  // The comment most recently deleted, with the body as it was before
+  // and after, so the deletion can be undone for a moment. Deleting is
+  // one keystroke and takes a whole thread with it; a confirm dialog
+  // would slow every deletion to guard the rare mistake, while an undo
+  // costs nothing until it is needed. Cleared by any other change to the
+  // body or comments, since restoring an older body over them would
+  // lose those changes.
+  lastDeleted: { comment: Comment; bodyBefore: string; bodyAfter: string } | null;
 };
 
 // Something the user asked for that would throw unsaved work away.
@@ -217,6 +225,7 @@ export const INITIAL_STATE: DocumentState = {
   sort: "doc",
   pendingIntent: null,
   intentResolution: null,
+  lastDeleted: null,
 };
 
 export type DocumentAction =
@@ -267,6 +276,8 @@ export type DocumentAction =
     }
   | { type: "toggleResolved"; commentId: number }
   | { type: "deleteComment"; commentId: number; body: string }
+  | { type: "undoDelete" }
+  | { type: "dismissUndoDelete" }
   | { type: "deleteReply"; commentId: number; replyIndex: number }
   | { type: "acceptSuggestion"; commentId: number; body: string }
   | { type: "rejectSuggestion"; commentId: number; body: string }
@@ -323,6 +334,21 @@ function sameComments(a: Comment[], b: Comment[]): boolean {
 }
 
 export function reduceDocument(state: DocumentState, action: DocumentAction): DocumentState {
+  const next = reduce(state, action);
+  // Any change to the body or comments other than the deletion itself
+  // invalidates the undo: the body it would restore no longer contains
+  // that change.
+  if (
+    next.lastDeleted !== null &&
+    action.type !== "deleteComment" &&
+    (next.body !== state.body || next.comments !== state.comments)
+  ) {
+    return { ...next, lastDeleted: null };
+  }
+  return next;
+}
+
+function reduce(state: DocumentState, action: DocumentAction): DocumentState {
   switch (action.type) {
     case "load":
       return {
@@ -351,6 +377,7 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
         // on the user any more.
         pendingIntent: null,
         intentResolution: null,
+        lastDeleted: null,
         // Filter / sort persist across loads — they're a viewing
         // preference, not a document property.
       };
@@ -484,7 +511,8 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
           : state.focusedCommentId;
       return { ...state, comments, dirty: true, focusedCommentId };
     }
-    case "deleteComment":
+    case "deleteComment": {
+      const deleted = state.comments.find((c) => c.id === action.commentId);
       return {
         ...state,
         body: action.body,
@@ -494,7 +522,28 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
           state.focusedCommentId === action.commentId ? null : state.focusedCommentId,
         composer: null,
         reattachTarget: state.reattachTarget === action.commentId ? null : state.reattachTarget,
+        lastDeleted: deleted
+          ? { comment: deleted, bodyBefore: state.body, bodyAfter: action.body }
+          : null,
       };
+    }
+    case "undoDelete": {
+      const last = state.lastDeleted;
+      // Only while nothing else has changed: the wrapper above clears
+      // `lastDeleted` on any other change, so this is a consistency
+      // check rather than a branch that should be reachable.
+      if (!last || state.body !== last.bodyAfter) return state;
+      return {
+        ...state,
+        body: last.bodyBefore,
+        comments: [...state.comments, last.comment].sort((a, b) => a.id - b.id),
+        dirty: true,
+        focusedCommentId: last.comment.id,
+        lastDeleted: null,
+      };
+    }
+    case "dismissUndoDelete":
+      return state.lastDeleted ? { ...state, lastDeleted: null } : state;
     case "deleteReply": {
       const comments = state.comments.map((c) => {
         if (c.id !== action.commentId) return c;

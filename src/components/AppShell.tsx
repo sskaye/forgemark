@@ -4,6 +4,7 @@ import { TabBar } from "./TabBar";
 import { Sidebar } from "./Sidebar";
 import { EditorPane } from "./EditorPane";
 import { ErrorBanner } from "./ErrorBanner";
+import { UndoDeleteBanner } from "./UndoDeleteBanner";
 import { ReattachModal } from "./ReattachModal";
 import { FileConflictBanner } from "./FileConflictBanner";
 import { EditDuringOpenModal } from "./EditDuringOpenModal";
@@ -199,6 +200,7 @@ export function AppShell() {
       />
       <TabBar />
       <ErrorBanner />
+      <UndoDeleteBanner />
       {/* Phase 10 — file-conflict surfaces. The banner shows when the
           file changed on disk but we have no unsaved work; the
           edit-during-open modal blocks when there *is* unsaved work; the

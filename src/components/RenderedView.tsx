@@ -209,7 +209,16 @@ export function RenderedView({
     if (lastInitialRef.current === initialMarkdown) return;
     lastInitialRef.current = initialMarkdown;
     editorReadyRef.current = false;
-    editor.commands.setContent(initialMarkdown, { emitUpdate: false });
+    // Not an undo step. This path carries state-level changes — a comment
+    // added, deleted, accepted, reattached, a reload from disk — and ⌘Z
+    // reverting the *text* of one while the comment records stayed put
+    // left the file with markers for a comment that no longer existed.
+    // Undo is for typing; those changes have their own way back.
+    editor
+      .chain()
+      .setMeta("addToHistory", false)
+      .setContent(initialMarkdown, { emitUpdate: false })
+      .run();
     // Defer the ready flip past the current task so any synchronous
     // setContent-induced onUpdate firings still see ready=false.
     queueMicrotask(() => {

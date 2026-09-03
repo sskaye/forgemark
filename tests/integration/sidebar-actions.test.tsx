@@ -189,6 +189,26 @@ describe("FMCard action row", () => {
     expect(screen.getByTestId("probe-body").textContent).toBe("before bit after\n");
   });
 
+  it("Delete can be undone for a moment, restoring the record and its markers", async () => {
+    renderApp({
+      body: "before <!-- fmc:1 -->bit<!-- /fmc:1 --> after\n",
+      comments: [aComment(1)],
+    });
+    fireEvent.click(await screen.findByTestId("fm-card-1"));
+    fireEvent.click(await screen.findByTestId("fm-card-delete-1"));
+    await waitFor(() => expect(screen.queryByTestId("fm-card-1")).not.toBeInTheDocument());
+
+    const banner = await screen.findByTestId("fm-undo-delete");
+    expect(banner.textContent).toMatch(/Deleted comment #1/);
+    fireEvent.click(screen.getByTestId("fm-undo-delete-button"));
+
+    expect(await screen.findByTestId("fm-card-1")).toBeInTheDocument();
+    expect(screen.getByTestId("probe-body").textContent).toBe(
+      "before <!-- fmc:1 -->bit<!-- /fmc:1 --> after\n",
+    );
+    expect(screen.queryByTestId("fm-undo-delete")).not.toBeInTheDocument();
+  });
+
   it("Cascade delete: deleting a parent with replies removes the replies too", async () => {
     renderApp({
       body: "<!-- fmc:1 -->bit<!-- /fmc:1 -->\n",
