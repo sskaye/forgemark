@@ -16,6 +16,7 @@ import { OverlapPrompt } from "./OverlapPrompt";
 import { FindReplaceBar } from "./FindReplaceBar";
 import { LostAnchorBanner } from "./LostAnchorBanner";
 import { ContextMenu } from "./ContextMenu";
+import { commandFor, modalOpen } from "../state/keymap";
 import {
   classifyAnchors,
   contextSnippet,
@@ -246,39 +247,45 @@ export function EditorPane({ docId }: Props) {
   useEffect(() => {
     if (!isActive) return;
     const onKey = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-      if (!mod) return;
-      const key = e.key.toLowerCase();
-      if (e.altKey) {
-        if (key === "m") {
+      const cmd = commandFor(e);
+      if (!cmd || modalOpen()) return;
+      switch (cmd) {
+        case "comment":
           e.preventDefault();
           openComposer();
-        } else if (key === "e") {
+          return;
+        case "suggest":
           e.preventDefault();
           openComposer("suggest");
-        } else if (key === "f") {
+          return;
+        case "find-replace":
           e.preventDefault();
           openFindReplace(true);
+          return;
+        case "find":
+          e.preventDefault();
+          openFindReplace(false);
+          return;
+        case "find-next":
+        case "find-prev":
+          e.preventDefault();
+          moveActiveMatch(cmd === "find-next" ? 1 : -1);
+          return;
+        case "find-selection": {
+          e.preventDefault();
+          const selected = handleRef.current?.selectedText()?.trim();
+          if (!selected) return;
+          if (state.viewMode !== "rendered") setViewMode("rendered");
+          setFindState((prev) => ({
+            ...prev,
+            open: true,
+            query: selected,
+            activeIndex: 0,
+          }));
+          return;
         }
-        return;
-      }
-      if (key === "f") {
-        e.preventDefault();
-        openFindReplace(false);
-      } else if (key === "g") {
-        e.preventDefault();
-        moveActiveMatch(e.shiftKey ? -1 : 1);
-      } else if (key === "e") {
-        e.preventDefault();
-        const selected = handleRef.current?.selectedText()?.trim();
-        if (!selected) return;
-        if (state.viewMode !== "rendered") setViewMode("rendered");
-        setFindState((prev) => ({
-          ...prev,
-          open: true,
-          query: selected,
-          activeIndex: 0,
-        }));
+        default:
+          return;
       }
     };
     window.addEventListener("keydown", onKey);

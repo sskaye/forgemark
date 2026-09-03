@@ -131,6 +131,7 @@ export function FMCard({
       aria-pressed={focused}
       aria-label={`Comment by ${comment.author}: ${plainPreview(comment, 60)}`}
       onClick={onFocus}
+      onFocus={onFocus}
       onKeyDown={onKey}
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}

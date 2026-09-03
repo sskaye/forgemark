@@ -11,6 +11,8 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 
 ### Added
 
+- Every keyboard shortcut is now defined in one table, and a test refuses two commands sharing a chord. ⌘⇧E used to open Clean Export, the edit composer, and Find with the selection all at once; it now opens Clean Export only, and editing your own comment is E with the card focused. Card shortcuts act only while the keyboard focus is in the sidebar, never over an open dialog, and never while typing.
+- Tabs from the keyboard: ⌘⇧] and ⌘⇧[ move between tabs, ⌘1 to ⌘9 jump to one, and arrow keys walk the tab strip. In the sidebar, ↑/↓ (or j/k) move between comment cards.
 - Deleting a comment can be undone for a few seconds from a banner. It restores the thread, its replies, and its markers exactly.
 
 ### Fixed

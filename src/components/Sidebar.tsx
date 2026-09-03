@@ -11,6 +11,7 @@ import {
 import type { Comment, Reply } from "../format/types";
 import type { FilterMode, SortMode } from "../state/document";
 import "./Sidebar.css";
+import { commandFor, isTypingTarget, modalOpen } from "../state/keymap";
 
 type SidebarProps = {
   anchorStatuses: Map<number, AnchorStatus>;
@@ -20,8 +21,9 @@ type SidebarProps = {
 //   - Dynamic filter dropdown — populated from comment authors + "By me".
 //   - Sort: Doc order / Newest / Oldest. Replies stay chronological.
 //   - Card lifecycle dispatches (reply / edit / resolve / delete).
-//   - Global keyboard shortcuts that act on the focused card:
-//       ⌘R reply, ⌘⏎ resolve, ⌘⇧E edit own, Delete delete.
+//   - Keyboard shortcuts that act on the focused card while focus is in
+//     the sidebar: ⌘R reply, ⌘⏎ resolve, E edit own, Delete delete,
+//     ↑/↓ (or j/k) move between cards. Chords live in state/keymap.ts.
 export function Sidebar({ anchorStatuses }: SidebarProps) {
   const { state, dispatch } = useDocument();
   const [authorName] = useAuthorName();
@@ -41,50 +43,64 @@ export function Sidebar({ anchorStatuses }: SidebarProps) {
 
   const open = comments.filter((c) => !c.resolved).length;
 
-  // Global keyboard shortcuts. Active when a card is focused; the
-  // composer's own keydown handler stops propagation so these don't
-  // fire while the user is typing in a textarea.
+  // Keyboard shortcuts on the focused card. They apply only while the
+  // keyboard focus is inside the sidebar: the reducer's focused comment
+  // is also set by clicking an anchor in the editor, and acting on that
+  // from the editor — ⌘⏎ resolving a thread mid-sentence, Backspace
+  // deleting the comment behind an open dialog — was a trap. Nothing
+  // here fires over a dialog or into a text field.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const cmd = commandFor(e);
+      if (!cmd || modalOpen() || isTypingTarget(e.target)) return;
+      const active = document.activeElement;
+      if (!(active instanceof HTMLElement) || !active.closest(".fm-sidebar")) return;
+
+      if (cmd === "next-comment" || cmd === "prev-comment") {
+        e.preventDefault();
+        const cards = Array.from(
+          document.querySelectorAll<HTMLElement>(".fm-sidebar [data-anchor-card-id]"),
+        );
+        if (cards.length === 0) return;
+        const at = cards.findIndex((el) => el === active || el.contains(active));
+        const step = cmd === "next-comment" ? 1 : -1;
+        const next = at < 0 ? (step > 0 ? 0 : cards.length - 1) : at + step;
+        cards[Math.max(0, Math.min(cards.length - 1, next))]?.focus();
+        return;
+      }
+
       if (focusedCommentId == null) return;
       const c = comments.find((x) => x.id === focusedCommentId);
       if (!c) return;
-      const mod = e.metaKey || e.ctrlKey;
-      // ⌘R — reply (no-op on suggestion cards per Phase 7 design)
-      if (mod && !e.shiftKey && e.key.toLowerCase() === "r") {
-        e.preventDefault();
-        if (c.suggested_edit) return;
-        dispatch({
-          type: "openComposer",
-          composer: { mode: "reply", commentId: c.id },
-        });
-        return;
-      }
-      // ⌘⏎ — resolve / unresolve (when card focused)
-      if (mod && e.key === "Enter") {
-        e.preventDefault();
-        dispatch({ type: "toggleResolved", commentId: c.id });
-        return;
-      }
-      // ⌘⇧E — edit own comment
-      if (mod && e.shiftKey && e.key.toLowerCase() === "e") {
-        if (c.author !== authorName) return;
-        e.preventDefault();
-        dispatch({
-          type: "openComposer",
-          composer: {
-            mode: "editComment",
+      switch (cmd) {
+        case "reply":
+          e.preventDefault();
+          // No replies on suggestion cards.
+          if (c.suggested_edit) return;
+          dispatch({ type: "openComposer", composer: { mode: "reply", commentId: c.id } });
+          return;
+        case "toggle-resolved":
+          e.preventDefault();
+          dispatch({ type: "toggleResolved", commentId: c.id });
+          return;
+        case "edit-comment":
+          if (c.author !== authorName) return;
+          e.preventDefault();
+          dispatch({
+            type: "openComposer",
+            composer: { mode: "editComment", commentId: c.id, initialBody: c.body ?? "" },
+          });
+          return;
+        case "delete-comment":
+          e.preventDefault();
+          dispatch({
+            type: "deleteComment",
             commentId: c.id,
-            initialBody: c.body ?? "",
-          },
-        });
-        return;
-      }
-      // Delete / Backspace — delete the focused comment.
-      if ((e.key === "Delete" || e.key === "Backspace") && !mod && !isTypingTarget(e.target)) {
-        e.preventDefault();
-        const newBody = removeMarkersFromBody(state.body, c.id);
-        dispatch({ type: "deleteComment", commentId: c.id, body: newBody });
+            body: removeMarkersFromBody(state.body, c.id),
+          });
+          return;
+        default:
+          return;
       }
     };
     window.addEventListener("keydown", onKey);
@@ -464,10 +480,4 @@ function valueToFilter(v: string): FilterMode {
     return { kind: "byAuthor", author: v.slice("byAuthor:".length) };
   }
   return { kind: "all" };
-}
-
-function isTypingTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  const tag = target.tagName.toLowerCase();
-  return tag === "textarea" || tag === "input" || target.isContentEditable === true;
 }

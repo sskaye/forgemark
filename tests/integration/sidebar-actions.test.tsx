@@ -295,7 +295,7 @@ describe("Keyboard shortcuts on the focused card", () => {
       comments: [aComment(1)],
     });
     const card = await screen.findByTestId("fm-card-1");
-    fireEvent.click(card);
+    await act(async () => card.focus());
     press("r", { meta: true });
     expect(await screen.findByTestId("fm-inline-composer")).toBeInTheDocument();
   });
@@ -306,33 +306,33 @@ describe("Keyboard shortcuts on the focused card", () => {
       comments: [aComment(1)],
     });
     const card = await screen.findByTestId("fm-card-1");
-    fireEvent.click(card);
+    await act(async () => card.focus());
     press("Enter", { meta: true });
     await waitFor(() => {
       expect(screen.getByTestId("probe-resolved-ids").textContent).toBe("1");
     });
   });
 
-  it("⌘⇧E opens edit composer on own comment", async () => {
+  it("E opens edit composer on own comment", async () => {
     renderApp({
       body: "<!-- fmc:1 -->bit<!-- /fmc:1 -->\n",
       comments: [aComment(1, { body: "mine\n" })],
     });
     const card = await screen.findByTestId("fm-card-1");
-    fireEvent.click(card);
-    press("e", { meta: true, shift: true });
+    await act(async () => card.focus());
+    press("e");
     const ta = (await screen.findByTestId("fm-inline-composer-textarea")) as HTMLTextAreaElement;
     expect(ta.value).toBe("mine\n");
   });
 
-  it("⌘⇧E is a no-op on someone else's comment", async () => {
+  it("E is a no-op on someone else's comment", async () => {
     renderApp({
       body: "<!-- fmc:1 -->bit<!-- /fmc:1 -->\n",
       comments: [aComment(1, { author: "Devon" })],
     });
     const card = await screen.findByTestId("fm-card-1");
-    fireEvent.click(card);
-    press("e", { meta: true, shift: true });
+    await act(async () => card.focus());
+    press("e");
     // Composer doesn't open.
     expect(screen.queryByTestId("fm-inline-composer")).not.toBeInTheDocument();
   });
@@ -343,7 +343,7 @@ describe("Keyboard shortcuts on the focused card", () => {
       comments: [aComment(1)],
     });
     const card = await screen.findByTestId("fm-card-1");
-    fireEvent.click(card);
+    await act(async () => card.focus());
     // Move focus off the card so isTypingTarget returns false.
     document.body.focus();
     press("Delete");

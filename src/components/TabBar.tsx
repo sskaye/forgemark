@@ -35,7 +35,31 @@ export function TabBar() {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
                 dispatch({ type: "activateTab", docId: id });
+                return;
               }
+              // Roving focus: arrows and Home/End move along the strip
+              // and activate as they go, as a native tab list does.
+              const at = workspace.order.indexOf(id);
+              const last = workspace.order.length - 1;
+              const to =
+                e.key === "ArrowRight"
+                  ? Math.min(last, at + 1)
+                  : e.key === "ArrowLeft"
+                    ? Math.max(0, at - 1)
+                    : e.key === "Home"
+                      ? 0
+                      : e.key === "End"
+                        ? last
+                        : -1;
+              if (to < 0 || to === at) return;
+              e.preventDefault();
+              const target = workspace.order[to];
+              dispatch({ type: "activateTab", docId: target });
+              (
+                e.currentTarget.parentElement?.querySelector(
+                  `[data-testid="fm-tab-${target}"]`,
+                ) as HTMLElement | null
+              )?.focus();
             }}
           >
             <span className="fm-tab-name">{doc.fileName}</span>

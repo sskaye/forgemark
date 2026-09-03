@@ -19,6 +19,7 @@ import {
   type FileWatcher,
 } from "../services/fileWatcher";
 import { useRecentFiles, useDefaultView } from "./preferences";
+import { commandFor, modalOpen } from "./keymap";
 
 type Logger = (msg: string, err: unknown) => void;
 
@@ -519,15 +520,14 @@ export function DocumentBindings({
   useEffect(() => {
     if (!isActive) return;
     const onKey = async (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-      if (!mod) return;
-      const key = e.key.toLowerCase();
+      const cmd = commandFor(e);
+      if (!cmd || modalOpen()) return;
       const s = stateRef.current;
-      if (key === "o") {
+      if (cmd === "open") {
         e.preventDefault();
         // Opens in a tab of its own — nothing is discarded, so no guard.
         await runOpenDialog();
-      } else if (key === "s") {
+      } else if (cmd === "save" || cmd === "save-as") {
         e.preventDefault();
         // A read-only file isn't a dead end: performSave turns the save
         // into a Save As so the review made on it can be kept elsewhere.
@@ -541,8 +541,8 @@ export function DocumentBindings({
         }
         // ⌘S = save in place (or prompt for Untitled);
         // ⌘⇧S = Save As, always prompts.
-        await performSave({ forcePrompt: e.shiftKey });
-      } else if (key === "n") {
+        await performSave({ forcePrompt: cmd === "save-as" });
+      } else if (cmd === "new-tab") {
         e.preventDefault();
         workspaceDispatchRef.current({ type: "openTab" });
       }
