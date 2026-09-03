@@ -129,6 +129,7 @@
 }
 
 .fm-card-reply:hover .fm-card-reply-actions,
+.fm-card-reply:focus-within .fm-card-reply-actions,
 .fm-card.is-focused .fm-card-reply-actions {
   visibility: visible;
 }

@@ -54,6 +54,7 @@ export default [
         DOMRect: "readonly",
         NodeFilter: "readonly",
         HTMLIFrameElement: "readonly",
+        HTMLDialogElement: "readonly",
         ResizeObserver: "readonly",
         Event: "readonly",
         EventTarget: "readonly",

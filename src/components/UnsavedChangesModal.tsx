@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { Modal } from "./Modal";
 import "./ConflictModals.css";
 
 type Props = {
@@ -29,68 +29,48 @@ export function UnsavedChangesModal({
   onDiscard,
   onCancel,
 }: Props) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onCancel();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel]);
-
   return (
-    <div
-      className="fm-modal-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="fm-unsaved-title"
-      data-testid="fm-unsaved-modal"
-      onClick={onCancel}
-    >
-      <div className="fm-modal" role="document" onClick={(e) => e.stopPropagation()}>
-        <header className="fm-modal-header">
-          <h2 id="fm-unsaved-title" className="fm-modal-title">
-            Save changes to {fileName}?
-          </h2>
-          <p className="fm-modal-sub">
-            {conflictPending
-              ? "This file also changed on disk, so it can’t be saved automatically. If you don’t save, your changes are lost."
-              : "This document has never been saved. If you don’t save it, your changes are lost."}
-          </p>
-        </header>
-        <footer className="fm-modal-footer">
+    <Modal labelledBy="fm-unsaved-title" testId="fm-unsaved-modal" onClose={onCancel}>
+      <header className="fm-modal-header">
+        <h2 id="fm-unsaved-title" className="fm-modal-title">
+          Save changes to {fileName}?
+        </h2>
+        <p className="fm-modal-sub">
+          {conflictPending
+            ? "This file also changed on disk, so it can’t be saved automatically. If you don’t save, your changes are lost."
+            : "This document has never been saved. If you don’t save it, your changes are lost."}
+        </p>
+      </header>
+      <footer className="fm-modal-footer">
+        <button
+          type="button"
+          className="fm-modal-button"
+          onClick={onCancel}
+          data-testid="fm-unsaved-cancel"
+        >
+          Cancel
+        </button>
+        <div className="fm-modal-spacer" />
+        <button
+          type="button"
+          className="fm-modal-button fm-modal-button-danger"
+          onClick={onDiscard}
+          data-testid="fm-unsaved-discard"
+        >
+          Don’t Save
+        </button>
+        {!conflictPending && (
           <button
             type="button"
-            className="fm-modal-button"
-            onClick={onCancel}
-            data-testid="fm-unsaved-cancel"
+            className="fm-modal-button fm-modal-button-primary"
+            onClick={onSave}
+            data-testid="fm-unsaved-save"
+            autoFocus
           >
-            Cancel
+            {untitled ? "Save As…" : "Save"}
           </button>
-          <div className="fm-modal-spacer" />
-          <button
-            type="button"
-            className="fm-modal-button fm-modal-button-danger"
-            onClick={onDiscard}
-            data-testid="fm-unsaved-discard"
-          >
-            Don’t Save
-          </button>
-          {!conflictPending && (
-            <button
-              type="button"
-              className="fm-modal-button fm-modal-button-primary"
-              onClick={onSave}
-              data-testid="fm-unsaved-save"
-              autoFocus
-            >
-              {untitled ? "Save As…" : "Save"}
-            </button>
-          )}
-        </footer>
-      </div>
-    </div>
+        )}
+      </footer>
+    </Modal>
   );
 }

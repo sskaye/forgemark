@@ -127,18 +127,14 @@ describe("sidebar / card / anchor synchronisation (Phase 4)", () => {
     });
   });
 
-  it("cards have role=button and tabIndex=0 (keyboard reachable)", async () => {
+  it("cards are focusable regions, not buttons (their controls are buttons)", async () => {
+    // A button may not contain buttons, and an aria-label on the card
+    // replaced its whole content for screen readers.
     await loadFixture();
     const card = screen.getByTestId("fm-card-1");
-    expect(card.getAttribute("role")).toBe("button");
+    expect(card.getAttribute("role")).not.toBe("button");
     expect(card.getAttribute("tabindex")).toBe("0");
-  });
-
-  it("card aria-label includes author and a body preview", async () => {
-    await loadFixture();
-    const card = screen.getByTestId("fm-card-1");
-    const label = card.getAttribute("aria-label") ?? "";
-    expect(label).toContain("Claude");
-    expect(label).toContain("sample composition");
+    expect(card.getAttribute("aria-label")).toContain("Claude");
+    expect(card.textContent).toContain("sample composition");
   });
 });

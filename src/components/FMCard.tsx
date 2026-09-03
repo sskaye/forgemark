@@ -101,10 +101,9 @@ export function FMCard({
         className={className}
         data-testid={`fm-card-${comment.id}`}
         data-anchor-card-id={comment.id}
-        role="button"
         tabIndex={0}
-        aria-pressed={focused}
-        aria-label={`Resolved comment by ${comment.author}: ${plainPreview(comment, 60)}`}
+        aria-current={focused ? "true" : undefined}
+        aria-label={`Resolved comment by ${comment.author}`}
         onClick={onFocus}
         onKeyDown={onKey}
         onMouseEnter={() => onHover(true)}
@@ -127,10 +126,9 @@ export function FMCard({
       className={className}
       data-testid={`fm-card-${comment.id}`}
       data-anchor-card-id={comment.id}
-      role="button"
       tabIndex={0}
-      aria-pressed={focused}
-      aria-label={`Comment by ${comment.author}: ${plainPreview(comment, 60)}`}
+      aria-current={focused ? "true" : undefined}
+      aria-label={`Comment by ${comment.author}`}
       onClick={onFocus}
       onFocus={onFocus}
       onKeyDown={onKey}

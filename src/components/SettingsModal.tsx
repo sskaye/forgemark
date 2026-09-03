@@ -1,3 +1,5 @@
+import { Modal } from "./Modal";
+import { Segmented } from "./Segmented";
 import { useEffect, useRef, useState } from "react";
 import {
   useAuthorName,
@@ -47,154 +49,135 @@ export function SettingsModal({ onClose }: Props) {
     authorRef.current?.focus();
   }, []);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   return (
-    <div
-      className="fm-modal-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="fm-settings-title"
-      data-testid="fm-settings-modal"
-      onClick={onClose}
+    <Modal
+      labelledBy="fm-settings-title"
+      testId="fm-settings-modal"
+      onClose={onClose}
+      contentClassName="fm-settings"
     >
-      <div className="fm-settings" role="document" onClick={(e) => e.stopPropagation()}>
-        <header className="fm-settings-header">
-          <h2 id="fm-settings-title" className="fm-settings-title">
-            Settings
-          </h2>
-        </header>
-        <div className="fm-settings-body">
-          <Section title="General">
-            <Field label="Author name" htmlFor="fm-author">
-              <input
-                ref={authorRef}
-                id="fm-author"
-                type="text"
-                className="fm-settings-input"
-                value={author}
-                onChange={(e) => setAuthor(e.target.value)}
-                data-testid="fm-settings-author"
-              />
-            </Field>
-            <Field label="Theme">
-              <Segmented
-                testid="fm-settings-theme"
-                value={theme}
-                options={[
-                  { value: "light", label: "Light" },
-                  { value: "dark", label: "Dark" },
-                  { value: "system", label: "System" },
-                ]}
-                onChange={(v) => setTheme(v as "light" | "dark" | "system")}
-              />
-            </Field>
-            <Field label="Font size">
-              <div className="fm-settings-stepper">
-                <button
-                  type="button"
-                  className="fm-settings-stepper-btn"
-                  onClick={() => setFontSize(fontSize - 1)}
-                  disabled={fontSize <= FONT_SIZE_RANGE.min}
-                  aria-label="Decrease text size"
-                  data-testid="fm-settings-font-down"
-                >
-                  −
-                </button>
-                <span className="fm-settings-stepper-value" data-testid="fm-settings-font-value">
-                  {fontSize}
-                </span>
-                <button
-                  type="button"
-                  className="fm-settings-stepper-btn"
-                  onClick={() => setFontSize(fontSize + 1)}
-                  disabled={fontSize >= FONT_SIZE_RANGE.max}
-                  aria-label="Increase text size"
-                  data-testid="fm-settings-font-up"
-                >
-                  +
-                </button>
-              </div>
-            </Field>
-            <Field label="Default view" hint="Applies to the next opened document.">
-              <Segmented
-                testid="fm-settings-default-view"
-                value={defaultView}
-                options={[
-                  { value: "rendered", label: "Rendered" },
-                  { value: "source", label: "Source" },
-                ]}
-                onChange={(v) => setDefaultView(v as ViewPreference)}
-              />
-            </Field>
-          </Section>
-
-          <Section title="AI Participation">
-            <p className="fm-settings-ai-blurb">
-              Forgemark ships a small skill bundle that teaches an AI agent how to read and write
-              Forgemark files. Pick the artifact your tool expects:
-            </p>
-            <div className="fm-settings-ai-buttons">
+      <header className="fm-settings-header">
+        <h2 id="fm-settings-title" className="fm-settings-title">
+          Settings
+        </h2>
+      </header>
+      <div className="fm-settings-body">
+        <Section title="General">
+          <Field label="Author name" htmlFor="fm-author">
+            <input
+              ref={authorRef}
+              id="fm-author"
+              type="text"
+              className="fm-settings-input"
+              value={author}
+              onChange={(e) => setAuthor(e.target.value)}
+              data-testid="fm-settings-author"
+            />
+          </Field>
+          <Field label="Theme">
+            <Segmented
+              testid="fm-settings-theme"
+              value={theme}
+              options={[
+                { value: "light", label: "Light" },
+                { value: "dark", label: "Dark" },
+                { value: "system", label: "System" },
+              ]}
+              onChange={(v) => setTheme(v as "light" | "dark" | "system")}
+            />
+          </Field>
+          <Field label="Font size">
+            <div className="fm-settings-stepper">
               <button
                 type="button"
-                className="fm-modal-button fm-modal-button-primary"
-                onClick={() => onDownload("claude")}
-                disabled={downloadState.inFlight !== null}
-                data-testid="fm-settings-skill-claude"
+                className="fm-settings-stepper-btn"
+                onClick={() => setFontSize(fontSize - 1)}
+                disabled={fontSize <= FONT_SIZE_RANGE.min}
+                aria-label="Decrease text size"
+                data-testid="fm-settings-font-down"
               >
-                {downloadState.inFlight === "claude" ? "Saving…" : "Download for Claude (.skill)"}
+                −
               </button>
+              <span className="fm-settings-stepper-value" data-testid="fm-settings-font-value">
+                {fontSize}
+              </span>
               <button
                 type="button"
-                className="fm-modal-button fm-modal-button-primary"
-                onClick={() => onDownload("codex")}
-                disabled={downloadState.inFlight !== null}
-                data-testid="fm-settings-skill-codex"
+                className="fm-settings-stepper-btn"
+                onClick={() => setFontSize(fontSize + 1)}
+                disabled={fontSize >= FONT_SIZE_RANGE.max}
+                aria-label="Increase text size"
+                data-testid="fm-settings-font-up"
               >
-                {downloadState.inFlight === "codex" ? "Saving…" : "Download for Codex (.zip)"}
+                +
               </button>
             </div>
-            <p className="fm-settings-ai-help">
-              Both files contain identical content; the extension is what your AI tool expects.
-            </p>
-            {downloadState.error && (
-              <p
-                className="fm-settings-ai-error"
-                data-testid="fm-settings-skill-error"
-                role="alert"
-              >
-                {downloadState.error}
-              </p>
-            )}
-          </Section>
+          </Field>
+          <Field label="Default view" hint="Applies to the next opened document.">
+            <Segmented
+              testid="fm-settings-default-view"
+              value={defaultView}
+              options={[
+                { value: "rendered", label: "Rendered" },
+                { value: "source", label: "Source" },
+              ]}
+              onChange={(v) => setDefaultView(v as ViewPreference)}
+            />
+          </Field>
+        </Section>
 
-          <Section title="About">
-            <p className="fm-settings-about">
-              Forgemark — collaborative review of markdown documents. Built with Tauri.
+        <Section title="AI Participation">
+          <p className="fm-settings-ai-blurb">
+            Forgemark ships a small skill bundle that teaches an AI agent how to read and write
+            Forgemark files. Pick the artifact your tool expects:
+          </p>
+          <div className="fm-settings-ai-buttons">
+            <button
+              type="button"
+              className="fm-modal-button fm-modal-button-primary"
+              onClick={() => onDownload("claude")}
+              disabled={downloadState.inFlight !== null}
+              data-testid="fm-settings-skill-claude"
+            >
+              {downloadState.inFlight === "claude" ? "Saving…" : "Download for Claude (.skill)"}
+            </button>
+            <button
+              type="button"
+              className="fm-modal-button fm-modal-button-primary"
+              onClick={() => onDownload("codex")}
+              disabled={downloadState.inFlight !== null}
+              data-testid="fm-settings-skill-codex"
+            >
+              {downloadState.inFlight === "codex" ? "Saving…" : "Download for Codex (.zip)"}
+            </button>
+          </div>
+          <p className="fm-settings-ai-help">
+            Both files contain identical content; the extension is what your AI tool expects.
+          </p>
+          {downloadState.error && (
+            <p className="fm-settings-ai-error" data-testid="fm-settings-skill-error" role="alert">
+              {downloadState.error}
             </p>
-          </Section>
-        </div>
-        <footer className="fm-settings-footer">
-          <button
-            type="button"
-            className="fm-modal-button fm-modal-button-primary"
-            onClick={onClose}
-            data-testid="fm-settings-done"
-          >
-            Done
-          </button>
-        </footer>
+          )}
+        </Section>
+
+        <Section title="About">
+          <p className="fm-settings-about">
+            Forgemark — collaborative review of markdown documents. Built with Tauri.
+          </p>
+        </Section>
       </div>
-    </div>
+      <footer className="fm-settings-footer">
+        <button
+          type="button"
+          className="fm-modal-button fm-modal-button-primary"
+          onClick={onClose}
+          data-testid="fm-settings-done"
+        >
+          Done
+        </button>
+      </footer>
+    </Modal>
   );
 }
 
@@ -227,39 +210,6 @@ function Field({
         {children}
         {hint && <span className="fm-settings-field-hint">{hint}</span>}
       </div>
-    </div>
-  );
-}
-
-function Segmented<T extends string>({
-  value,
-  options,
-  onChange,
-  testid,
-}: {
-  value: T;
-  options: { value: T; label: string }[];
-  onChange: (v: T) => void;
-  testid: string;
-}) {
-  return (
-    <div className="fm-segmented" role="radiogroup" data-testid={testid}>
-      {options.map((opt) => {
-        const active = opt.value === value;
-        return (
-          <button
-            key={opt.value}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            className={"fm-segmented-button" + (active ? " is-active" : "")}
-            onClick={() => onChange(opt.value)}
-            data-testid={`${testid}-${opt.value}`}
-          >
-            {opt.label}
-          </button>
-        );
-      })}
     </div>
   );
 }

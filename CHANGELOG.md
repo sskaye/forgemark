@@ -42,6 +42,7 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 
 ### Changed
 
+- Every dialog now uses one modal shell built on the native `dialog` element: it takes focus when it opens, gives it back to whatever opened it when it closes, traps Tab inside itself, and answers Enter only from within. Comment cards are focusable regions rather than buttons, so screen readers hear their content and the reply controls are reachable by keyboard. The Rendered/Source switch and the Settings choices share one segmented control that moves with arrow keys.
 - The test suite mounts the app through one shared harness against one in-memory fake of the Tauri plugins, replacing identical mock blocks in thirty files. Five tests that mounted the document bindings twice, and so ran two auto-save timers against one document, now mount them once. Timing assertions moved behind `npm run test:perf`. The unused AI test harness, its SDK dependency, and the unused retry helper are gone.
 - The skill's instructions lead with the tool; the format reference stays for reading a file and as a fallback. The spec now states that `anchor_text` is advisory and how it is normalised, that ids stay sparse after deletions, and how a regenerated report keeps its review.
 - `npm run verify-ai-output` is now `forgemark lint` over the built tool (the previous script depended on a package that was not installed).

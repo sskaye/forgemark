@@ -1,3 +1,4 @@
+import { Segmented } from "./Segmented";
 import "./TitleBar.css";
 
 type Props = {
@@ -35,7 +36,16 @@ export function TitleBar({
       </div>
 
       <div className="fm-titlebar-actions">
-        <ViewModeToggle value={viewMode} onChange={onViewModeChange} />
+        <Segmented
+          role="tablist"
+          label="View mode"
+          value={viewMode}
+          options={[
+            { value: "rendered", label: "Rendered" },
+            { value: "source", label: "Source" },
+          ]}
+          onChange={onViewModeChange}
+        />
         <SidebarToggle open={sidebarOpen} onClick={onToggleSidebar} />
         {onOpenSettings && <SettingsButton onClick={onOpenSettings} />}
       </div>
@@ -66,34 +76,6 @@ function SettingsButton({ onClick }: { onClick: () => void }) {
         <circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.1" />
       </svg>
     </button>
-  );
-}
-
-function ViewModeToggle({
-  value,
-  onChange,
-}: {
-  value: "rendered" | "source";
-  onChange: (v: "rendered" | "source") => void;
-}) {
-  return (
-    <div className="fm-segmented" role="tablist" aria-label="View mode">
-      {(["rendered", "source"] as const).map((mode) => {
-        const active = value === mode;
-        return (
-          <button
-            key={mode}
-            type="button"
-            role="tab"
-            aria-selected={active}
-            className={"fm-segmented-button" + (active ? " is-active" : "")}
-            onClick={() => onChange(mode)}
-          >
-            {mode === "rendered" ? "Rendered" : "Source"}
-          </button>
-        );
-      })}
-    </div>
   );
 }
 

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { Modal } from "./Modal";
 import type { DocumentState } from "../state/document";
 import "./ConflictModals.css";
 
@@ -17,71 +17,51 @@ type Props = {
 // Cancel keeps the externalChange pending; the banner remains visible
 // and a subsequent ⌘S routes through the save-conflict modal.
 export function EditDuringOpenModal({ state, onReloadFromDisk, onKeepYours, onCancel }: Props) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onCancel();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel]);
-
   const items = summarizeUnsavedWork(state);
 
   return (
-    <div
-      className="fm-modal-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="fm-edit-during-title"
-      data-testid="fm-edit-during-modal"
-      onClick={onCancel}
-    >
-      <div className="fm-modal" role="document" onClick={(e) => e.stopPropagation()}>
-        <header className="fm-modal-header">
-          <h2 id="fm-edit-during-title" className="fm-modal-title">
-            This file changed on disk
-          </h2>
-          <p className="fm-modal-sub">You have unsaved work in this window:</p>
-        </header>
-        <section className="fm-modal-body">
-          <ul className="fm-conflict-summary" data-testid="fm-edit-during-summary">
-            {items.map((it, i) => (
-              <li key={i}>{it}</li>
-            ))}
-          </ul>
-        </section>
-        <footer className="fm-modal-footer">
-          <button
-            type="button"
-            className="fm-modal-button"
-            onClick={onCancel}
-            data-testid="fm-edit-during-cancel"
-          >
-            Cancel
-          </button>
-          <div className="fm-modal-spacer" />
-          <button
-            type="button"
-            className="fm-modal-button"
-            onClick={onKeepYours}
-            data-testid="fm-edit-during-keep"
-          >
-            Keep your version
-          </button>
-          <button
-            type="button"
-            className="fm-modal-button fm-modal-button-primary"
-            onClick={onReloadFromDisk}
-            data-testid="fm-edit-during-reload"
-          >
-            Reload from disk
-          </button>
-        </footer>
-      </div>
-    </div>
+    <Modal labelledBy="fm-edit-during-title" testId="fm-edit-during-modal" onClose={onCancel}>
+      <header className="fm-modal-header">
+        <h2 id="fm-edit-during-title" className="fm-modal-title">
+          This file changed on disk
+        </h2>
+        <p className="fm-modal-sub">You have unsaved work in this window:</p>
+      </header>
+      <section className="fm-modal-body">
+        <ul className="fm-conflict-summary" data-testid="fm-edit-during-summary">
+          {items.map((it, i) => (
+            <li key={i}>{it}</li>
+          ))}
+        </ul>
+      </section>
+      <footer className="fm-modal-footer">
+        <button
+          type="button"
+          className="fm-modal-button"
+          onClick={onCancel}
+          data-testid="fm-edit-during-cancel"
+        >
+          Cancel
+        </button>
+        <div className="fm-modal-spacer" />
+        <button
+          type="button"
+          className="fm-modal-button"
+          onClick={onKeepYours}
+          data-testid="fm-edit-during-keep"
+        >
+          Keep your version
+        </button>
+        <button
+          type="button"
+          className="fm-modal-button fm-modal-button-primary"
+          onClick={onReloadFromDisk}
+          data-testid="fm-edit-during-reload"
+        >
+          Reload from disk
+        </button>
+      </footer>
+    </Modal>
   );
 }
 
