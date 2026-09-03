@@ -11,8 +11,9 @@
 //
 // Two contracts the build keeps:
 //   - Both artifacts are byte-identical (sha256 equal).
-//   - Total bundle size is < 60 KB (the size budget the design
-//     handoff and Phase 12 plan committed to).
+//   - Total bundle size is < 512 KB. The prose and examples are ~30 KB;
+//     the rest of the budget is the CLI bundle (scripts/forgemark.mjs,
+//     built by build-cli.mjs), which carries the whole format layer.
 
 import {
   readdirSync,
@@ -30,7 +31,7 @@ const SRC = join(ROOT, "assets", "forgemark-skill");
 const OUT_DIR = join(ROOT, "assets");
 const SKILL_OUT = join(OUT_DIR, "forgemark-skill.skill");
 const ZIP_OUT = join(OUT_DIR, "forgemark-skill.zip");
-const SIZE_BUDGET = 60 * 1024;
+const SIZE_BUDGET = 512 * 1024;
 
 // Files in the source tree that aren't part of the skill payload.
 const IGNORE = new Set([".DS_Store"]);

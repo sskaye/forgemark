@@ -488,7 +488,10 @@ export function EditorPane({ docId }: Props) {
   const sourceText = useMemo(
     () =>
       state.viewMode === "source"
-        ? serializeForgemarkFile({ body: state.body, comments: state.comments })
+        ? serializeForgemarkFile(
+            { body: state.body, comments: state.comments },
+            { validate: false },
+          )
         : "",
     [state.viewMode, state.body, state.comments],
   );

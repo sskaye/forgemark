@@ -34,7 +34,7 @@ function recoveryMessage(err: unknown, recovery: RecoveryResult): string {
     return `Some comment anchors were damaged. Recovered ${recovery.file.comments.length} comment(s); any showing a lost anchor can be reattached.`;
   }
   return err instanceof ForgemarkParseError
-    ? `Comments block couldn't be parsed (${err.kind}); loaded as plain markdown.`
+    ? `Comments block couldn't be read — ${err.message}. Loaded as plain markdown; the file can't be saved with new comments until the block is repaired.`
     : errorMessage("Couldn't parse comment block", err);
 }
 
@@ -241,9 +241,17 @@ export function DocumentBindings({
     async (opts: { forcePrompt?: boolean } = {}) => {
       const s = stateRef.current;
       if (s.readOnly) return;
-      const text = s.dirty
-        ? serializeForgemarkFile({ body: s.body, comments: s.comments })
-        : s.originalText;
+      let text: string;
+      try {
+        text = s.dirty
+          ? serializeForgemarkFile({ body: s.body, comments: s.comments })
+          : s.originalText;
+      } catch (err) {
+        // The serializer refuses output it can't read back (or a body
+        // that already holds an unreadable block). Nothing was written.
+        dispatch({ type: "error", message: errorMessage("Couldn't save", err) });
+        return;
+      }
       // Save As (⌘⇧S) forces the location prompt regardless of whether
       // the buffer already has a path; plain Save (⌘S) reuses the
       // path when set.
@@ -463,8 +471,8 @@ export function DocumentBindings({
     if (state.readOnly) return;
     if (state.externalChange != null) return;
     const handle = setTimeout(async () => {
-      const text = serializeForgemarkFile({ body: state.body, comments: state.comments });
       try {
+        const text = serializeForgemarkFile({ body: state.body, comments: state.comments });
         await saveDocument(state.filePath, text);
         dispatch({ type: "saved", text, body: state.body });
         baselineRef.current = await fingerprint(text, null);

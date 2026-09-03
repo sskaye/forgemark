@@ -2,6 +2,24 @@
 
 All notable changes to Forgemark are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- A command-line tool for AI agents, shipped inside the skill as `scripts/forgemark.mjs`. `list`, `show`, `comment`, `reply`, `resolve`, `float`, `reattach`, `delete`, and `lint` do everything an agent needs in a review without it ever composing the comments block or placing a marker by hand. It is built from the app's own parser and serializer, checks that every write reads back, and writes atomically; passages are named by quoting them, and the tool refuses an ambiguous phrase or one that overlaps another comment rather than guessing. Works on Markdown and HTML reports, including whole-element anchors by `id`.
+- `forgemark lint` reports everything the app would refuse in a file — with the file line and the comment record for an unreadable block — plus the things a reviewer would rather not meet: an orphaned comment, an anchor description that has drifted, a malformed timestamp.
+
+### Fixed
+
+- A comment whose anchor crossed a hard-wrapped line could be written as YAML the app could not read back, hiding every comment in the file on the next open. Such values are now quoted, and the app parses its own output before writing it.
+- Opening a file whose comments block could not be read, then adding a comment, appended a second block with colliding ids. Saving now refuses in that state and says where the unreadable block is, so it can be repaired; prose edits still save.
+- The error shown for an unreadable comments block now names the line and the comment id instead of "couldn't be parsed (yaml)".
+
+### Changed
+
+- The skill's instructions lead with the tool; the format reference stays for reading a file and as a fallback. The spec now states that `anchor_text` is advisory and how it is normalised, that ids stay sparse after deletions, and how a regenerated report keeps its review.
+- `npm run verify-ai-output` is now `forgemark lint` over the built tool (the previous script depended on a package that was not installed).
+
 ## [1.6.0] — 2026-08-18
 
 ### Added

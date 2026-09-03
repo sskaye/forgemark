@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Forgemark Codebase Review</title>
+<style>
+  :root {
+    --ground: #FCFCFB;
+    --plane: #F4F4F2;
+    --ink: #1B1B1A;
+    --muted: rgba(27,27,26,0.62);
+    --faint: rgba(27,27,26,0.42);
+    --rule: rgba(27,27,26,0.12);
+    --accent: #0A84FF;
+    --accent-soft: rgba(10,132,255,0.10);
+    --crit: #C9522E;
+    --crit-soft: rgba(201,82,46,0.12);
+    --high: #B8860B;
+    --high-soft: rgba(184,134,11,0.14);
+    --med: #2F6F9F;
+    --med-soft: rgba(47,111,159,0.12);
+    --low: rgba(27,27,26,0.55);
+    --low-soft: rgba(27,27,26,0.07);
+    --good: #1E7F5C;
+    --code-bg: rgba(27,27,26,0.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #1A1A19;
+      --plane: #222221;
+      --ink: #ECECEC;
+      --muted: rgba(236,236,236,0.62);
+      --faint: rgba(236,236,236,0.42);
+      --rule: rgba(236,236,236,0.14);
+      --accent: #3998FF;
+      --accent-soft: rgba(57,152,255,0.18);
+      --crit: #E8785A;
+      --crit-soft: rgba(232,120,90,0.16);
+      --high: #D9A83A;
+      --high-soft: rgba(217,168,58,0.16);
+      --med: #6FAEE0;
+      --med-soft: rgba(111,174,224,0.16);
+      --low: rgba(236,236,236,0.55);
+      --low-soft: rgba(236,236,236,0.08);
+      --good: #4FBF92;
+      --code-bg: rgba(236,236,236,0.08);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #1A1A19;
+    --plane: #222221;
+    --ink: #ECECEC;
+    --muted: rgba(236,236,236,0.62);
+    --faint: rgba(236,236,236,0.42);
+    --rule: rgba(236,236,236,0.14);
+    --accent: #3998FF;
+    --accent-soft: rgba(57,152,255,0.18);
+    --crit: #E8785A;
+    --crit-soft: rgba(232,120,90,0.16);
+    --high: #D9A83A;
+    --high-soft: rgba(217,168,58,0.16);
+    --med: #6FAEE0;
+    --med-soft: rgba(111,174,224,0.16);
+    --low: rgba(236,236,236,0.55);
+    --low-soft: rgba(236,236,236,0.08);
+    --good: #4FBF92;
+    --code-bg: rgba(236,236,236,0.08);
+  }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    letter-spacing: -0.005em;
+    margin: 0;
+  }
+  main { max-width: 74ch; margin: 0 auto; padding: 48px 24px 96px; }
+  h1 { font-size: 30px; line-height: 1.2; font-weight: 650; letter-spacing: -0.02em; margin: 0 0 8px; text-wrap: balance; }
+  h2 { font-size: 20px; line-height: 1.3; font-weight: 620; letter-spacing: -0.012em; margin: 56px 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--rule); text-wrap: balance; }
+  h3 { font-size: 17px; line-height: 1.35; font-weight: 620; margin: 0; text-wrap: balance; }
+  p { margin: 0 0 12px; }
+  .lede { color: var(--muted); font-size: 17px; margin: 0 0 28px; max-width: 62ch; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--faint); font-size: 13px; letter-spacing: 0.02em; text-transform: uppercase; margin-bottom: 36px; }
+  code, .path { font: 13.5px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; letter-spacing: 0; }
+  .path { color: var(--muted); }
+  .tiers { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin: 0 0 8px; }
+  .tier { background: var(--plane); border-radius: 8px; padding: 12px 14px; }
+  .tier b { display: block; font-size: 26px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .tier span { color: var(--muted); font-size: 13px; }
+  .tier.crit b { color: var(--crit); }
+  .tier.high b { color: var(--high); }
+  .tier.med b { color: var(--med); }
+  .tier.low b { color: var(--low); }
+  ol.items { list-style: none; margin: 0; padding: 0; counter-reset: item; }
+  ol.items > li { position: relative; padding: 22px 0 22px 56px; border-top: 1px solid var(--rule); counter-increment: item; }
+  ol.items > li::before { content: counter(item); position: absolute; left: 0; top: 20px; width: 40px; font-size: 24px; font-weight: 650; letter-spacing: -0.02em; color: var(--faint); font-variant-numeric: tabular-nums; text-align: right; }
+  .head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin-bottom: 8px; }
+  .chip { display: inline-block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; line-height: 1.6; }
+  .chip.crit { color: var(--crit); background: var(--crit-soft); }
+  .chip.high { color: var(--high); background: var(--high-soft); }
+  .chip.med { color: var(--med); background: var(--med-soft); }
+  .chip.low { color: var(--low); background: var(--low-soft); }
+  .size { color: var(--faint); font-size: 13px; }
+  .why { margin-bottom: 10px; }
+  .why strong { font-weight: 620; }
+  ul.findings { margin: 6px 0 12px; padding-left: 18px; }
+  ul.findings li { margin-bottom: 6px; }
+  ul.findings li::marker { color: var(--faint); }
+  .fix { background: var(--accent-soft); border-radius: 8px; padding: 10px 14px; margin-top: 10px; }
+  .fix::before { content: "Do"; display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; }
+  .fix p:last-child { margin-bottom: 0; }
+  ul.good { margin: 0; padding-left: 18px; }
+  ul.good li { margin-bottom: 8px; }
+  ul.good li::marker { color: var(--good); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  .scroll { overflow-x: auto; margin: 12px 0 20px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  td code { white-space: nowrap; }
+  .note { color: var(--muted); font-size: 14px; }
+  @media (max-width: 640px) {
+    .tiers { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    ol.items > li { padding-left: 40px; }
+    ol.items > li::before { width: 28px; font-size: 18px; top: 24px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Forgemark Codebase Review</h1>
+  <p class="lede">Every finding from a full read of the app, the shell, the tooling, and the tests, ranked into fourteen pieces of work by how much they matter to a small group of expert users who trust the tool with their files.</p>
+  <div class="meta">
+    <span>Branch feature/agent-cli</span>
+    <span>3 September 2026</span>
+    <span>~13,000 lines of TypeScript and Rust read</span>
+    <span>Top claims re-verified by hand</span>
+  </div>
+
+  <div class="tiers">
+    <div class="tier crit"><b>2</b><span>Critical: data loss in the core workflow</span></div>
+    <div class="tier high"><b>4</b><span>High: bugs a reviewer will hit</span></div>
+    <div class="tier med"><b>5</b><span>Medium: structure and workflow</span></div>
+    <div class="tier low"><b>3</b><span>Low: hygiene and cleanup</span></div>
+  </div>
+  <p class="note">Sizes are rough: small is under a day, medium a few days, large a week or more. Line numbers are as of this branch.</p>
+
+  <h2>How to read the ranking</h2>
+  <p>The product's promise is that review data lives in the author's file without disturbing it, and that a human and an agent can work on one file together. Anything that breaks either promise ranks first, whatever its size. Bugs an expert hits in a normal session come next. Structural work ranks by how much it lowers the cost of everything after it. Hygiene is last, and mostly small.</p>
+
+  <ol class="items">
+
+    <li>
+      <div class="head"><span class="chip crit">Critical</span><h3>Make commenting and editing Markdown lossless</h3><span class="size">large, in three steps</span></div>
+      <p class="why"><strong>Every comment or keystroke rewrites the whole file in the editor's dialect.</strong> The rendered view re-serializes the entire document through Tiptap on any change, including adding one comment with no typing. A probe with the app's exact extension list changed 24 of 32 ordinary Markdown constructs. Frontmatter becomes a heading. Bare filenames are autolinked. HTML blocks and ordinary HTML comments are deleted. Hard-wrapped paragraphs are unwrapped. Reference links are inlined and their definitions dropped. Footnotes, escapes, tables' alignment, setext headings, indented code, and multiple blank lines are all normalised. A four-backtick fence around a three-backtick fence is corrupted. This is what rewrote SKILL.md during your review, and it makes a reviewed file's git diff the entire document.</p>
+      <ul class="findings">
+        <li><span class="path">src/components/RenderedView.tsx:244-268, 388-394</span> the update and applyAnchor paths both return <code>getMarkdown()</code> for the whole document.</li>
+        <li><span class="path">src/components/RenderedView.tsx:193-198, 216</span> mark order puts bold outside the anchor, so an anchor spanning <code>**bold** and *em*</code> ends up with its markers inside the delimiters after one pass and shrinks to <code>bold</code> on the second. <code>linkify: true</code> plus the Link extension's default autolink produce the filename links.</li>
+        <li><span class="path">@tiptap/extension-code</span> declares <code>excludes: "_"</code>, so bold and anchors are dropped from inline code at parse time. An anchor around <code>`foo()`</code> loses its markers entirely and the comment is orphaned by the first keystroke. The CLI creates exactly this shape when a phrase touches code.</li>
+        <li><span class="path">src/format/markers-display.ts:21-25, 78-89</span> span replacement and coalescing are not fence-aware, unlike the scanner, so markers quoted inside a code fence are eaten and a stray <code>&lt;/span&gt;</code> can be left in the fence. This is the mechanism that stripped the example in SKILL.md twice.</li>
+        <li><span class="path">src/components/CodeBlockAnchor.ts:79-91</span> writes the block's trailing newline, so a code block inside a list gains a blank line per save; it always emits three backticks, which breaks nested fences.</li>
+      </ul>
+      <div class="fix">
+        <p><strong>Step 1, small to medium.</strong> Stop routing Markdown comments through the editor. HTML already splices markers at byte offsets; do the same for Markdown by moving the CLI's phrase locator from <code>cli/anchor.ts</code> into <code>src/format</code> and using the captured selection text and context to find the passage in the untouched body. A reviewer who never types then gets a byte-identical file plus two markers. Make prose editing an explicit toggle, off by default, so a stray keystroke cannot normalise a file.</p>
+        <p><strong>Step 2, small.</strong> The cheap fidelity wins: split frontmatter off before the editor and re-attach it after; turn off <code>linkify</code> and Link's <code>autolink</code>; register a Code extension with <code>excludes: ""</code> after the anchor mark; make span replacement use the scanner's code regions; strip the trailing newline and size the fence to the longest backtick run in CodeBlockAnchor. Represent markers as inline atom nodes rather than a mark so an anchor can legally span formatting. Add a parity test that runs each fixture through the real extension list and compares bytes.</p>
+        <p><strong>Step 3, medium to large, choose one.</strong> For typing, either diff the editor's top-level blocks against the source's block map and splice only the changed run (keeps WYSIWYG; unrepresentable blocks become verbatim atoms), or edit in CodeMirror, which is already a dependency, and keep the rendered view read-only. For this userbase, CodeMirror editing is the smaller and more honest option unless WYSIWYG typing is a hard requirement.</p>
+      </div>
+    </li>
+
+    <li>
+      <div class="head"><span class="chip crit">Critical</span><h3>Stop auto-save from overwriting an agent's write</h3><span class="size">medium</span></div>
+      <p class="why"><strong>The human-plus-agent workflow can lose the agent's comment with no banner.</strong> The file watcher uses the plugin's debounced watch with its default two-second delay, plus a 200 ms debounce of its own, so an external change surfaces about 2.2 seconds after it lands. Auto-save fires 500 ms after any keystroke and never checks the disk. If the CLI writes a reply and the reviewer types within two seconds, auto-save writes over it, the watcher then reads the app's own bytes, the hash matches the refreshed baseline, and nothing surfaces.</p>
+      <ul class="findings">
+        <li><span class="path">src/state/DocumentBindings.tsx:468-484, 240-262</span> neither auto-save nor ⌘S compares the disk against the baseline before writing.</li>
+        <li><span class="path">src/services/fileWatcher.ts:47, 84-93</span> calls <code>watch()</code> without <code>delayMs</code>.</li>
+        <li><span class="path">src/services/fileIO.ts:130</span> the app's own write is a truncate-then-write, so a concurrent reader (the CLI's <code>lint</code>) can see a partial file. The CLI writes through a temp file and rename; the app should too, and needs <code>fs:allow-rename</code> in the capability.</li>
+        <li><span class="path">src/state/DocumentBindings.tsx:112, 278, 478</span> every baseline is built with a null mtime, so the mtime fast path in <code>conflict.ts</code> never runs and two of its unit tests describe behaviour production never exercises.</li>
+      </ul>
+      <div class="fix"><p>Before every write, stat and re-read the file and compare its fingerprint with the baseline; on a mismatch dispatch the external-change action instead of writing. Pass a short <code>delayMs</code> to the watcher. Write through a temp file and rename. Store the mtime in the baseline or delete the dead fast path.</p></div>
+    </li>
+
+    <li>
+      <div class="head"><span class="chip high">High</span><h3>Fix the save and quit state machine</h3><span class="size">small each, one focused pass</span></div>
+      <p class="why"><strong>Four verified bugs in one file, all reachable in a normal session.</strong></p>
+      <ul class="findings">
+        <li><span class="path">src/state/DocumentBindings.tsx:293-318, 355-373</span> ⌘Q with a read-only document that has an unsaved comment loops forever: <code>runQuit</code> finds the dirty doc, <code>guardDiscard</code> treats read-only as nothing to do and calls <code>executeIntent</code>, which calls <code>runQuit</code> again. Commenting on read-only files is allowed, and such a review can never be saved anywhere because Save As is also blocked by the read-only check.</li>
+        <li><span class="path">src/state/DocumentBindings.tsx:473-478; src/state/document.ts:352-360</span> keystrokes typed while a save is in flight are lost: the <code>saved</code> action replaces <code>body</code> with the snapshot that was written and clears dirty, so a later edit is reverted in state and in the editor and never saved.</li>
+        <li><span class="path">src/state/DocumentBindings.tsx:364-369</span> the silent save on close or quit does not check that the save succeeded; a disk-full or permission error flashes a banner and the tab closes anyway.</li>
+        <li><span class="path">src/state/document.ts:315-344; DocumentBindings.tsx:380-415</span> "Save As" from the unsaved-changes prompt writes the file but never carries out the close or quit, because the <code>load</code> action clears the pending intent. The same action also flips a user in Source view back to Rendered and lets Save As target a path already open in another tab.</li>
+      </ul>
+      <div class="fix"><p>Skip read-only documents in <code>runQuit</code> and let Save As proceed for them. Make <code>saved</code> leave <code>body</code> alone and set dirty from a comparison with the written snapshot. Have <code>performSave</code> return whether the write happened, and fall through to the prompt when it did not. Give the rebind-only load its own reducer branch that touches only path, name, original text, and dirty. Add one integration test per bug.</p></div>
+    </li>
+
+    <li>
+      <div class="head"><span class="chip high">High</span><h3>Make delete recoverable and undo consistent</h3><span class="size">small to medium</span></div>
+      <p class="why"><strong>Delete is one keystroke, unconfirmed, and irreversible, and ⌘Z afterwards corrupts the file.</strong> Backspace with a card focused deletes a whole thread with its replies. Programmatic body replacements for delete, accept, reject, and reattach go through <code>setContent</code> as ordinary history entries, so ⌘Z restores the markers in the editor while the record stays deleted; the next save writes a recordless pair, and if a comment is added meanwhile its id is reused and the pair is duplicated.</p>
+      <ul class="findings">
+        <li><span class="path">src/components/Sidebar.tsx:84-88; FMCard.tsx:223-233, 273-283, 323-333</span> immediate <code>deleteComment</code> dispatch.</li>
+        <li><span class="path">src/components/RenderedView.tsx:279</span> <code>setContent</code> without <code>addToHistory: false</code>; the undo-isolation test currently asserts the opposite intent.</li>
+      </ul>
+      <div class="fix"><p>Mark programmatic replacements as not undoable in the editor, and add a small reducer-level undo that keeps the last deleted comment with its previous body and offers "Undo" in the banner slot for a few seconds. That is better than a confirm dialog for an expert user.</p></div>
+    </li>
+
+    <li>
+      <div class="head"><span class="chip high">High</span><h3>One keymap, and shortcuts that know where focus is</h3><span class="size">small to medium</span></div>
+      <p class="why"><strong>⌘⇧E is bound in three places and all three fire.</strong> With a saved file open and your own card focused, one chord opens the edit composer, the Clean Export modal, and Find with the selection. On macOS the native menu owns the chord, so the sidebar binding is dead in the real app. Card shortcuts listen on <code>window</code> whenever the reducer has a focused comment, which is also set by clicking an anchor in the editor; so ⌘⏎ while typing resolves a thread, and Backspace with the Reattach modal open deletes the comment behind it.</p>
+      <ul class="findings">
+        <li><span class="path">src/components/AppShell.tsx:109-112; Sidebar.tsx:70-81; EditorPane.tsx:268-278; src-tauri/src/lib.rs:202</span> the three bindings and the menu accelerator; the EditorPane branch lacks a shift check.</li>
+        <li><span class="path">src/components/Sidebar.tsx:47-92</span> only the Delete branch checks for a typing target; none check for an open modal or DOM focus in the sidebar.</li>
+        <li><span class="path">src/components/TabBar.tsx:29-39</span> inactive tabs have <code>tabIndex -1</code> and no arrow-key handling, so tabs are unreachable from the keyboard.</li>
+      </ul>
+      <div class="fix"><p>Move every app chord into one keymap table with a single window listener that knows about modals and the focused region. Drive card shortcuts from DOM focus by dispatching the focused comment from the card's focus event. Add ←/→ on the tab strip, ⌘⇧[ and ⌘⇧], and j/k or ↑/↓ to move between cards, which is the navigation the sidebar currently lacks.</p></div>
+    </li>
+
+    <li>
+      <div class="head"><span class="chip high">High</span><h3>Small bugs a reviewer meets every session</h3><span class="size">small each</span></div>
+      <ul class="findings">
+        <li><span class="path">src/components/AppShell.tsx:71-75, 270-278</span> after the first print, the hidden print editor stays mounted and re-parses the whole document on every keystroke. Clear <code>printOptions</code> after printing.</li>
+        <li><span class="path">src/components/FMCard.tsx:435-445</span> the card's markdown stripper runs the emphasis regex before the code strip, so <code>snake_case_name</code> renders as <code>snakecasename</code> and <code>a * b * c</code> loses its stars. On a tool used to review code, the body you read differs from the body the CLI wrote. Render the raw body or use markdown-it, which is already in the tree.</li>
+        <li><span class="path">src/components/Sidebar.tsx:444</span> "Doc order" sorts by id, which is creation order, not position; anchor status already carries the offset.</li>
+        <li><span class="path">src/components/AppShell.tsx:292-301</span> Clean Export computes the default filename and then discards it with <code>void</code>; every export dialog opens as Untitled.</li>
+        <li><span class="path">src/state/DocumentBindings.tsx:138, 200</span> recovery and parse-error banners are dispatched to the previous tab before the new tab opens, so the damaged file shows no warning. Pass the error inside the open-tab payload.</li>
+        <li><span class="path">src/components/InlineComposer.tsx:60-69; NewCommentComposer.tsx:107-116</span> clicking the document to re-read a passage throws away the reply draft; the edit-during-open modal even counts the unsent reply while offering to erase it.</li>
+        <li><span class="path">src/components/Sidebar.tsx:352-393</span> a persisted "by author" filter can point at an author with no comments in the newly opened file; the select goes blank.</li>
+        <li><span class="path">src/state/preferences.ts:230-238</span> clearing the author field writes an empty author into every comment until restart.</li>
+        <li><span class="path">src/components/RenderedView.tsx:619; EditorPane.tsx:789-805</span> stepping through Find matches pops the Comment toolbar over every match.</li>
+        <li><span class="path">src/components/RenderedView.tsx:415-428</span> Replace across an anchor edge silently grows, shrinks, or removes the anchor without updating its recorded text.</li>
+      </ul>
+    </li>
+
+    <li>
+      <div class="head"><span class="chip med">Medium</span><h3>One modal primitive with real focus management</h3><span class="size">medium</span></div>
+      <p class="why"><strong>Seven hand-rolled modals, none trap or restore focus.</strong> Each copies a window-level Escape listener and backdrop click; Tab walks the app behind the dialog; the print options modal fires Continue on Enter anywhere in the window; ⌘, over an open Unsaved prompt stacks a second dialog whose Escape closes both. The card's ARIA is also wrong: the whole article is a button with a toolbar of buttons inside it and a label that hides the body from screen readers, and reply actions are invisible until hover so tabbing lands on hidden controls.</p>
+      <ul class="findings">
+        <li><span class="path">SaveConflictModal, EditDuringOpenModal, UnsavedChangesModal, SettingsModal, PrintOptionsModal, CleanExportModal, ReattachModal</span> the seven copies.</li>
+        <li><span class="path">src/components/FMCard.tsx:99-137, 208-336; FMCard.css:124-134</span> the role and visibility problems.</li>
+        <li><span class="path">src/components/TitleBar.tsx:80-95; SettingsModal.tsx:234-265</span> the same segmented control markup with two different ARIA patterns and no arrow keys.</li>
+      </ul>
+      <div class="fix"><p>A native <code>&lt;dialog&gt;</code> with <code>showModal()</code> gives the focus trap, inert background, Escape, and backdrop for free; replace the seven copies with one component. Give the card <code>tabIndex 0</code> and <code>aria-current</code>, drop the button role, and make the reply actions visible on focus-within. Extract one segmented control.</p></div>
+    </li>
+
+    <li>
+      <div class="head"><span class="chip med">Medium</span><h3>A shared integration test harness</h3><span class="size">medium, and it pays for every test after it</span></div>
+      <p class="why"><strong>The Tauri mocks are copied into thirty test files, and five tests double-mount the bindings.</strong> <code>renderApp</code>, <code>Probe</code>, and <code>Harness</code> are redefined thirteen, nine, and six times. Five files render <code>DocumentBindings</code> themselves while AppShell also mounts one per document, so those tests run two save timers and two watchers against one document and every ⌘S saves twice; nothing asserts call counts, which is why they are green.</p>
+      <ul class="findings">
+        <li><span class="path">tests/integration/composer, html-review, overlap-prompt, file-open, sidebar-cards</span> the double mounts.</li>
+        <li><span class="path">tests/integration/rendered-perf.test.tsx:47-48; tests/perf/end-to-end.test.ts:126</span> wall-clock assertions in the default run, already widened once for CI jitter.</li>
+        <li><span class="path">tests/e2e/smoke.spec.ts</span> asserts nothing the jsdom suite does not, at the cost of a macOS runner and a Chromium install per run.</li>
+        <li><span class="path">package.json:20; tests/utils/flaky.ts</span> <code>npm run test:ai</code> finds no test files, the flaky helper has no callers, and the Anthropic SDK dependency is unused; README and CONVENTIONS promise a harness that does not exist.</li>
+        <li>Nothing asserts the editor's serialized output on a fixture, undo after delete, or the toolbar during Find.</li>
+      </ul>
+      <div class="fix"><p>Add <code>tests/utils/harness.tsx</code> with one mock set called from setup, one <code>renderApp</code>, and one open-file helper; delete the explicit bindings from the five files. Gate the timing tests behind an environment variable. Give the Playwright job the one thing jsdom cannot do, the HTML frame layout checks the architecture doc says are checked by hand, or drop it. Remove the dead AI harness pieces and fix the docs.</p></div>
+    </li>
+
+    <li>
+      <div class="head"><span class="chip med">Medium</span><h3>Windows: file associations that do nothing</h3><span class="size">small to medium</span></div>
+      <p class="why"><strong>The installer registers .md and .html, and double-clicking opens a blank window.</strong> A comment in the shell says opens arrive via argv and single-instance, but nothing reads argv and there is no single-instance plugin, so a second double-click also starts a second app.</p>
+      <ul class="findings">
+        <li><span class="path">src-tauri/tauri.conf.json:46-57; src-tauri/src/lib.rs:132-137</span> the declaration and the comment.</li>
+        <li><span class="path">src/state/menuBridge.ts:84-91; src/main.tsx:12-14</span> cold-start open on macOS also depends on three awaited IPC calls finishing after React's first commit; it works today but nothing guarantees it, and if it loses the Finder-opened file is dropped silently.</li>
+      </ul>
+      <div class="fix"><p>Push argv paths into the pending-files queue at setup and add the single-instance plugin to forward a second launch. Buffer pending opens in the bridge module and drain them from the effect that registers the listener.</p></div>
+    </li>
+
+    <li>
+      <div class="head"><span class="chip med">Medium</span><h3>Tighten the bindings and reducer</h3><span class="size">small to medium</span></div>
+      <ul class="findings">
+        <li><span class="path">src/state/DocumentBindings.tsx:123-176 vs 181-223</span> the open-by-path and open-dialog paths repeat the same thirty lines of parse, recover, open-tab, record-recent.</li>
+        <li><span class="path">src/state/document.ts:463-473, 543-567</span> delete and float require callers to pass a body from <code>removeMarkersFromBody</code>, repeated in four places; the reducer can compute it.</li>
+        <li><span class="path">src/state/preferences.ts:108-151; DocumentBindings.tsx:70-79</span> Open Recent is written on every open and read nowhere; a ref and an event have no consumers; every open failure is labelled "file no longer exists".</li>
+        <li><span class="path">src/state/DocumentProvider.tsx:82-85; EditorPane.tsx:74-76</span> every keystroke in any tab re-renders every pane and every bindings instance, and hands RenderedView fresh callbacks that re-subscribe its listeners. Only worth a selector hook if a profile shows it.</li>
+        <li><span class="path">src/components/HtmlView.tsx:652-653, 170, 469</span> block discovery is quadratic over every figure and SVG and runs twice per resize from two observers that re-trigger each other.</li>
+        <li><span class="path">src/components/EditorPane.tsx:338-364</span> the context-menu listener is not gated on the active tab, so hidden panes also mount menus; <span class="path">SelectionToolbar.tsx:32-42</span> keeps a stale nudge transform between selections.</li>
+        <li>Stale header comments describe the pre-tabs world in the riskiest file, including the assumption behind the Save As bug above.</li>
+      </ul>
+      <div class="fix"><p>Extract <code>openIntoTab</code>, compute marker removal in the reducer, either wire Open Recent to the native menu or delete it, fix the two HtmlView observer loops, and rewrite the stale comments while making the fixes in item 3.</p></div>
+    </li>
+
+    <li>
+      <div class="head"><span class="chip med">Medium</span><h3>Tokens, buttons, and contrast</h3><span class="size">small to medium</span></div>
+      <p class="why"><strong>The token pipeline is good; the components bypass it.</strong> Hard-coded whites and greys in the title bar, orphan purples in the error banner, the same hover rule copied into nine stylesheets, eight near-identical button rulesets, and timestamps at a contrast ratio of 2.5 that the contrast test records as intentional. On a review tool a timestamp is information.</p>
+      <ul class="findings">
+        <li><span class="path">TitleBar.css:92, 99; ErrorBanner.css:7-39; Sidebar.css:62; FMCard.css:204; ReattachModal.css:196</span> literals.</li>
+        <li><span class="path">FMCard.css:57-66; SettingsModal.css:77-80, 163-167; tests/unit/contrast.test.ts:95-112</span> the faint text and the test that blesses it.</li>
+      </ul>
+      <div class="fix"><p>Add hover, active-control, and danger-soft tokens; one button class with primary and danger variants in the global stylesheet; timestamps up to the muted tone.</p></div>
+    </li>
+
+    <li>
+      <div class="head"><span class="chip low">Low</span><h3>Security and release hygiene</h3><span class="size">small</span></div>
+      <ul class="findings">
+        <li><span class="path">src-tauri/tauri.conf.json:31-33; capabilities/default.json:22-25</span> no CSP and a filesystem scope of everything. No XSS route was found, but a remote image in a reviewed file loads on open, and any future script hole is a full-disk one. A CSP is a few lines; the scope is defensible for an open-any-file editor and should say so.</li>
+        <li><span class="path">scripts/release.mjs:52, 111-117</span> the inline-credentials branch prints the Apple app-specific password in the logged command. Redact or drop the branch.</li>
+        <li><span class="path">.github/workflows/ci.yml:40-74, 86-89, 97</span> CI never runs a macOS <code>tauri build</code>, so bundle breakage is found on release day; the e2e job installs Rust it does not use; <code>wait-on</code> is downloaded unpinned at CI time.</li>
+        <li><span class="path">scripts/set-version.mjs:26-27</span> matches the first <code>"version"</code> key in package.json rather than the top-level one.</li>
+      </ul>
+    </li>
+
+    <li>
+      <div class="head"><span class="chip low">Low</span><h3>Dead code and unused dependencies</h3><span class="size">small</span></div>
+      <ul class="findings">
+        <li><span class="path">package.json</span> <code>codemirror</code>, <code>@codemirror/theme-one-dark</code>, and <code>@anthropic-ai/sdk</code> have no imports; <code>vite-node</code> is used by <code>npm run cli</code> but not declared, and Vitest 3 drops it.</li>
+        <li><span class="path">src-tauri/Cargo.toml:24-25</span> <code>serde</code> and <code>serde_json</code> are declared and never referenced.</li>
+        <li><span class="path">src/services/fileIO.ts:47-50; src/state/document.ts:371-381; src/services/conflict.ts:56-62</span> <code>openDocument</code>, <code>newUntitled</code>, and <code>fingerprintSync</code> are kept alive only by tests.</li>
+        <li><span class="path">src/services/htmlDom.ts:106-160; htmlDecorate.ts:209-226</span> two helpers with no callers and CSS for an in-frame button that was replaced.</li>
+        <li><span class="path">src/format/types.ts:103-106; SourceView.tsx:58, 65; viewSync.ts:16-17</span> the marker regex exists three times; "closest anchor id" is written four times.</li>
+        <li><span class="path">src/services/fileWatcher.ts:111-116, 126-129</span> a Windows drive root is not watched, and a payload without paths triggers a full read.</li>
+      </ul>
+    </li>
+
+    <li>
+      <div class="head"><span class="chip low">Low</span><h3>Expert-workflow additions</h3><span class="size">small each, once item 5 exists</span></div>
+      <p class="why">Grounded in what the sidebar does today: no next or previous comment, no jump to next open comment, no keyboard toggle for the sidebar, no resolve-all-visible, and the header shows open and total but not orphans. With the keymap in place these are each a few lines.</p>
+    </li>
+
+  </ol>
+
+  <h2>Leave alone</h2>
+  <p>The reviewers were asked what not to touch. These came up independently from more than one of them.</p>
+  <ul class="good">
+    <li>The HTML review path: byte splicing instead of re-serialization, one shared text coordinate between DOM and source, and the honest handling of WKWebView's missing events. This is the design item 1 should copy for Markdown.</li>
+    <li>The format layer: deterministic emitter, tolerant parse plus fail-soft recovery, and now the write-side guards.</li>
+    <li><code>workspace.ts</code>: thin, deterministic, and tested on every branch. The undo-isolation design with <code>loadGeneration</code>.</li>
+    <li>The Rust shell: careful mutex handling, the exit-approval flag with its reason documented, the custom Quit item, platform gating.</li>
+    <li>The external-change state machine and its integration tests; the unsaved-work rule of saving silently when possible.</li>
+    <li>The build tooling: deterministic skill and CLI bundles, byte-compared by tests; version check across four files including the Cargo lock.</li>
+    <li>The typing-test harness that drives ProseMirror through real DOM mutation, and ARCHITECTURE.md's candour about what the suite cannot cover.</li>
+  </ul>
+
+  <h2>Testing strategy</h2>
+  <p>The suite is strong where the format layer and reducers live and weak in exactly the places items 1 through 7 change. Every item is developed test-first: the failing test is written before the fix, so it proves the bug and then guards the fix.</p>
+  <ul class="findings">
+    <li><strong>Before item 1:</strong> a characterization test that runs each fixture through the editor's real extension list and compares bytes. It is red today for the known cases and becomes the gate for every step of the lossless work.</li>
+    <li><strong>Item 3:</strong> one failing integration test per bug (quit loop, lost keystroke, failed silent save, Save As from the prompt) before each fix.</li>
+    <li><strong>Item 8 before items 7 and 10:</strong> the shared harness lands first and removes the five double-mounted bindings, so the refactors lean on tests that run one save timer, not two.</li>
+    <li><strong>Items 5 and 7:</strong> keyboard and modal work gets focus assertions; nothing in the suite asserts focus today.</li>
+    <li><strong>Manual checklist:</strong> the things jsdom cannot reach (the real directory watcher, native menus, file dialogs, iframe layout) go in a short checklist in the architecture doc, run before a release rather than per change.</li>
+  </ul>
+  <p class="note">Expected cost: about a third of each change. Expected payoff: the two critical items, which touch the code paths that write files, land with proof rather than confidence.</p>
+
+  <h2>Suggested order</h2>
+  <div class="scroll">
+  <table>
+    <tr><th>Batch</th><th>Items</th><th>Why together</th></tr>
+    <tr><td>1</td><td>2, then 3</td><td>Both live in DocumentBindings and both lose work. Small, and they unblock trusting the agent loop.</td></tr>
+    <tr><td>2</td><td>1 steps 1 and 2</td><td>Lossless commenting reuses the CLI's locator; the fidelity fixes are a day. Together they make a review's diff two markers and a block.</td></tr>
+    <tr><td>3</td><td>4, 5, 6</td><td>The bugs an expert hits daily; the keymap makes 5 and 14 cheap.</td></tr>
+    <tr><td>4</td><td>8, then 7 and 10</td><td>The harness first, so the modal and bindings refactors land with tests that are not copies.</td></tr>
+    <tr><td>5</td><td>1 step 3</td><td>Decide WYSIWYG versus CodeMirror editing once the rest is stable.</td></tr>
+    <tr><td>6</td><td>9, 11, 12, 13</td><td>Whenever convenient.</td></tr>
+  </table>
+  </div>
+</main>
+</body>
+</html>

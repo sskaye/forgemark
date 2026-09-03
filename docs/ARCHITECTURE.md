@@ -12,7 +12,9 @@ generated HTML reports. Review data lives inside the file itself:
 - Inline marker comments wrap anchored passages: `<!-- fmc:N -->...<!-- /fmc:N -->`.
 - A trailing `<!-- forgemark-comments ... -->` block stores comment records as
   YAML.
-- The AI-facing format spec lives in `assets/forgemark-skill/SKILL.md`.
+- The AI-facing format spec lives in `assets/forgemark-skill/SKILL.md`,
+  alongside a command-line tool agents use instead of writing the format
+  by hand. See "The agent CLI" below.
 
 The app treats the parsed document as two values: `body` and `comments[]`.
 Opening a file parses it into that shape. Saving serializes the shape back to a
@@ -269,6 +271,7 @@ human should look at.
 | Preferences     | `src/state/preferences.ts`                                                                         | LocalStorage-backed author, theme, font size, default view, recent files, and first-run flag.                                                                                                                                                                                                              |
 | Native shell    | `src-tauri/src/lib.rs`, `src/state/menuBridge.ts`, `src/services/windowActions.ts`                 | Rust builds native menus and file-open events, then emits Tauri events. The frontend routes them into existing command paths.                                                                                                                                                                              |
 | Skill bundles   | `assets/forgemark-skill/*`, `scripts/build-skill.mjs`, `src/services/skillDownload.ts`             | AI-agent instructions are packaged as both `.skill` and `.zip`; Settings downloads them through the Tauri save dialog.                                                                                                                                                                                     |
+| Agent CLI       | `cli/*`, `scripts/build-cli.mjs`, `assets/forgemark-skill/scripts/forgemark.mjs`                   | `list`, `show`, `comment`, `reply`, `resolve`, `float`, `reattach`, `delete`, `lint` over a file, built from the format layer and bundled into one file the skill ships. Pure operations in `lib.ts`, anchor placement in `anchor.ts`, checks in `lint.ts`, disk and argv in `io.ts` / `run.ts`.           |
 
 ## Important workflows
 
@@ -368,12 +371,91 @@ External file changes:
 - Clean in-memory state shows a banner. Dirty state shows an edit-during-open
   modal. Pressing save during a conflict opens the save-conflict modal.
 
+## The agent CLI
+
+A review cycle with an agent editing the files by hand lost its comments
+four times, from four causes: a block scalar the app itself emitted with
+an indented first line; a duplicate `replies:` key appended to a record
+that already had one; a bare colon in an unquoted body; and a second
+comments block appended after the first had become unreadable. Each hid
+every comment in the file, and three of the four were invisible until a
+reviewer opened it. The common cause was agents composing YAML and
+placing markers themselves, and nothing checking the result until the
+app read it.
+
+`cli/` is the answer: a `forgemark` command built from `src/format` and
+bundled by esbuild into `assets/forgemark-skill/scripts/forgemark.mjs`,
+one file with no dependencies that any Node 18+ runs. It ships inside the
+skill, so an agent that has the skill has the tool, and `SKILL.md` tells
+it to use the tool for every read and write. The commands are the things
+an agent does in a review: `list` and `show` to read, `comment` (with
+`--anchor`, `--selector` for an HTML element, `--floating`, or
+`--suggest`), `reply`, `resolve`/`unresolve`, `float`, `reattach`,
+`delete`, and `lint`.
+
+Rules the CLI keeps, all of them tested:
+
+- **Nothing is written that would not read back.** Every write goes
+  parse → mutate → serialize → parse the result as the app will → atomic
+  write (temp file plus rename, which the app's directory watcher sees
+  as one change). A file the app could not read cleanly is refused with
+  the parser's message and a pointer to `lint`; the alternative,
+  writing back a recovered approximation, would silently change a
+  reviewer's file.
+- **Anchors are placed by phrase, not offset.** `anchor.ts` matches the
+  quoted passage against the source with whitespace collapsed (across
+  hard wraps), then case-insensitively, then tolerating inline markup
+  between words. An ambiguous phrase is refused with the occurrences
+  listed; `--occurrence N` picks one. A match touching inline code widens
+  to the code span, one inside a fence snaps to the whole block with
+  own-line markers, one that straddles a fence is refused, and one that
+  overlaps an existing pair is refused with "reply to that comment
+  instead" — the same rule the app enforces at creation. HTML matches
+  run over the rendered text map and map back to exact source offsets.
+- **`anchor_text` is the rendered text.** `src/format/anchor-text.ts`
+  states the normalisation once (Markdown markup stripped, HTML tags
+  stripped and entities decoded, whitespace collapsed) so the CLI writes
+  what the app writes and `lint` can tell drift from formatting.
+- **`lint` reports; it does not repair.** Errors are what the app would
+  refuse or misread (an unreadable block with its file line and record
+  id, a second block, colliding ids, unmatched or recordless markers,
+  overlapping pairs, a floating note that still has markers). Warnings
+  are what the reviewer would rather not meet (an orphan, a drifted
+  `anchor_text`, a malformed timestamp). Repair was considered and
+  dropped: with the tool doing the writes, the remaining ways to break a
+  file are prose edits around markers, which the app already recovers
+  from on open and which the agent settles with `reattach` or `float`.
+
+The write-side guards the review exposed live in the format layer, so
+the app gets them too: the emitter double-quotes a multi-line string
+whose first line begins with a space rather than emitting a block
+literal the parser can't read; `serializeForgemarkFile` parses its own
+block back before returning and refuses when the body still holds a
+`<!-- forgemark-comments` line the open path could not read (which is
+exactly how the second block was produced); and a YAML parse error
+carries the file line and the comment id it falls in, which the app's
+banner now shows instead of "couldn't be parsed (yaml)".
+
+The bundle is a committed build artifact like the skill zip, and stale
+the same way. `tests/unit/cli/bundle.test.ts` rebuilds it in memory and
+compares bytes, so a change to `cli/` or `src/format` without `npm run
+build:cli` fails the suite. `npm run cli -- …` runs it from source.
+
 ## Tests
 
 - `tests/unit/format/*`: parser, serializer, marker, escaping, compose,
   suggestions, round-trip, property, and reattach behavior.
 - `tests/unit/*`: document reducer, workspace reducer, preferences, file IO,
   conflict fingerprints, tokens, clean export, menu bridge, smoke.
+- `tests/unit/cli/*`: anchor placement, the command operations, lint, disk
+  I/O failure paths, the command-line surface end to end on temp copies of
+  the fixtures (Markdown, HTML element anchors, CRLF), and bundle freshness.
+- `tests/integration/save-guard.test.tsx`: the app refuses to save over an
+  unreadable comments block (⌘S and auto-save), and a file the CLI wrote
+  while the app had it open arrives through the external-change path.
+- `tests/unit/format/property.test.ts` fuzzes the emitter with the string
+  shapes that once defeated a block literal — leading and trailing spaces,
+  tabs, blank lines, no trailing newline or several, carriage returns.
 - `tests/integration/*`: AppShell, rendered/source views, composer, sidebar,
   suggestions, lost anchors, file opening, settings, skill download, file
   conflicts, tabs, per-tab editors, background documents, the unsaved-work

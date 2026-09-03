@@ -8,7 +8,7 @@ A desktop application for collaborative review of Markdown documents and generat
 
 - **For humans:** a quiet, native macOS / Windows app that feels like Word commenting — select text and a **Comment / Suggest edit** bar appears above it, type a note, see threads in a sidebar. Open several documents at once in tabs; they reopen where you left them.
 - **For generated reports:** open an `.html` file and review it the same way. The report renders exactly as its author designed it — its own CSS, its own charts — and you can comment on a passage or on a whole figure. See [HTML reports](#html-reports).
-- **For AI agents:** the same comments are plain markdown. Read existing comments, add new ones, address them — all by editing the file. The bundled [skill package](#ai-agents) teaches Claude / Codex / any other capable LLM the format in one read.
+- **For AI agents:** the same comments are plain text in the file, and the bundled [skill package](#ai-agents) ships a command-line tool that reads, adds, and answers them safely — an agent never composes the YAML or places a marker by hand.
 - **Not** a Google Docs replacement, not a real-time co-editor, not a git client. Specifically a review tool.
 
 For contributors and agents, the current code map is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
@@ -86,6 +86,18 @@ The Settings → AI Participation panel exposes two download buttons:
 
 Both files contain identical content; the extension is what your AI tool expects. With the skill installed, asking your agent to "add a comment", "address that review note", or "suggest a tighter wording" produces well-formed Forgemark output that the app reads back without complaint.
 
+The skill's centrepiece is `scripts/forgemark.mjs`, a self-contained command-line tool (Node 18+, no install) built from the app's own format layer:
+
+```bash
+forgemark list report.md                      # every comment, one per entry
+forgemark show report.md 3                    # one thread in full
+forgemark comment report.md --anchor "the evening and the small hours" --body "Too strong." --author Claude
+forgemark reply report.md 3 --body "Softened in §2." --author Claude
+forgemark lint report.md                      # what the app would refuse, what the reviewer would rather not meet
+```
+
+Every write is parsed back before the file is replaced and written atomically, so the tool cannot produce a file the app can't read. `SKILL.md` tells the agent to use it for every read and write and keeps the format reference for understanding a file, or as a fallback when the tool can't run. The tool is equally usable by a person: `npx forgemark lint` from a checkout, or `node forgemark.mjs` from an extracted skill.
+
 ### Install in Claude Code (CLI)
 
 ```bash
@@ -129,9 +141,11 @@ npm run lint              # ESLint
 npm run typecheck         # tsc --noEmit
 npm run format            # Prettier write
 npm run build             # production Tauri bundle
-npm run build:skill       # rebuild the .skill / .zip artefacts
+npm run build:cli         # rebuild the CLI bundle inside the skill source tree
+npm run build:skill       # rebuild the CLI bundle and the .skill / .zip artefacts
 npm run build:icons       # regenerate the icon stack from forgemark-icon.svg
-npm run verify-ai-output  # validate a captured AI output against the format
+npm run cli -- <args>     # run the CLI from source (vite-node), e.g. npm run cli -- lint file.md
+npm run verify-ai-output  # lint a captured AI output with the built CLI
 ```
 
 For release engineering (signing, notarization, distribution), see [`RELEASING.md`](RELEASING.md).
@@ -149,11 +163,12 @@ The prompt fixtures and expected behaviors live under `tests/ai/`.
 
 ```
 src/                React + TypeScript UI
+cli/                The forgemark command-line tool, built from src/format
 src-tauri/          Tauri shell (Rust)
 tests/              Unit, integration, E2E, perf, AI-agent tests
 docs/               Current architecture notes and retained token source
 assets/             Skill package, sample documents, app icon
-scripts/            Build helpers (skill packaging, icon generation, verifier)
+scripts/            Build helpers (CLI bundle, skill packaging, icon generation)
 .github/workflows/  CI (no AI tests)
 ```
 

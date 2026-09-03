@@ -9,7 +9,8 @@
 //
 // Quoting policy:
 //   - Numbers and booleans: bare.
-//   - Multi-line strings: block-literal `|`.
+//   - Multi-line strings: block-literal `|`, unless the first line begins
+//     with whitespace (see `blockLiteralSafe`), in which case double-quoted.
 //   - Single-line strings: bare iff `isPlainSafe(s)` returns true (the
 //     string is unambiguously a YAML "plain scalar"); otherwise double-quoted.
 //
@@ -49,14 +50,54 @@ function isPlainSafe(s: string): boolean {
 }
 
 function emitString(s: string): string {
-  if (s.includes("\n")) {
-    // Use block-literal. We escape user content first so `-->` etc. are safe.
-    const escaped = escapeContent(s);
-    return emitBlockLiteral(escaped);
-  }
   if (isPlainSafe(s)) return s;
-  // Double-quoted scalar with escapes.
+  // Double-quoted scalar with escapes. Multi-line strings normally take
+  // the block-literal path in `emitKeyValue`; this is the fallback for
+  // the ones that can't (see `blockLiteralSafe`).
   return '"' + escapeForDoubleQuote(escapeContent(s)) + '"';
+}
+
+// Whether a multi-line string can be written as a block literal (`|`).
+//
+// A block scalar's indentation is auto-detected from its first non-empty
+// line. If that line begins with whitespace, the detected indentation is
+// *deeper* than the one we emit, and any later line at our indentation
+// terminates the scalar early — the parser then reports a stray scalar
+// and every comment in the file disappears. The failure was first seen on
+// an anchor spanning a hard-wrapped line, whose continuation carried the
+// source's own leading spaces. Such strings are double-quoted instead.
+//
+// Only spaces count as indentation, so a leading tab is content and is
+// fine; so are later lines indented more deeply than the first. A last
+// line made only of spaces is refused because chomping would decide
+// whether it is content; so is a carriage return, which YAML folds.
+function blockLiteralSafe(lines: string[], raw: string): boolean {
+  const first = lines.find((ln) => ln.length > 0);
+  if (first === undefined) return false;
+  if (first.startsWith(" ")) return false;
+  const last = lines[lines.length - 1];
+  if (last.length > 0 && /^\s*$/.test(last)) return false;
+  return !raw.includes("\r");
+}
+
+// Lines of a block literal for `value`, or null when the value must be
+// double-quoted instead. `prefix` is the text before the `|`.
+//
+// The chomping indicator follows the value's trailing newlines: exactly
+// one → `|` (clip), the overwhelmingly common shape; none → `|-`
+// (strip); two or more → no block literal at all, since "keep" would
+// make the blank lines before the next record ambiguous to a reader.
+function blockLiteralLines(value: string, prefix: string, indent: string): string[] | null {
+  const escaped = escapeContent(value);
+  if (escaped.endsWith("\n\n")) return null;
+  const clip = escaped.endsWith("\n");
+  const lines = escaped.split("\n");
+  // Drop the empty element after a trailing newline; `|` puts it back.
+  const lineSlice = clip ? lines.slice(0, -1) : lines;
+  if (!blockLiteralSafe(lineSlice, escaped)) return null;
+  const result = [`${prefix}${clip ? "|" : "|-"}`];
+  for (const ln of lineSlice) result.push(`${indent}${ln}`);
+  return result;
 }
 
 function escapeForDoubleQuote(s: string): string {
@@ -71,22 +112,6 @@ function escapeForDoubleQuote(s: string): string {
     else out += ch;
   }
   return out;
-}
-
-// Block-literal `|` style. Always uses chomp-clip (default) — assumes the
-// final newline is intentional. For Forgemark bodies this is the natural
-// choice.
-function emitBlockLiteral(content: string): string {
-  // YAML block-literal:
-  //
-  //   key: |
-  //     line one
-  //     line two
-  //
-  // The string passed in here is the raw user content (newlines and all).
-  // It is rendered after the `|`, indented by `INDENT` more than the key
-  // line. Trailing newlines are preserved by default chomping.
-  return content; // serializer adds the `|` prefix and indents
 }
 
 // Emit a Reply object. `indent` is the indentation level for keys (the
@@ -124,14 +149,10 @@ function emitKeyValue(key: string, value: unknown, indent: string): string[] {
   if (typeof value === "number") return [`${indent}${key}: ${value}`];
   if (typeof value === "string") {
     if (value.includes("\n")) {
-      // Block-literal
-      const escaped = escapeContent(value);
-      const lines = escaped.split("\n");
-      const result = [`${indent}${key}: |`];
-      // Strip a trailing blank line — block-literal adds an implicit newline.
-      const lineSlice = lines[lines.length - 1] === "" ? lines.slice(0, -1) : lines;
-      for (const ln of lineSlice) result.push(`${indent}${INDENT}${ln}`);
-      return result;
+      // Block-literal `|` with clip chomping — the final newline is kept,
+      // which is the natural reading for a comment body.
+      const block = blockLiteralLines(value, `${indent}${key}: `, indent + INDENT);
+      if (block) return block;
     }
     return [`${indent}${key}: ${emitString(value)}`];
   }
@@ -167,12 +188,8 @@ function stringifyGeneric(value: unknown, indent: string): string[] {
   }
   if (typeof value === "string") {
     if (value.includes("\n")) {
-      const escaped = escapeContent(value);
-      const lines = escaped.split("\n");
-      const result = [`${indent}|`];
-      const lineSlice = lines[lines.length - 1] === "" ? lines.slice(0, -1) : lines;
-      for (const ln of lineSlice) result.push(`${indent}${INDENT}${ln}`);
-      return result;
+      const block = blockLiteralLines(value, indent, indent + INDENT);
+      if (block) return block;
     }
     return [`${indent}${emitString(value)}`];
   }

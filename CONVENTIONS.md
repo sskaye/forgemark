@@ -44,6 +44,7 @@ These are greppable in CI and called out in the v1.1 planning meeting.
 
 ```
 src/                  # React + TS UI
+cli/                  # The forgemark CLI (Node), built from src/format
 src-tauri/            # Tauri shell (Rust)
 tests/                # All test code
 docs/                 # Current architecture notes and retained token source

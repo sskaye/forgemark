@@ -49,9 +49,9 @@ const arbShortText = fc
   .map((cs) => cs.join("").trim())
   .filter((s) => s.length >= 1);
 
-// A possibly-multi-line body. Must end with newline (matches the literal
-// block-style YAML emit). Trims any trailing spaces per line.
-const arbBody = fc
+// A possibly-multi-line body in the tidy shape the app usually writes:
+// trimmed lines, one trailing newline.
+const arbTidyBody = fc
   .array(arbShortText, { minLength: 1, maxLength: 4 })
   .map(
     (lines) =>
@@ -61,6 +61,42 @@ const arbBody = fc
         .join("\n") + "\n",
   )
   .filter((s) => s.trim().length >= 1);
+
+// The awkward shapes: lines with leading or trailing spaces, tabs, blank
+// lines, no trailing newline or several, carriage returns. Each of
+// these once defeated (or could defeat) a block literal, and every one
+// must come back byte-identical, whichever quoting the emitter picks.
+const arbAwkwardLine = fc
+  .tuple(
+    fc.constantFrom("", " ", "  ", "\t"),
+    fc.option(arbShortText, { nil: "" }),
+    fc.constantFrom("", " ", "  "),
+  )
+  .map(([lead, text, trail]) => lead + text + trail);
+const arbAwkwardBody = fc
+  .tuple(
+    fc.array(arbAwkwardLine, { minLength: 1, maxLength: 4 }),
+    fc.constantFrom("", "\n", "\n\n", "\r\n"),
+  )
+  .map(([lines, tail]) => lines.join("\n") + tail)
+  .filter((s) => s.trim().length >= 1);
+
+const arbBody = fc.oneof(
+  { weight: 3, arbitrary: arbTidyBody },
+  { weight: 1, arbitrary: arbAwkwardBody },
+);
+
+// Anchors can be hard-wrapped and carry the source's leading spaces on
+// the continuation line — the shape that produced unreadable YAML.
+const arbAnchorText = fc.oneof(
+  { weight: 3, arbitrary: arbShortText },
+  {
+    weight: 1,
+    arbitrary: fc
+      .tuple(arbShortText, fc.constantFrom("", " ", "    "), arbShortText)
+      .map(([a, lead, b]) => `${lead}${a}\n${lead}${b}`),
+  },
+);
 
 const arbReply: fc.Arbitrary<Reply> = fc.record({
   author: arbAuthor,
@@ -76,7 +112,7 @@ const arbSuggestion: fc.Arbitrary<SuggestedEdit> = fc.record({
 // Plain (non-floating) comment with markers in body. body is required.
 const arbPlainComment: fc.Arbitrary<Omit<Comment, "id">> = fc.record(
   {
-    anchor_text: arbShortText,
+    anchor_text: arbAnchorText,
     author: arbAuthor,
     timestamp: arbTimestamp,
     resolved: fc.boolean(),
@@ -91,7 +127,7 @@ const arbPlainComment: fc.Arbitrary<Omit<Comment, "id">> = fc.record(
 // Suggestion comment: body optional, suggested_edit present.
 const arbSuggestionComment: fc.Arbitrary<Omit<Comment, "id">> = fc.record(
   {
-    anchor_text: arbShortText,
+    anchor_text: arbAnchorText,
     author: arbAuthor,
     timestamp: arbTimestamp,
     resolved: fc.constant(false),

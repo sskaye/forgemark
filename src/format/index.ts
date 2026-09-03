@@ -2,11 +2,18 @@
 export {
   parseForgemarkFile,
   recoverForgemarkFile,
+  parseCommentsBlock,
+  findStrayBlock,
   ForgemarkParseError,
   type ParseOptions,
   type RecoveryResult,
 } from "./parser";
-export { serializeForgemarkFile } from "./serializer";
+export {
+  serializeForgemarkFile,
+  ForgemarkSerializeError,
+  type SerializeOptions,
+} from "./serializer";
+export { normalizeAnchorText, anchorTextMatches } from "./anchor-text";
 export {
   findMarkers,
   findMarkersMarkdown,
