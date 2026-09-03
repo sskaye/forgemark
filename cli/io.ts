@@ -1,6 +1,13 @@
 // Disk and clock, kept out of the operations so those stay testable.
 
-import { readFileSync, writeFileSync, renameSync, unlinkSync, existsSync } from "node:fs";
+import {
+  readFileSync,
+  writeFileSync,
+  renameSync,
+  unlinkSync,
+  existsSync,
+  realpathSync,
+} from "node:fs";
 import { dirname, basename, join } from "node:path";
 import { detectFormat, type DocFormat } from "../src/format/types";
 
@@ -20,7 +27,14 @@ export function readSource(path: string): Source {
 // Write through a temporary file in the same directory and rename it
 // into place. A reader — the Forgemark app, which watches the directory
 // — sees either the old file or the new one, never a half-written one.
+// The rename targets the real file, so a symlinked document keeps its
+// link rather than being replaced by a plain file.
 export function writeAtomic(path: string, text: string): void {
+  try {
+    path = realpathSync(path);
+  } catch {
+    // Not there yet; the rename creates it.
+  }
   const tmp = join(dirname(path), `.${basename(path)}.forgemark-${process.pid}.tmp`);
   try {
     writeFileSync(tmp, text, "utf8");

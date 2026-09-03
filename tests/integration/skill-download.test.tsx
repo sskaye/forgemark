@@ -20,6 +20,9 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: vi.fn(),
   writeTextFile: vi.fn(),
+  rename: vi.fn(() => Promise.resolve()),
+  lstat: vi.fn(() => Promise.resolve({ isSymlink: false })),
+  remove: vi.fn(() => Promise.resolve()),
   writeFile: (...args: unknown[]) => writeFileMock(...(args as [])),
   stat: vi.fn(),
   watch: vi.fn(() => Promise.resolve(() => {})),

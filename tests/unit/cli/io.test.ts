@@ -1,6 +1,15 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync, chmodSync } from "node:fs";
+import {
+  mkdtempSync,
+  writeFileSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  chmodSync,
+  symlinkSync,
+  lstatSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readSource, writeAtomic, nowIso, IoError } from "../../../cli/io";
@@ -44,6 +53,16 @@ describe("writeAtomic", () => {
     writeAtomic(path, "new\n");
     expect(readFileSync(path, "utf8")).toBe("new\n");
     expect(readdirSync(dir)).toEqual(["doc.md"]);
+  });
+
+  it("writes through a symlink to its target, keeping the link", () => {
+    const target = join(dir, "real.md");
+    const link = join(dir, "link.md");
+    writeFileSync(target, "old\n");
+    symlinkSync(target, link);
+    writeAtomic(link, "new\n");
+    expect(lstatSync(link).isSymbolicLink()).toBe(true);
+    expect(readFileSync(target, "utf8")).toBe("new\n");
   });
 
   it("creates the file when it does not exist yet", () => {

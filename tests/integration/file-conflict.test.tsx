@@ -16,6 +16,9 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn() }));
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: (...args: unknown[]) => readTextFileMock(...(args as [])),
   writeTextFile: (...args: unknown[]) => writeTextFileMock(...(args as [])),
+  rename: vi.fn(() => Promise.resolve()),
+  lstat: vi.fn(() => Promise.resolve({ isSymlink: false })),
+  remove: vi.fn(() => Promise.resolve()),
   stat: (...args: unknown[]) => statMock(...(args as [])),
   watch: vi.fn(() => Promise.resolve(() => {})),
 }));

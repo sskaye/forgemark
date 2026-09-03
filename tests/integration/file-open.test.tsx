@@ -20,6 +20,9 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: (...args: unknown[]) => mockReadTextFile(...args),
   writeTextFile: (...args: unknown[]) => mockWriteTextFile(...args),
+  rename: vi.fn(() => Promise.resolve()),
+  lstat: vi.fn(() => Promise.resolve({ isSymlink: false })),
+  remove: vi.fn(() => Promise.resolve()),
   stat: (...args: unknown[]) => mockStat(...args),
 }));
 
@@ -149,8 +152,12 @@ describe("file open edge cases", () => {
       expect(screen.getByTestId("probe-name").textContent).toBe("example.md");
     });
     pressKey("s");
+    // Written beside the file and renamed into place (atomic save).
     await waitFor(() => {
-      expect(mockWriteTextFile).toHaveBeenCalledWith("/tmp/example.md", "alpha\n");
+      expect(mockWriteTextFile).toHaveBeenCalledWith(
+        expect.stringMatching(/^\/tmp\/\.example\.md\..+\.tmp$/),
+        "alpha\n",
+      );
     });
   });
 

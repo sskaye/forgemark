@@ -12,7 +12,12 @@ import {
   type RecoveryResult,
 } from "../format";
 import { fingerprint, type FileFingerprint } from "../services/conflict";
-import { watchMarkdownFile, type FileWatcher } from "../services/fileWatcher";
+import {
+  watchMarkdownFile,
+  snapshotFile,
+  mtimeOf,
+  type FileWatcher,
+} from "../services/fileWatcher";
 import { useRecentFiles, useDefaultView } from "./preferences";
 
 type Logger = (msg: string, err: unknown) => void;
@@ -101,21 +106,84 @@ export function DocumentBindings({
   const baselineRef = useRef<FileFingerprint>({ mtimeMs: null, hash: "" });
 
   // Refresh the baseline whenever filePath / originalText change. Both
-  // load (file open) and saved transitions update originalText.
+  // load (file open) and saved transitions update originalText. The
+  // mtime is read from disk so the comparison's fast path has something
+  // to compare.
+  const refreshBaseline = useCallback(async (path: string, text: string) => {
+    const fp = await fingerprint(text, await mtimeOf(path));
+    baselineRef.current = fp;
+    return fp;
+  }, []);
   useEffect(() => {
     let cancelled = false;
     if (!state.filePath) {
       baselineRef.current = { mtimeMs: null, hash: "" };
       return;
     }
+    const path = state.filePath;
     (async () => {
-      const fp = await fingerprint(state.originalText, null);
+      const fp = await fingerprint(state.originalText, await mtimeOf(path));
       if (!cancelled) baselineRef.current = fp;
     })();
     return () => {
       cancelled = true;
     };
   }, [state.filePath, state.originalText]);
+
+  // Surface bytes found on disk that differ from what we last read or
+  // wrote. Shared by the watcher and by the pre-write check below.
+  const reportExternalChange = useCallback(
+    (text: string, fp: FileFingerprint) => {
+      try {
+        const parsed = parseForgemarkFile(text, {
+          tolerant: true,
+          format: stateRef.current.format,
+        });
+        dispatch({
+          type: "externalChangeDetected",
+          text,
+          body: parsed.body,
+          comments: parsed.comments,
+          fingerprint: fp,
+        });
+      } catch (err) {
+        dispatch({
+          type: "externalChangeDetected",
+          text,
+          body: text,
+          comments: [],
+          fingerprint: fp,
+          parseError: (err as Error).message,
+        });
+      }
+    },
+    [dispatch],
+  );
+
+  // Before any write: is the file on disk still the one we read or last
+  // wrote? The watcher is debounced, so a change can land — an agent's
+  // reply, another editor's save — after the baseline was taken and
+  // before the watcher reports it. Writing then would overwrite it with
+  // no banner. When the disk has moved on, surface it exactly as the
+  // watcher would and let the conflict surfaces decide; the caller
+  // writes nothing. A file that can't be read (deleted, unmounted) is
+  // not a conflict: writing recreates it.
+  const diskChangedSinceBaseline = useCallback(
+    async (path: string): Promise<boolean> => {
+      let snap;
+      try {
+        snap = await snapshotFile(path);
+      } catch {
+        return false;
+      }
+      // Compare content, not mtime: the bytes are already in hand, and
+      // the mtime fast path exists to avoid a read we have just done.
+      if (snap.fingerprint.hash === baselineRef.current.hash) return false;
+      reportExternalChange(snap.text, snap.fingerprint);
+      return true;
+    },
+    [reportExternalChange],
+  );
 
   // Phase 11: open a specific path (e.g. via Open Recent). Same logic
   // as ⌘O's chosen-path branch — kept as a callable so non-keyboard
@@ -238,7 +306,7 @@ export function DocumentBindings({
   // Save handler — shared by ⌘S and the pending-save effect (which
   // fires when the save-conflict modal's Overwrite is clicked).
   const performSave = useCallback(
-    async (opts: { forcePrompt?: boolean } = {}) => {
+    async (opts: { forcePrompt?: boolean; overwrite?: boolean } = {}) => {
       const s = stateRef.current;
       if (s.readOnly) return;
       let text: string;
@@ -256,6 +324,10 @@ export function DocumentBindings({
       // the buffer already has a path; plain Save (⌘S) reuses the
       // path when set.
       const seedPath = opts.forcePrompt ? null : s.filePath;
+      // A plain save over the open path must not overwrite a change we
+      // haven't seen yet. `overwrite` is the save-conflict modal's
+      // explicit answer, and Save As picks a destination the user chose.
+      if (seedPath && !opts.overwrite && (await diskChangedSinceBaseline(seedPath))) return;
       try {
         const path = await saveDocument(seedPath, text, s.format);
         if (!path) return; // user cancelled save dialog
@@ -275,13 +347,13 @@ export function DocumentBindings({
           });
         }
         // Refresh baseline so the watcher doesn't fire on our own write.
-        baselineRef.current = await fingerprint(text, null);
+        await refreshBaseline(path, text);
       } catch (err) {
         logger("save failed", err);
         dispatch({ type: "error", message: errorMessage("Save failed", err) });
       }
     },
-    [dispatch, logger],
+    [dispatch, logger, diskChangedSinceBaseline, refreshBaseline],
   );
 
   // Quitting has to account for every open document, and each document's
@@ -470,12 +542,14 @@ export function DocumentBindings({
     if (!state.filePath) return;
     if (state.readOnly) return;
     if (state.externalChange != null) return;
+    const path = state.filePath;
     const handle = setTimeout(async () => {
       try {
+        if (await diskChangedSinceBaseline(path)) return;
         const text = serializeForgemarkFile({ body: state.body, comments: state.comments });
-        await saveDocument(state.filePath, text);
+        await saveDocument(path, text);
         dispatch({ type: "saved", text, body: state.body });
-        baselineRef.current = await fingerprint(text, null);
+        await refreshBaseline(path, text);
       } catch (err) {
         logger("auto-save failed", err);
         dispatch({ type: "error", message: errorMessage("Auto-save failed", err) });
@@ -491,6 +565,8 @@ export function DocumentBindings({
     state.externalChange,
     dispatch,
     logger,
+    diskChangedSinceBaseline,
+    refreshBaseline,
   ]);
 
   // Phase 10: pendingSave bridge. When the save-conflict modal's
@@ -500,7 +576,9 @@ export function DocumentBindings({
     if (!state.pendingSave) return;
     let cancelled = false;
     (async () => {
-      await performSave();
+      // The user chose Overwrite in the save-conflict modal: the disk
+      // differs from the baseline by definition, so skip the check.
+      await performSave({ overwrite: true });
       if (!cancelled) dispatch({ type: "clearPendingSave" });
     })();
     return () => {
@@ -538,33 +616,7 @@ export function DocumentBindings({
         const w = await watchMarkdownFile(
           path,
           () => baselineRef.current,
-          ({ text, fingerprint: fp }) => {
-            // Try to parse the new bytes. If parse fails, surface the
-            // change with parseError set so the save-conflict modal
-            // can show "Unknown changes".
-            try {
-              const parsed = parseForgemarkFile(text, {
-                tolerant: true,
-                format: stateRef.current.format,
-              });
-              dispatch({
-                type: "externalChangeDetected",
-                text,
-                body: parsed.body,
-                comments: parsed.comments,
-                fingerprint: fp,
-              });
-            } catch (err) {
-              dispatch({
-                type: "externalChangeDetected",
-                text,
-                body: text,
-                comments: [],
-                fingerprint: fp,
-                parseError: (err as Error).message,
-              });
-            }
-          },
+          ({ text, fingerprint: fp }) => reportExternalChange(text, fp),
         );
         if (cancelled) {
           await w.dispose();
@@ -581,7 +633,7 @@ export function DocumentBindings({
       cancelled = true;
       void watcher?.dispose();
     };
-  }, [state.filePath, dispatch, logger]);
+  }, [state.filePath, reportExternalChange, logger]);
 
   return null;
 }

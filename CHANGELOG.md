@@ -11,6 +11,7 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 
 ### Fixed
 
+- Auto-save and ⌘S could overwrite a change another program had just made to the file — an agent's reply, another editor's save — because the file watcher reports changes with a delay and nothing checked the disk before writing. Every write now compares the file on disk with what was last read or written, and surfaces the change instead of writing over it. The watcher's own delay is shorter, and the app writes through a temporary file and a rename, so a reader never sees a half-written document.
 - A comment whose anchor crossed a hard-wrapped line could be written as YAML the app could not read back, hiding every comment in the file on the next open. Such values are now quoted, and the app parses its own output before writing it.
 - Opening a file whose comments block could not be read, then adding a comment, appended a second block with colliding ids. Saving now refuses in that state and says where the unreadable block is, so it can be repaired; prose edits still save.
 - The error shown for an unreadable comments block now names the line and the comment id instead of "couldn't be parsed (yaml)".

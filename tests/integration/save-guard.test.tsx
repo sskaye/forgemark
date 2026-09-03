@@ -19,7 +19,7 @@ import type { Comment } from "../../src/format/types";
 //      shows the new reply.
 
 const writeTextFileMock = vi.fn(() => Promise.resolve());
-const readTextFileMock = vi.fn(() => Promise.resolve(""));
+const readTextFileMock = vi.fn((): Promise<string> => Promise.resolve(""));
 const statMock = vi.fn(() =>
   Promise.resolve({ mtime: new Date(0), readonly: false, isDirectory: false }),
 );
@@ -28,6 +28,9 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn(), ask:
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: (...args: unknown[]) => readTextFileMock(...(args as [])),
   writeTextFile: (...args: unknown[]) => writeTextFileMock(...(args as [])),
+  rename: vi.fn(() => Promise.resolve()),
+  lstat: vi.fn(() => Promise.resolve({ isSymlink: false })),
+  remove: vi.fn(() => Promise.resolve()),
   stat: (...args: unknown[]) => statMock(...(args as [])),
   watch: vi.fn(() => Promise.resolve(() => {})),
 }));
@@ -130,6 +133,7 @@ describe("save guard for an unreadable comments block", () => {
 
   it("refuses ⌘S after a comment is added, with a banner, and writes nothing", async () => {
     const recovery = recoverForgemarkFile(BROKEN);
+    readTextFileMock.mockResolvedValue(BROKEN);
     renderApp({ initial: { text: BROKEN, ...recovery.file } });
 
     fireEvent.click(screen.getByTestId("probe-add-floating"));
@@ -146,6 +150,7 @@ describe("save guard for an unreadable comments block", () => {
 
   it("refuses auto-save the same way", async () => {
     const recovery = recoverForgemarkFile(BROKEN);
+    readTextFileMock.mockResolvedValue(BROKEN);
     renderApp({ initial: { text: BROKEN, ...recovery.file } });
     fireEvent.click(screen.getByTestId("probe-add-floating"));
 
@@ -154,6 +159,46 @@ describe("save guard for an unreadable comments block", () => {
       { timeout: 3000 },
     );
     expect(writeTextFileMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("a write that would overwrite someone else's change", () => {
+  const ORIGINAL = "x <!-- fmc:1 -->some text<!-- /fmc:1 --> y\n";
+  const parsed = () => ({ text: ORIGINAL, body: ORIGINAL, comments: [] as Comment[] });
+
+  // The watcher is debounced, so a change on disk can land after the
+  // baseline was taken and before the watcher reports it. Auto-save used
+  // to write straight over it — the agent's reply gone, no banner. Every
+  // write now compares the disk against the baseline first.
+  it("⌘S surfaces the change instead of writing", async () => {
+    renderApp({ initial: parsed() });
+    readTextFileMock.mockResolvedValue("x some text y — changed on disk\n");
+    fireEvent.click(screen.getByTestId("probe-add-floating"));
+    fireEvent.keyDown(window, { key: "s", metaKey: true });
+
+    // Dirty in memory + changed on disk = the edit-during-open modal.
+    expect(await screen.findByTestId("fm-edit-during-modal")).toBeInTheDocument();
+    expect(writeTextFileMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId("probe-dirty").textContent).toBe("dirty");
+  });
+
+  it("auto-save surfaces the change instead of writing", async () => {
+    renderApp({ initial: parsed() });
+    readTextFileMock.mockResolvedValue("x some text y — changed on disk\n");
+    fireEvent.click(screen.getByTestId("probe-add-floating"));
+    expect(
+      await screen.findByTestId("fm-edit-during-modal", {}, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    expect(writeTextFileMock).not.toHaveBeenCalled();
+  });
+
+  it("writes when the disk still matches the baseline", async () => {
+    renderApp({ initial: parsed() });
+    readTextFileMock.mockResolvedValue(ORIGINAL);
+    fireEvent.click(screen.getByTestId("probe-add-floating"));
+    fireEvent.keyDown(window, { key: "s", metaKey: true });
+    await waitFor(() => expect(writeTextFileMock).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByTestId("probe-dirty").textContent).toBe("clean"));
   });
 });
 

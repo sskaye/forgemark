@@ -14,7 +14,7 @@
 // All Tauri-flavoured calls go through this module. Tests stub it.
 
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { readTextFile, writeTextFile, stat } from "@tauri-apps/plugin-fs";
+import { readTextFile, writeTextFile, stat, lstat, rename, remove } from "@tauri-apps/plugin-fs";
 import { detectFormat } from "../format/types";
 import type { DocFormat } from "../format/types";
 
@@ -127,8 +127,43 @@ export async function saveDocument(
     if (!chosen) return null; // user cancelled
     target = chosen;
   }
-  await writeTextFile(target, text);
+  await writeAtomically(target, text);
   return target;
+}
+
+// Write beside the target and rename into place, so a reader that opens
+// the file mid-write — the CLI's lint, an agent's watcher, a sync
+// client — sees the old bytes or the new ones, never a truncated file.
+// The rename is also the single event the directory watcher was built
+// around. A symlink is written in place instead: renaming over it would
+// replace the link with a plain file.
+async function writeAtomically(target: string, text: string): Promise<void> {
+  let symlink = false;
+  try {
+    symlink = (await lstat(target)).isSymlink === true;
+  } catch {
+    // The file doesn't exist yet; a plain rename creates it.
+  }
+  if (symlink) {
+    await writeTextFile(target, text);
+    return;
+  }
+  const sep = target.lastIndexOf("\\") > target.lastIndexOf("/") ? "\\" : "/";
+  const idx = target.lastIndexOf(sep);
+  const dir = idx >= 0 ? target.slice(0, idx + 1) : "";
+  const name = idx >= 0 ? target.slice(idx + 1) : target;
+  const tmp = `${dir}.${name}.${Date.now().toString(36)}.tmp`;
+  await writeTextFile(tmp, text);
+  try {
+    await rename(tmp, target);
+  } catch (err) {
+    try {
+      await remove(tmp);
+    } catch {
+      // The rename error is the one worth reporting.
+    }
+    throw err;
+  }
 }
 
 export function basename(path: string): string {
