@@ -90,6 +90,11 @@ export function AppShell() {
       } catch {
         window.print();
       }
+      // The hidden print editor is a second full editor that re-parses
+      // the document on every keystroke; leaving it mounted after the
+      // first print made typing measurably slower for the rest of the
+      // session.
+      if (!cancelled) setPrintOptions(null);
     });
     return () => {
       cancelled = true;
@@ -320,12 +325,8 @@ export function AppShell() {
             const baseName = state.fileName.replace(/\.(md|markdown|html?|xhtml)$/i, "");
             const defaultPath = baseName + (state.format === "html" ? "-clean.html" : "-clean.md");
             try {
-              await saveDocument(null, text, state.format);
+              await saveDocument(null, text, state.format, defaultPath);
               setCleanExportOpen(false);
-              // Hint the OS save dialog name via the fileIO layer's
-              // save() — its current signature takes no default name,
-              // so we just write through. Phase 13 may polish.
-              void defaultPath;
             } catch (err) {
               setCleanExportOpen(false);
               dispatch({

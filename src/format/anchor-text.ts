@@ -40,6 +40,19 @@ export function anchorTextMatches(
   return collapse(recorded) === rendered || normalizeAnchorText(recorded, format) === rendered;
 }
 
+// Inline Markdown markup removed, line structure kept. For showing a
+// comment body as plain text: emphasis and link syntax go, code spans
+// keep their content verbatim, so `snake_case_name` and `a * b * c`
+// come through as written.
+export function stripMarkdownInline(s: string): string {
+  return s
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => renderedMarkdown(line.replace(/^#+\s+/, "")))
+    .join("\n")
+    .trim();
+}
+
 function renderedHtml(s: string): string {
   return decodeHTML(s.replace(/<!--[\s\S]*?-->/g, "").replace(/<[^>]+>/g, ""));
 }

@@ -17,6 +17,16 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 
 ### Fixed
 
+- After printing once, a hidden second copy of the editor stayed mounted and re-parsed the document on every keystroke, slowing typing for the rest of the session.
+- Comment bodies showed code identifiers wrongly: `snake_case_name` lost its underscores and `a * b * c` its stars.
+- "Doc order" in the sidebar sorted by comment id, which is creation order, rather than by where each anchor sits in the document.
+- Clean Export opened the save dialog as "Untitled" instead of proposing `<name>-clean.md`.
+- The banner for a file whose comments block could not be read appeared on the previous tab, not the one that opened.
+- Clicking the document while writing a reply threw the draft away; a non-empty draft now survives a click outside (Escape still cancels).
+- A persisted "By <author>" filter left the filter menu blank in a file with nothing by that author.
+- Clearing the author name in Settings wrote an empty author into every comment until the next launch.
+- Stepping through Find matches no longer pops the Comment toolbar over each one.
+- Replace no longer changes a match that straddles the edge of a comment's anchor, which used to move or remove the anchor silently.
 - ⌘Z after deleting a comment, accepting a suggestion, or reattaching one used to revert the text of that change while the comment records stayed put, leaving markers for a comment that no longer existed. Those changes are no longer undo steps in the editor; undo is for typing.
 - Adding a comment to a Markdown document rewrote the whole file in the editor's dialect: front matter became a heading, bare filenames were autolinked, hard-wrapped paragraphs were unwrapped, reference links inlined, HTML comments deleted. A comment now splices its two markers into the untouched source, so a review-only session leaves every other byte as the author wrote it. When the selected passage appears more than once, its surroundings pick the right one.
 - What the editor still rewrites when you type has shrunk: front matter is kept aside and put back, bare filenames and addresses are no longer turned into links, bold text is no longer split around inline code, an anchor that touches inline code keeps its markers, markers quoted inside a code fence are left alone, a code block inside a list no longer gains a blank line per save, and a fence that quotes another fence is no longer cut short.

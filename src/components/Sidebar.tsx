@@ -30,8 +30,8 @@ export function Sidebar({ anchorStatuses }: SidebarProps) {
   const { comments, focusedCommentId, hoveredCommentId, composer, filter, sort } = state;
 
   const visibleComments = useMemo(
-    () => sortComments(filterComments(comments, filter, authorName), sort),
-    [comments, filter, sort, authorName],
+    () => sortComments(filterComments(comments, filter, authorName), sort, anchorStatuses),
+    [comments, filter, sort, authorName, anchorStatuses],
   );
 
   // Phase 9: split into three groups, preserving sort within each.
@@ -398,8 +398,16 @@ function SidebarHeader({
           <option value="all">All comments</option>
           <option value="open">Open only</option>
           <option value="resolved">Resolved</option>
-          {authors.includes(authorName) && <option value="byMe">By me</option>}
+          {(authors.includes(authorName) || filter.kind === "byMe") && (
+            <option value="byMe">By me</option>
+          )}
           {authors
+            .concat(
+              // The filter persists across files; keep its option even
+              // when this file has nothing by that author, so the select
+              // never shows blank.
+              filter.kind === "byAuthor" && !authors.includes(filter.author) ? [filter.author] : [],
+            )
             .filter((a) => a !== authorName)
             .map((a) => (
               <option key={a} value={`byAuthor:${a}`}>
@@ -456,11 +464,25 @@ function filterComments(comments: Comment[], filter: FilterMode, authorName: str
   }
 }
 
-function sortComments(comments: Comment[], sort: SortMode): Comment[] {
-  if (sort === "doc") return [...comments].sort((a, b) => a.id - b.id);
-  if (sort === "newest")
-    return [...comments].sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
-  return [...comments].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+function sortComments(
+  comments: Comment[],
+  sort: SortMode,
+  statuses: Map<number, AnchorStatus>,
+): Comment[] {
+  if (sort === "doc") {
+    // Where the anchor sits in the document, not when the comment was
+    // made: ids are creation order, and a comment added later near the
+    // top belongs at the top. Orphans and notes have no position and
+    // keep id order among themselves.
+    const at = (c: Comment) => {
+      const st = statuses.get(c.id);
+      return st?.kind === "attached" ? st.from : Number.POSITIVE_INFINITY;
+    };
+    return [...comments].sort((a, b) => at(a) - at(b) || a.id - b.id);
+  }
+  const when = (c: Comment) => Date.parse(c.timestamp) || 0;
+  if (sort === "newest") return [...comments].sort((a, b) => when(b) - when(a) || b.id - a.id);
+  return [...comments].sort((a, b) => when(a) - when(b) || a.id - b.id);
 }
 
 function filterToValue(f: FilterMode): string {

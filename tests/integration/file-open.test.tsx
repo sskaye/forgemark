@@ -37,6 +37,7 @@ function StateProbe() {
       <span data-testid="probe-readonly">{state.readOnly ? "ro" : "rw"}</span>
       <span data-testid="probe-body">{state.body}</span>
       <span data-testid="probe-comment-count">{state.comments.length}</span>
+      <span data-testid="probe-error">{state.error ?? ""}</span>
     </div>
   );
 }
@@ -185,6 +186,21 @@ describe("file open edge cases", () => {
     await waitFor(() => {
       expect(screen.getByTestId("probe-comment-count").textContent).toBe("1");
     });
+  });
+
+  it("puts a recovery banner on the tab it describes, not the previous one", async () => {
+    // Unreadable block: the file opens as plain markdown with a message.
+    // The message used to be dispatched before the new tab existed, so
+    // it landed on the tab the user was leaving.
+    const text = "Prose.\n\n<!-- forgemark-comments\n- id: 1\n  body: [broken\n-->\n";
+    mockOpen.mockResolvedValue("/tmp/broken.md");
+    mockStat.mockResolvedValue({ isDirectory: false, readonly: false });
+    mockReadTextFile.mockResolvedValue(text);
+
+    renderHarness();
+    pressKey("o");
+    await waitFor(() => expect(screen.getByTestId("probe-name").textContent).toBe("broken.md"));
+    expect(screen.getByTestId("probe-error").textContent).toMatch(/couldn't be read/);
   });
 
   it("⌘S on a read-only file is a no-op", async () => {

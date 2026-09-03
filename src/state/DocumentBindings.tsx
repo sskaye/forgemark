@@ -194,6 +194,7 @@ export function DocumentBindings({
       try {
         const opened = await readDocument(path);
         let parsed;
+        let openError: string | null = null;
         try {
           parsed = parseForgemarkFile(opened.text, {
             tolerant: true,
@@ -204,7 +205,7 @@ export function DocumentBindings({
           // blanking every comment on a single damaged anchor.
           const recovery = recoverForgemarkFile(opened.text, opened.format);
           parsed = recovery.file;
-          dispatch({ type: "error", message: recoveryMessage(err, recovery) });
+          openError = recoveryMessage(err, recovery);
         }
         // Open in a tab. `openTab` focuses an existing tab if this file
         // is already open, and reuses the current one if it's an
@@ -219,6 +220,9 @@ export function DocumentBindings({
             comments: parsed.comments,
             format: opened.format,
             readOnly: opened.readOnly,
+            // The banner belongs on the tab it describes. Dispatching an
+            // error before the tab existed put it on the previous one.
+            error: openError,
             // Seed the preferred view here rather than dispatching a
             // second action at the freshly created tab.
             viewMode: defaultViewRef.current,
@@ -229,10 +233,7 @@ export function DocumentBindings({
         // Stale recent-file entry — surface a polite error and the
         // caller can decide to remove it from the recent list.
         logger("open path failed", err);
-        dispatch({
-          type: "error",
-          message: `File no longer exists at ${path}. Remove from recent files?`,
-        });
+        dispatch({ type: "error", message: errorMessage("Open failed", err) });
         // Tag the error message with the path so the recent-files UI
         // can decide whether to remove it. Custom events let the UI
         // act on the failure asynchronously.
@@ -252,6 +253,7 @@ export function DocumentBindings({
       const files = await openDocuments();
       for (const opened of files) {
         let parsed;
+        let openError: string | null = null;
         try {
           // Phase 9: tolerant mode keeps comments that are missing their
           // marker pair so the lost-anchor banner can surface them,
@@ -266,7 +268,7 @@ export function DocumentBindings({
           // reattachment) instead of dropping every comment.
           const recovery = recoverForgemarkFile(opened.text, opened.format);
           parsed = recovery.file;
-          dispatch({ type: "error", message: recoveryMessage(err, recovery) });
+          openError = recoveryMessage(err, recovery);
         }
         workspaceDispatchRef.current({
           type: "openTab",
@@ -278,6 +280,7 @@ export function DocumentBindings({
             comments: parsed.comments,
             format: opened.format,
             readOnly: opened.readOnly,
+            error: openError,
             // Seed the preferred view here rather than dispatching a
             // second action at the freshly created tab.
             viewMode: defaultViewRef.current,

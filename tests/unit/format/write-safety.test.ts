@@ -6,6 +6,7 @@ import {
   findStrayBlock,
   normalizeAnchorText,
   anchorTextMatches,
+  stripMarkdownInline,
   ForgemarkParseError,
   ForgemarkSerializeError,
 } from "../../../src/format";
@@ -152,6 +153,16 @@ describe("a stray comments block in the body", () => {
   it("can be skipped for display-only serialization", () => {
     const withNew = { body: stale, comments: [comment({ floating: true })] };
     expect(() => serializeForgemarkFile(withNew, { validate: false })).not.toThrow();
+  });
+});
+
+describe("stripMarkdownInline", () => {
+  it("removes emphasis and links but keeps code identifiers and lines", () => {
+    expect(stripMarkdownInline("Use `snake_case_name` and **bold** here.")).toBe(
+      "Use snake_case_name and bold here.",
+    );
+    expect(stripMarkdownInline("a * b * c and foo_bar_baz")).toBe("a * b * c and foo_bar_baz");
+    expect(stripMarkdownInline("# Heading\n\nline two [x](u)")).toBe("Heading\n\nline two x");
   });
 });
 

@@ -850,7 +850,10 @@ export function EditorPane({ docId }: Props) {
         state.viewMode === "rendered" &&
         selectionAffordance != null &&
         state.composer == null &&
-        contextMenu == null && (
+        contextMenu == null &&
+        // Find selects each match as you step through them; that is
+        // navigation, not a passage the reader wants to comment on.
+        !findState.open && (
           <SelectionToolbar
             x={selectionAffordance.rect.left}
             y={selectionAffordance.rect.top}

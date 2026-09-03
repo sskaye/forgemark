@@ -34,7 +34,13 @@ export type RecentFile = {
 // ── Author name ───────────────────────────────────────────────────────
 
 export function useAuthorName(): [string, (next: string) => void] {
-  return useStringPref(KEY_AUTHOR, DEFAULT_AUTHOR);
+  const [stored, set] = useStringPref(KEY_AUTHOR, DEFAULT_AUTHOR);
+  // The Settings field can be cleared mid-session; comments made before
+  // a restart then carried an empty author while the "By me" filter
+  // looked for the fallback. The fallback applies whenever the stored
+  // value is blank, not only on first read.
+  const effective = stored.trim().length > 0 ? stored.trim() : DEFAULT_AUTHOR;
+  return [effective, set];
 }
 
 // ── Theme ─────────────────────────────────────────────────────────────

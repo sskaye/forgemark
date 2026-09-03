@@ -53,12 +53,12 @@ function HarnessProbe({
   );
 }
 
-function renderApp(body: string, opts: { readOnly?: boolean } = {}) {
+function renderApp(body: string, opts: { readOnly?: boolean; comments?: Comment[] } = {}) {
   return render(
     <ThemeProvider initialPreference="light">
       <DocumentProvider>
         <AppShell />
-        <HarnessProbe body={body} readOnly={opts.readOnly} />
+        <HarnessProbe body={body} readOnly={opts.readOnly} comments={opts.comments} />
       </DocumentProvider>
     </ThemeProvider>,
   );
@@ -105,6 +105,46 @@ describe("Find/Replace", () => {
       expect(screen.getByTestId("probe-body")).toHaveTextContent("gamma beta gamma"),
     );
     expect(screen.getByTestId("probe-dirty")).toHaveTextContent("true");
+  });
+
+  it("Replace leaves a match that crosses an anchor's edge alone", async () => {
+    // "one two" starts outside the anchor and ends inside it. Replacing
+    // it would move the anchor's edge and the comment with it.
+    renderApp("one <!-- fmc:1 -->two<!-- /fmc:1 --> three\n", {
+      comments: [
+        {
+          id: 1,
+          anchor_text: "two",
+          author: "Maya",
+          timestamp: "2026-05-07T09:00:00Z",
+          resolved: false,
+          body: "n\n",
+        },
+      ],
+    });
+    fireEvent.keyDown(window, { key: "f", metaKey: true, altKey: true });
+    fireEvent.change(await screen.findByTestId("fm-findbar-query"), {
+      target: { value: "one two" },
+    });
+    fireEvent.change(screen.getByTestId("fm-findbar-replacement"), { target: { value: "x" } });
+    await waitFor(() => expect(screen.getByTestId("fm-findbar-count")).toHaveTextContent("1 of 1"));
+
+    fireEvent.click(screen.getByTestId("fm-findbar-replace-all"));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.getByTestId("probe-body").textContent).toBe(
+      "one <!-- fmc:1 -->two<!-- /fmc:1 --> three\n",
+    );
+
+    // Wholly inside the anchor is fine.
+    fireEvent.change(screen.getByTestId("fm-findbar-query"), { target: { value: "two" } });
+    fireEvent.change(screen.getByTestId("fm-findbar-replacement"), { target: { value: "2" } });
+    await waitFor(() => expect(screen.getByTestId("fm-findbar-count")).toHaveTextContent("1 of 1"));
+    fireEvent.click(screen.getByTestId("fm-findbar-replace-all"));
+    await waitFor(() =>
+      expect(screen.getByTestId("probe-body").textContent?.trim()).toBe(
+        "one <!-- fmc:1 -->2<!-- /fmc:1 --> three",
+      ),
+    );
   });
 
   it("Cmd+G and Cmd+Shift+G cycle through matches", async () => {

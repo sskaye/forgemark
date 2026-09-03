@@ -2,6 +2,7 @@ import { useState, type KeyboardEvent } from "react";
 import { Avatar } from "./Avatar";
 import { InlineComposer } from "./InlineComposer";
 import type { Comment, Reply } from "../format/types";
+import { stripMarkdownInline } from "../format";
 import "./FMCard.css";
 
 type Props = {
@@ -433,16 +434,11 @@ function CardAuthorRow({
   );
 }
 
+// Bodies are shown as text, with inline markup stripped by the format
+// layer's rule so code identifiers survive (an earlier local version
+// turned `snake_case` into `snakecase`).
 function stripMarkdown(s: string): string {
-  return s
-    .replace(/\r\n?/g, "\n")
-    .replace(/^#+\s+/gm, "")
-    .replace(/\*\*(.+?)\*\*/g, "$1")
-    .replace(/__(.+?)__/g, "$1")
-    .replace(/\*(.+?)\*/g, "$1")
-    .replace(/_(.+?)_/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    .trim();
+  return stripMarkdownInline(s);
 }
 
 function truncate(s: string, max: number): string {

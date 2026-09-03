@@ -354,20 +354,26 @@ export function RenderedView({
         updateSearchDecorations(editor, matches, activeIndex);
         activateSearchMatch(editor, matches, activeIndex);
       },
+      // A match that straddles an anchor's edge is left alone: replacing
+      // it would silently grow, shrink, or remove the anchor. Matches
+      // wholly inside or wholly outside an anchor are fine.
       replaceSearchMatch: (match: RenderedSearchMatch, replacement: string) => {
         if (!editor || !editor.isEditable) return false;
+        if (crossesAnchorEdge(editor.state.doc, match.from, match.to)) return false;
         const tr = editor.state.tr.insertText(replacement, match.from, match.to);
         editor.view.dispatch(tr);
         return true;
       },
       replaceAllSearchMatches: (matches: RenderedSearchMatch[], replacement: string) => {
         if (!editor || !editor.isEditable || matches.length === 0) return 0;
+        const safe = matches.filter((m) => !crossesAnchorEdge(editor.state.doc, m.from, m.to));
+        if (safe.length === 0) return 0;
         let tr = editor.state.tr;
-        for (const match of [...matches].sort((a, b) => b.from - a.from)) {
+        for (const match of [...safe].sort((a, b) => b.from - a.from)) {
           tr = tr.insertText(replacement, match.from, match.to);
         }
         editor.view.dispatch(tr);
-        return matches.length;
+        return safe.length;
       },
       clearSearch: () => {
         if (!editor) return;
@@ -701,6 +707,21 @@ export function classifyCodeSelection(
 // Exported for unit testing — the file format cannot represent overlapping
 // or nested anchors, so this is the gate that diverts an overlapping
 // new-comment into a reply (see OverlapPrompt).
+// Whether [from, to) covers text in more than one anchor state — part
+// inside an anchor and part outside, or parts of two anchors. Replacing
+// such a range would move an anchor's edge.
+export function crossesAnchorEdge(doc: ProseMirrorNode, from: number, to: number): boolean {
+  const states = new Set<string | null>();
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isText) return true;
+    if (pos + node.nodeSize <= from || pos >= to) return true;
+    const mark = node.marks.find((m) => m.type.name === "anchor");
+    states.add(mark ? String(mark.attrs.anchorId) : null);
+    return true;
+  });
+  return states.size > 1;
+}
+
 export function bestOverlappingAnchorId(
   doc: ProseMirrorNode,
   from: number,
