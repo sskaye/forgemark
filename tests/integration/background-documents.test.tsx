@@ -159,6 +159,7 @@ describe("window-level listeners stay single", () => {
       "/other/second.md",
       "second body\n",
       "markdown",
+      "second.md",
     );
   });
 

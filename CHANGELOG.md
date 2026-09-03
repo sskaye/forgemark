@@ -12,6 +12,11 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 ### Fixed
 
 - Auto-save and ⌘S could overwrite a change another program had just made to the file — an agent's reply, another editor's save — because the file watcher reports changes with a delay and nothing checked the disk before writing. Every write now compares the file on disk with what was last read or written, and surfaces the change instead of writing over it. The watcher's own delay is shorter, and the app writes through a temporary file and a rename, so a reader never sees a half-written document.
+- Quitting with a read-only document that held an unsaved comment hung the app. It now asks, and offers Save As; ⌘S on a read-only file also offers Save As instead of doing nothing.
+- A keystroke typed while a save was in flight was thrown away when the save finished. Edits made during a write now survive and are saved by the next auto-save.
+- Closing a tab or quitting when the silent save failed (disk full, permissions) closed anyway. It now asks what to do, with the error shown.
+- "Save" from the unsaved-changes prompt on an Untitled buffer saved the file but never closed the tab. Save As also no longer resets the view mode, and refuses a path that is already open in another tab.
+- Save As proposes the document's own name instead of "Untitled".
 - A comment whose anchor crossed a hard-wrapped line could be written as YAML the app could not read back, hiding every comment in the file on the next open. Such values are now quoted, and the app parses its own output before writing it.
 - Opening a file whose comments block could not be read, then adding a comment, appended a second block with colliding ids. Saving now refuses in that state and says where the unreadable block is, so it can be repaired; prose edits still save.
 - The error shown for an unreadable comments block now names the line and the comment id instead of "couldn't be parsed (yaml)".

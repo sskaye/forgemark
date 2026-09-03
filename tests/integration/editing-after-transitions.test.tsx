@@ -58,14 +58,12 @@ function Probe() {
         data-testid="save-as"
         onClick={() =>
           dispatch({
-            type: "load",
-            filePath: "/tmp/renamed.md",
-            fileName: "renamed.md",
+            type: "saved",
             text: "loaded body\n",
             body: "loaded body\n",
             comments: [],
-            readOnly: false,
-            rebindOnly: true,
+            filePath: "/tmp/renamed.md",
+            fileName: "renamed.md",
           })
         }
       />

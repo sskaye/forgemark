@@ -75,17 +75,36 @@ describe("document reducer", () => {
     expect(same).toBe(loaded);
   });
 
-  it("saved updates originalText and body and clears dirty", () => {
+  it("saved updates originalText and clears dirty when nothing moved", () => {
     const loaded = reduceDocument(INITIAL_STATE, baseLoad);
     const edited = reduceDocument(loaded, { type: "edit", body: "alpha bravo" });
     const saved = reduceDocument(edited, {
       type: "saved",
       text: "serialized form",
       body: "alpha bravo",
+      comments: edited.comments,
     });
     expect(saved.dirty).toBe(false);
     expect(saved.originalText).toBe("serialized form");
     expect(saved.body).toBe("alpha bravo");
+  });
+
+  it("saved keeps an edit that landed while the write was in flight", () => {
+    // The write serialized "alpha bravo"; the user typed on before it
+    // finished. The newer body must survive and stay dirty so the next
+    // auto-save writes it — it used to be replaced by the snapshot.
+    const loaded = reduceDocument(INITIAL_STATE, baseLoad);
+    const edited = reduceDocument(loaded, { type: "edit", body: "alpha bravo" });
+    const typedOn = reduceDocument(edited, { type: "edit", body: "alpha bravo charlie" });
+    const saved = reduceDocument(typedOn, {
+      type: "saved",
+      text: "serialized form",
+      body: "alpha bravo",
+      comments: edited.comments,
+    });
+    expect(saved.body).toBe("alpha bravo charlie");
+    expect(saved.dirty).toBe(true);
+    expect(saved.originalText).toBe("serialized form");
   });
 
   it("setViewMode toggles the per-document mode", () => {
@@ -148,19 +167,26 @@ describe("document reducer — loadGeneration (undo isolation)", () => {
   });
 
   it("does NOT bump when Save As rebinds the path", () => {
-    // Save As re-dispatches `load` only to pick up the new path — it's
-    // the same buffer the user has been editing, so their undo history
-    // has to survive.
-    const loaded = reduceDocument(INITIAL_STATE, baseLoad);
+    // Save As is a `saved` with a new path — it's the same buffer the
+    // user has been editing, so their undo history, view mode, and
+    // focus all have to survive.
+    const loaded = reduceDocument(reduceDocument(INITIAL_STATE, baseLoad), {
+      type: "setViewMode",
+      viewMode: "source",
+    });
     const renamed = reduceDocument(loaded, {
-      ...baseLoad,
+      type: "saved",
+      text: loaded.originalText,
+      body: loaded.body,
+      comments: loaded.comments,
       filePath: "/tmp/renamed.md",
       fileName: "renamed.md",
-      rebindOnly: true,
     });
     expect(renamed.filePath).toBe("/tmp/renamed.md");
     expect(renamed.fileName).toBe("renamed.md");
     expect(renamed.loadGeneration).toBe(loaded.loadGeneration);
+    expect(renamed.viewMode).toBe("source");
+    expect(renamed.dirty).toBe(false);
   });
 
   it("bumps on reload-from-disk", () => {

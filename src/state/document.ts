@@ -45,7 +45,7 @@ export type DocumentState = {
   // discards the Tiptap/ProseMirror undo stack. Without it the undo
   // history outlives the content it belongs to and ⌘Z walks backwards
   // into the *previous* document. Save As is deliberately excluded (see
-  // `rebindOnly` on the `load` action).
+  // `filePath` on the `saved` action, which rebinds without reloading).
   loadGeneration: number;
   viewMode: "rendered" | "source";
   readOnly: boolean;
@@ -233,14 +233,20 @@ export type DocumentAction =
       // Omitted by callers that only ever load Markdown (and by Save As,
       // which is rebinding a path rather than changing the language).
       format?: DocFormat;
-      // Save As re-dispatches `load` purely to rebind path/filename —
-      // the content is the same buffer the user has been editing, so
-      // their undo history must survive. Set this to keep
-      // `loadGeneration` (and therefore the editor instance) stable.
-      rebindOnly?: boolean;
     }
   | { type: "edit"; body: string }
-  | { type: "saved"; text: string; body: string }
+  // The write finished. `body`/`comments` are the snapshot that was
+  // serialized, so the reducer can tell whether the document moved on
+  // while the write was in flight. `filePath`/`fileName` are set by Save
+  // As: the same buffer, rebound to a new path, undo history intact.
+  | {
+      type: "saved";
+      text: string;
+      body: string;
+      comments: Comment[];
+      filePath?: string;
+      fileName?: string;
+    }
   | { type: "setViewMode"; viewMode: "rendered" | "source" }
   | { type: "newUntitled" }
   | { type: "error"; message: string }
@@ -310,6 +316,12 @@ export type DocumentAction =
   | { type: "resolveIntent"; resolution: "save" | "discard" }
   | { type: "clearIntent" };
 
+// The same comment records, element for element. Records are replaced,
+// never mutated, so identity per element is exact.
+function sameComments(a: Comment[], b: Comment[]): boolean {
+  return a.length === b.length && a.every((c, i) => c === b[i]);
+}
+
 export function reduceDocument(state: DocumentState, action: DocumentAction): DocumentState {
   switch (action.type) {
     case "load":
@@ -322,7 +334,7 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
         comments: action.comments,
         format: action.format ?? state.format,
         dirty: false,
-        loadGeneration: action.rebindOnly ? state.loadGeneration : state.loadGeneration + 1,
+        loadGeneration: state.loadGeneration + 1,
         viewMode: "rendered",
         readOnly: action.readOnly,
         error: null,
@@ -349,15 +361,27 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
         body: action.body,
         dirty: true,
       };
-    case "saved":
+    case "saved": {
+      // A keystroke or comment that landed while the write was in flight
+      // is not on disk. Keep it, and keep the document dirty so the next
+      // auto-save writes it; replacing `body` with the written snapshot
+      // used to throw such edits away.
+      const moved = state.body !== action.body || !sameComments(state.comments, action.comments);
       return {
         ...state,
         originalText: action.text,
-        body: action.body,
-        dirty: false,
+        dirty: moved,
         error: null,
         pendingSave: false,
+        ...(action.filePath !== undefined
+          ? {
+              filePath: action.filePath,
+              fileName: action.fileName ?? state.fileName,
+              readOnly: false,
+            }
+          : {}),
       };
+    }
     case "setViewMode":
       return { ...state, viewMode: action.viewMode };
     case "requestIntent":

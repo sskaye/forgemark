@@ -114,6 +114,9 @@ export async function saveDocument(
   path: string | null,
   text: string,
   format: DocFormat = "markdown",
+  // The name the dialog proposes when it has to ask. Defaults to
+  // Untitled with the format's extension.
+  defaultName?: string,
 ): Promise<string | null> {
   let target = path;
   if (!target) {
@@ -122,7 +125,7 @@ export async function saveDocument(
         format === "html"
           ? [{ name: "HTML", extensions: HTML_EXTENSIONS }]
           : [{ name: "Markdown", extensions: MARKDOWN_EXTENSIONS }],
-      defaultPath: format === "html" ? "Untitled.html" : "Untitled.md",
+      defaultPath: defaultName ?? (format === "html" ? "Untitled.html" : "Untitled.md"),
     });
     if (!chosen) return null; // user cancelled
     target = chosen;

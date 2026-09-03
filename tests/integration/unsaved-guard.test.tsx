@@ -190,6 +190,7 @@ describe("closing a tab guards unsaved work", () => {
         "/tmp/saved.md",
         "precious work\n",
         "markdown",
+        "saved.md",
       ),
     );
     expect(screen.queryByTestId("fm-unsaved-modal")).toBeNull();

@@ -305,10 +305,13 @@ export function DocumentBindings({
 
   // Save handler — shared by ⌘S and the pending-save effect (which
   // fires when the save-conflict modal's Overwrite is clicked).
+  // Resolves true only once the bytes are on disk. Callers that go on
+  // to discard the buffer (close, quit) must not proceed on false: the
+  // user backed out of the location dialog, the disk had moved on, or
+  // the write failed — all of which leave the work unsaved.
   const performSave = useCallback(
-    async (opts: { forcePrompt?: boolean; overwrite?: boolean } = {}) => {
+    async (opts: { forcePrompt?: boolean; overwrite?: boolean } = {}): Promise<boolean> => {
       const s = stateRef.current;
-      if (s.readOnly) return;
       let text: string;
       try {
         text = s.dirty
@@ -318,43 +321,54 @@ export function DocumentBindings({
         // The serializer refuses output it can't read back (or a body
         // that already holds an unreadable block). Nothing was written.
         dispatch({ type: "error", message: errorMessage("Couldn't save", err) });
-        return;
+        return false;
       }
       // Save As (⌘⇧S) forces the location prompt regardless of whether
-      // the buffer already has a path; plain Save (⌘S) reuses the
-      // path when set.
-      const seedPath = opts.forcePrompt ? null : s.filePath;
+      // the buffer already has a path; plain Save (⌘S) reuses the path
+      // when set. A read-only file can't be written where it is, but the
+      // review made on it can be saved somewhere else — so it prompts.
+      const seedPath = opts.forcePrompt || s.readOnly ? null : s.filePath;
       // A plain save over the open path must not overwrite a change we
       // haven't seen yet. `overwrite` is the save-conflict modal's
       // explicit answer, and Save As picks a destination the user chose.
-      if (seedPath && !opts.overwrite && (await diskChangedSinceBaseline(seedPath))) return;
+      if (seedPath && !opts.overwrite && (await diskChangedSinceBaseline(seedPath))) return false;
       try {
-        const path = await saveDocument(seedPath, text, s.format);
-        if (!path) return; // user cancelled save dialog
-        dispatch({ type: "saved", text, body: s.body });
-        if (path !== s.filePath) {
+        const path = await saveDocument(seedPath, text, s.format, chosenTarget(s.fileName));
+        if (!path) return false; // user cancelled save dialog
+        if (path !== s.filePath && isOpenElsewhere(path)) {
+          // Two tabs on one path would run two watchers and two auto-save
+          // loops against the same file. Refuse rather than let them
+          // overwrite each other; the file was not written.
           dispatch({
-            type: "load",
-            filePath: path,
-            fileName: filenameFromPath(path),
-            text,
-            body: s.body,
-            comments: s.comments,
-            readOnly: false,
-            // Path/filename rebind only — same buffer, so don't discard
-            // the user's undo history.
-            rebindOnly: true,
+            type: "error",
+            message: `${filenameFromPath(path)} is already open in another tab. Close that tab first, or choose another name.`,
           });
+          return false;
         }
+        dispatch({
+          type: "saved",
+          text,
+          body: s.body,
+          comments: s.comments,
+          ...(path !== s.filePath ? { filePath: path, fileName: filenameFromPath(path) } : {}),
+        });
         // Refresh baseline so the watcher doesn't fire on our own write.
         await refreshBaseline(path, text);
+        return true;
       } catch (err) {
         logger("save failed", err);
         dispatch({ type: "error", message: errorMessage("Save failed", err) });
+        return false;
       }
     },
     [dispatch, logger, diskChangedSinceBaseline, refreshBaseline],
   );
+
+  // Whether another open tab already has this path.
+  const isOpenElsewhere = (path: string) => {
+    const ws = workspaceRef.current;
+    return ws.order.some((id) => id !== idRef.current && ws.docs[id].filePath === path);
+  };
 
   // Quitting has to account for every open document, and each document's
   // file IO lives in its own bindings instance — this one can only save
@@ -427,18 +441,20 @@ export function DocumentBindings({
   const guardDiscard = useCallback(
     async (intent: PendingIntent) => {
       const s = stateRef.current;
-      if (!s.dirty || s.readOnly) {
+      if (!s.dirty) {
         await executeIntent(intent);
         return;
       }
-      // Untitled needs a destination from the user, and saving during an
-      // unresolved conflict would clobber the disk copy. Both have to ask.
-      const canSaveSilently = s.filePath != null && s.externalChange == null;
-      if (canSaveSilently) {
-        await performSave();
+      // Untitled needs a destination from the user, a read-only file
+      // can't be written where it is, and saving during an unresolved
+      // conflict would clobber the disk copy. All three have to ask.
+      const canSaveSilently = s.filePath != null && !s.readOnly && s.externalChange == null;
+      if (canSaveSilently && (await performSave())) {
         await executeIntent(intent);
         return;
       }
+      // Either we couldn't save for them, or we tried and it failed
+      // (disk full, permissions, the file changed underneath). Ask.
       dispatch({ type: "requestIntent", intent });
     },
     [dispatch, executeIntent, performSave],
@@ -456,10 +472,10 @@ export function DocumentBindings({
     let cancelled = false;
     (async () => {
       if (resolution === "save") {
-        await performSave();
-        // performSave leaves `dirty` set if the user backed out of the
-        // location dialog or the write failed. Don't discard their work.
-        if (stateRef.current.dirty) {
+        // False when the user backed out of the location dialog or the
+        // write failed. Don't discard their work.
+        const written = await performSave();
+        if (!written) {
           if (!cancelled) dispatch({ type: "clearIntent" });
           return;
         }
@@ -513,7 +529,8 @@ export function DocumentBindings({
         await runOpenDialog();
       } else if (key === "s") {
         e.preventDefault();
-        if (s.readOnly) return;
+        // A read-only file isn't a dead end: performSave turns the save
+        // into a Save As so the review made on it can be kept elsewhere.
         // Phase 10: if there's a pending external change, route into
         // the save-conflict modal instead of overwriting silently.
         // (Save As also routes here — the conflict resolution comes
@@ -548,7 +565,7 @@ export function DocumentBindings({
         if (await diskChangedSinceBaseline(path)) return;
         const text = serializeForgemarkFile({ body: state.body, comments: state.comments });
         await saveDocument(path, text);
-        dispatch({ type: "saved", text, body: state.body });
+        dispatch({ type: "saved", text, body: state.body, comments: state.comments });
         await refreshBaseline(path, text);
       } catch (err) {
         logger("auto-save failed", err);
@@ -636,6 +653,12 @@ export function DocumentBindings({
   }, [state.filePath, reportExternalChange, logger]);
 
   return null;
+}
+
+// The name the save dialog opens with: the document's own name, so Save
+// As on "draft.md" proposes "draft.md" rather than "Untitled.md".
+function chosenTarget(fileName: string): string | undefined {
+  return /^Untitled( \d+)?$/.test(fileName) ? undefined : fileName;
 }
 
 function filenameFromPath(path: string): string {

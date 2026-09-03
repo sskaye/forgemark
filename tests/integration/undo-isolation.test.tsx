@@ -25,7 +25,7 @@ vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn(() => Promise.resol
 
 function Probe() {
   const { dispatch } = useDocument();
-  const load = (fileName: string, body: string, rebindOnly?: boolean) => ({
+  const load = (fileName: string, body: string) => ({
     type: "load" as const,
     filePath: `/tmp/${fileName}`,
     fileName,
@@ -33,7 +33,15 @@ function Probe() {
     body,
     comments: [],
     readOnly: false,
-    ...(rebindOnly ? { rebindOnly: true } : {}),
+  });
+  // Save As: the same buffer, rebound to a new path.
+  const saveAs = (fileName: string, body: string) => ({
+    type: "saved" as const,
+    text: body,
+    body,
+    comments: [],
+    filePath: `/tmp/${fileName}`,
+    fileName,
   });
   return (
     <div>
@@ -41,7 +49,7 @@ function Probe() {
       <button data-testid="load-b" onClick={() => dispatch(load("b.md", "BBB replacement\n"))} />
       <button
         data-testid="save-as"
-        onClick={() => dispatch(load("renamed.md", "AAA original\n", true))}
+        onClick={() => dispatch(saveAs("renamed.md", "AAA original\n"))}
       />
       <button
         data-testid="edit"
