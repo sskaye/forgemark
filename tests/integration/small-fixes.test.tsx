@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
-import { ThemeProvider } from "../../src/theme/ThemeProvider";
-import { DocumentProvider, useDocument } from "../../src/state/DocumentProvider";
-import { AppShell } from "../../src/components/AppShell";
+import { screen, fireEvent, act, waitFor } from "@testing-library/react";
+import { useDocument } from "../../src/state/DocumentProvider";
+import { renderApp as mount } from "../utils/harness";
 import { saveDocument } from "../../src/services/fileIO";
 import { invoke } from "@tauri-apps/api/core";
 import type { Comment } from "../../src/format/types";
@@ -15,18 +14,6 @@ vi.mock("../../src/services/fileIO", () => ({
   readDocument: vi.fn(),
   saveDocument: vi.fn(),
 }));
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn(), ask: vi.fn() }));
-vi.mock("@tauri-apps/plugin-fs", () => ({
-  readTextFile: vi.fn(),
-  writeTextFile: vi.fn(),
-  rename: vi.fn(() => Promise.resolve()),
-  lstat: vi.fn(() => Promise.resolve({ isSymlink: false })),
-  remove: vi.fn(() => Promise.resolve()),
-  stat: vi.fn(),
-  watch: vi.fn(() => Promise.resolve(() => {})),
-}));
-vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn(() => Promise.resolve()) }));
-vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 
 const comment = (id: number, over: Partial<Comment> = {}): Comment => ({
   id,
@@ -95,14 +82,7 @@ function Probe({ body, comments }: { body: string; comments: Comment[] }) {
 }
 
 function renderApp(body: string, comments: Comment[]) {
-  return render(
-    <ThemeProvider initialPreference="light">
-      <DocumentProvider>
-        <AppShell />
-        <Probe body={body} comments={comments} />
-      </DocumentProvider>
-    </ThemeProvider>,
-  );
+  return mount({ probe: <Probe body={body} comments={comments} /> });
 }
 
 beforeEach(() => {

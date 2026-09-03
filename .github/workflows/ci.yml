@@ -6,8 +6,8 @@ on:
   pull_request:
     branches: [main]
 
-# AI-agent tests are NEVER run in CI (they need a live model and an API key);
-# `npm test` excludes tests/ai unless RUN_AI_TESTS=1. See CONVENTIONS.md.
+# AI-agent cases (tests/ai) are run by hand with a sub-agent, never in CI;
+# timing assertions run only via `npm run test:perf`. See CONVENTIONS.md.
 #
 # This workflow runs format + lint + typecheck + unit on macOS and Windows,
 # the Rust checks the desktop shell needs, and a Playwright smoke.

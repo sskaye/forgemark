@@ -485,8 +485,15 @@ build:cli` fails the suite. `npm run cli -- …` runs it from source.
   guard, and cold start.
 - `tests/perf/end-to-end.test.ts`: large-document performance smoke.
 - `tests/e2e/smoke.spec.ts`: Playwright smoke against the dev surface.
-- `tests/ai/*`: optional live-agent fixtures and prompts. These are excluded
-  from normal test runs unless `RUN_AI_TESTS=1`.
+- `tests/ai/*`: prompt/expectation cases run by hand with a sub-agent;
+  never part of `npm test`.
+- `tests/setup.ts` installs one fake Tauri (`tests/utils/tauri-fake.ts`)
+  for every test: an in-memory disk whose reads return what was seeded
+  or written, an atomic rename, dialogs that answer as told, and
+  watchers a test can fire. `tests/utils/harness.tsx` mounts the app.
+  Thirty files used to carry identical mocks whose reads returned
+  undefined, and five rendered a second `DocumentBindings` next to the
+  one `AppShell` mounts, running two save timers against one document.
 
 **Typing tests.** `tests/utils/typing.ts` drives real keystrokes into the
 rendered editor. ProseMirror observes its contenteditable through a

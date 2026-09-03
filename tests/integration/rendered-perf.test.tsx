@@ -44,7 +44,12 @@ describe("rendered view performance", () => {
     // Rough envelope. Anything under 1000ms is fine for a 30k-word doc
     // locally, but hosted Windows CI has enough jitter that a narrow budget
     // turns healthy runs red. The production-browser target is lower.
-    const budgetMs = process.env.CI ? 2500 : 1500;
-    expect(elapsed, `30k-word render took ${elapsed.toFixed(0)}ms`).toBeLessThan(budgetMs);
+    // The wall-clock budget is asserted only under PERF=1 (`npm run
+    // test:perf`): on a loaded runner it flags the runner, not the code.
+    // The structural checks above run every time.
+    if (process.env.PERF) {
+      const budgetMs = process.env.CI ? 2500 : 1500;
+      expect(elapsed, `30k-word render took ${elapsed.toFixed(0)}ms`).toBeLessThan(budgetMs);
+    }
   });
 });

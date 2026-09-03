@@ -2,21 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, act, waitFor, fireEvent } from "@testing-library/react";
 import { ThemeProvider } from "../../src/theme/ThemeProvider";
 import { DocumentProvider, useDocument } from "../../src/state/DocumentProvider";
-import { DocumentBindings } from "../../src/state/DocumentBindings";
 import { AppShell } from "../../src/components/AppShell";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn() }));
-vi.mock("@tauri-apps/plugin-fs", () => ({
-  readTextFile: vi.fn(),
-  writeTextFile: vi.fn(),
-  rename: vi.fn(() => Promise.resolve()),
-  lstat: vi.fn(() => Promise.resolve({ isSymlink: false })),
-  remove: vi.fn(() => Promise.resolve()),
-  stat: vi.fn(),
-  watch: vi.fn(() => Promise.resolve(() => {})),
-}));
 
 const FIXTURE_PATH = resolve(__dirname, "..", "ai", "fixtures", "01-simple.md");
 const FIXTURE = readFileSync(FIXTURE_PATH, "utf-8");
@@ -48,7 +36,6 @@ function renderApp() {
   return render(
     <ThemeProvider initialPreference="light">
       <DocumentProvider>
-        <DocumentBindings />
         <AppShell />
         <FocusProbe />
       </DocumentProvider>

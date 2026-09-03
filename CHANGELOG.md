@@ -42,6 +42,7 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 
 ### Changed
 
+- The test suite mounts the app through one shared harness against one in-memory fake of the Tauri plugins, replacing identical mock blocks in thirty files. Five tests that mounted the document bindings twice, and so ran two auto-save timers against one document, now mount them once. Timing assertions moved behind `npm run test:perf`. The unused AI test harness, its SDK dependency, and the unused retry helper are gone.
 - The skill's instructions lead with the tool; the format reference stays for reading a file and as a fallback. The spec now states that `anchor_text` is advisory and how it is normalised, that ids stay sparse after deletions, and how a regenerated report keeps its review.
 - `npm run verify-ai-output` is now `forgemark lint` over the built tool (the previous script depended on a package that was not installed).
 

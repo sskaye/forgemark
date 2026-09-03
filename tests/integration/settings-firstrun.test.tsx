@@ -1,19 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ThemeProvider } from "../../src/theme/ThemeProvider";
 import { DocumentProvider } from "../../src/state/DocumentProvider";
 import { AppShell } from "../../src/components/AppShell";
-
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn() }));
-vi.mock("@tauri-apps/plugin-fs", () => ({
-  readTextFile: vi.fn(),
-  writeTextFile: vi.fn(),
-  rename: vi.fn(() => Promise.resolve()),
-  lstat: vi.fn(() => Promise.resolve({ isSymlink: false })),
-  remove: vi.fn(() => Promise.resolve()),
-  stat: vi.fn(),
-  watch: vi.fn(() => Promise.resolve(() => {})),
-}));
 
 beforeEach(() => {
   window.localStorage.clear();

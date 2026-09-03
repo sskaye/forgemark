@@ -1,26 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
-import { ThemeProvider } from "../../src/theme/ThemeProvider";
-import { DocumentProvider, useWorkspace } from "../../src/state/DocumentProvider";
-import { AppShell } from "../../src/components/AppShell";
+import { describe, it, expect, beforeEach } from "vitest";
+import { screen, fireEvent, act, waitFor } from "@testing-library/react";
+import { useWorkspace } from "../../src/state/DocumentProvider";
+import { renderApp as mount } from "../utils/harness";
 import type { Comment } from "../../src/format/types";
 
 // The keymap in practice: one chord means one thing, card shortcuts
 // follow the keyboard focus, nothing fires over a dialog or into a text
 // field, and tabs and cards can be reached without a mouse.
-
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn(), ask: vi.fn() }));
-vi.mock("@tauri-apps/plugin-fs", () => ({
-  readTextFile: vi.fn(),
-  writeTextFile: vi.fn(),
-  rename: vi.fn(() => Promise.resolve()),
-  lstat: vi.fn(() => Promise.resolve({ isSymlink: false })),
-  remove: vi.fn(() => Promise.resolve()),
-  stat: vi.fn(),
-  watch: vi.fn(() => Promise.resolve(() => {})),
-}));
-vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn(() => Promise.resolve()) }));
-vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 
 const comment = (id: number, over: Partial<Comment> = {}): Comment => ({
   id,
@@ -92,14 +78,7 @@ function Probe() {
 }
 
 function renderApp() {
-  return render(
-    <ThemeProvider initialPreference="light">
-      <DocumentProvider>
-        <AppShell />
-        <Probe />
-      </DocumentProvider>
-    </ThemeProvider>,
-  );
+  return mount({ probe: <Probe /> });
 }
 
 const key = (k: string, mods: Partial<KeyboardEventInit> = {}, target: EventTarget = window) =>

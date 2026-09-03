@@ -5,8 +5,6 @@ import { resolve } from "node:path";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { RenderedView } from "../../src/components/RenderedView";
 
-vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn(() => Promise.resolve()) }));
-
 const fixture = readFileSync(resolve(__dirname, "..", "fixtures", "gfm-sample.md"), "utf-8");
 
 function renderFixture(body: string = fixture) {

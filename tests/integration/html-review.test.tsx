@@ -9,20 +9,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { ThemeProvider } from "../../src/theme/ThemeProvider";
 import { DocumentProvider, useDocument } from "../../src/state/DocumentProvider";
-import { DocumentBindings } from "../../src/state/DocumentBindings";
 import { AppShell } from "../../src/components/AppShell";
 import { parseForgemarkFile, serializeForgemarkFile } from "../../src/format";
-
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn() }));
-vi.mock("@tauri-apps/plugin-fs", () => ({
-  readTextFile: vi.fn(),
-  writeTextFile: vi.fn(),
-  rename: vi.fn(() => Promise.resolve()),
-  lstat: vi.fn(() => Promise.resolve({ isSymlink: false })),
-  remove: vi.fn(() => Promise.resolve()),
-  stat: vi.fn(),
-  watch: vi.fn(() => Promise.resolve(() => {})),
-}));
 
 const REPORT = `<!doctype html>
 <html><head><meta charset="utf-8"><title>Modelling meals</title>
@@ -68,7 +56,6 @@ function renderApp() {
   return render(
     <ThemeProvider initialPreference="light">
       <DocumentProvider>
-        <DocumentBindings />
         <Harness />
         <AppShell />
       </DocumentProvider>

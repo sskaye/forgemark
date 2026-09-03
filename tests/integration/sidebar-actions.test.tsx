@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent, act, waitFor, within } from "@testing-library/react";
 import { useRef } from "react";
 import { ThemeProvider } from "../../src/theme/ThemeProvider";
@@ -8,16 +8,6 @@ import type { Comment } from "../../src/format/types";
 
 // Phase 6 sidebar-action integration tests. The Tauri plugins are mocked
 // because AppShell pulls in DocumentBindings.
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn() }));
-vi.mock("@tauri-apps/plugin-fs", () => ({
-  readTextFile: vi.fn(),
-  writeTextFile: vi.fn(),
-  rename: vi.fn(() => Promise.resolve()),
-  lstat: vi.fn(() => Promise.resolve({ isSymlink: false })),
-  remove: vi.fn(() => Promise.resolve()),
-  stat: vi.fn(),
-  watch: vi.fn(() => Promise.resolve(() => {})),
-}));
 
 beforeEach(() => {
   window.localStorage.clear();

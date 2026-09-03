@@ -136,6 +136,7 @@ Other useful scripts:
 
 ```bash
 npm test                  # Vitest unit + integration
+npm run test:perf         # the timing assertions, which the default run skips
 npm run test:e2e          # Playwright E2E (against the Vite dev surface)
 npm run lint              # ESLint
 npm run typecheck         # tsc --noEmit
@@ -155,7 +156,7 @@ For release engineering (signing, notarization, distribution), see [`RELEASING.m
 AI-agent tests are **never run in CI** — they call live LLMs and are stochastic. Run them locally:
 
 - **Primary path (recommended):** open Claude Code, invoke a sub-agent with a fixture from `tests/ai/fixtures/`, the skill content at `assets/forgemark-skill/SKILL.md`, and a prompt from `tests/ai/cases/`. Capture the result in the PR description.
-- **Optional SDK harness:** `RUN_AI_TESTS=1 npm run test:ai` (requires `ANTHROPIC_API_KEY`).
+- Record the outcome in the case file's "Last run" line.
 
 The prompt fixtures and expected behaviors live under `tests/ai/`.
 

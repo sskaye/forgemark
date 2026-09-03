@@ -24,7 +24,6 @@ const statMock = vi.fn(() =>
   Promise.resolve({ mtime: new Date(0), readonly: false, isDirectory: false }),
 );
 
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn(), ask: vi.fn() }));
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: (...args: unknown[]) => readTextFileMock(...(args as [])),
   writeTextFile: (...args: unknown[]) => writeTextFileMock(...(args as [])),
@@ -34,8 +33,6 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
   stat: (...args: unknown[]) => statMock(...(args as [])),
   watch: vi.fn(() => Promise.resolve(() => {})),
 }));
-vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn(() => Promise.resolve()) }));
-vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 
 beforeEach(() => {
   window.localStorage.clear();

@@ -27,8 +27,9 @@ Quick reference for engineers working in this repo. For the current code map, re
 - Unit tests live next to source as `<file>.test.ts(x)` OR in `tests/unit/`.
 - Integration tests under `tests/integration/`.
 - E2E tests under `tests/e2e/`.
-- AI-agent tests under `tests/ai/`. Never run in CI; run them manually with `RUN_AI_TESTS=1 npm run test:ai` or by giving an agent the skill plus one fixture/case pair.
-- `tests/utils/flaky.ts` provides `flaky.flaky(...)` for tests that need a single logic retry. Use sparingly.
+- AI-agent cases under `tests/ai/`: a prompt, expectations, and the last run's outcome, run by hand by giving a sub-agent the skill plus one fixture. Never run in CI.
+- Integration tests mount the app through `tests/utils/harness.tsx` (`renderApp`, `LoadOnMount`) against the fake Tauri installed by `tests/setup.ts` (`fakeTauri` seeds files, fires watchers, and sets dialog answers). Don't render `DocumentBindings` yourself: `AppShell` mounts one per document.
+- Timing assertions run only under `npm run test:perf`; the structural parts of those tests run every time.
 
 ## Forward-compat markers
 
@@ -66,5 +67,5 @@ A pre-commit hook can run all four; not enforced, just recommended.
 ## AI testing
 
 - Primary path: invoke a sub-agent in Claude Code with a fixture + `assets/forgemark-skill/SKILL.md` + a prompt from `tests/ai/cases/<category>.md`. Capture the run summary in the PR description.
-- Optional local SDK harness: `RUN_AI_TESTS=1 npm run test:ai`. Requires `ANTHROPIC_API_KEY`.
+- Record the run's outcome in the case file's "Last run" line.
 - Never run in CI.
