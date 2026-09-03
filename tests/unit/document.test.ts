@@ -123,7 +123,7 @@ describe("document reducer", () => {
         },
       ],
     });
-    const deleted = reduceDocument(loaded, { type: "deleteComment", commentId: 1, body: "x a y" });
+    const deleted = reduceDocument(loaded, { type: "deleteComment", commentId: 1 });
     expect(deleted.comments).toEqual([]);
     expect(deleted.lastDeleted?.comment.id).toBe(1);
 
@@ -143,7 +143,7 @@ describe("document reducer", () => {
         { id: 1, anchor_text: "a", author: "A", timestamp: "t", resolved: false, body: "b\n" },
       ],
     });
-    const deleted = reduceDocument(loaded, { type: "deleteComment", commentId: 1, body: "x a y" });
+    const deleted = reduceDocument(loaded, { type: "deleteComment", commentId: 1 });
     const typed = reduceDocument(deleted, { type: "edit", body: "x a y z" });
     expect(typed.lastDeleted).toBeNull();
     // Restoring the old body over the new text would lose the text.

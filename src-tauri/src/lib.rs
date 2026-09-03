@@ -30,6 +30,26 @@ use tauri::RunEvent;
 #[derive(Default)]
 struct PendingFiles(Mutex<Vec<String>>);
 
+// The paths behind File > Open Recent, newest first. The frontend owns
+// the list (it lives in localStorage with the other preferences) and
+// pushes it here whenever it changes; the menu is rebuilt from it, and a
+// click on an entry sends the path back down `forgemark:open-path`, the
+// same road a Finder open takes.
+#[derive(Default)]
+struct RecentFiles(Mutex<Vec<String>>);
+
+#[tauri::command]
+fn set_recent_files(app: tauri::AppHandle, paths: Vec<String>) -> Result<(), String> {
+    {
+        let state = app.state::<RecentFiles>();
+        let mut guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
+        *guard = paths.clone();
+    }
+    let menu = build_menu(&app, &paths).map_err(|e| e.to_string())?;
+    app.set_menu(menu).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
 fn take_pending_files(state: tauri::State<PendingFiles>) -> Vec<String> {
     let mut guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
@@ -65,10 +85,12 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(PendingFiles::default())
         .manage(ExitApproved::default())
+        .manage(RecentFiles::default())
         .invoke_handler(tauri::generate_handler![
             take_pending_files,
             print_current_webview,
-            approve_exit
+            approve_exit,
+            set_recent_files
         ])
         // Closing the window (red button / ⌘W) must not throw away
         // unsaved work. Rust can't know whether there is any, so hand the
@@ -85,7 +107,7 @@ pub fn run() {
             }
         })
         .setup(|app| {
-            let menu = build_menu(app.handle())?;
+            let menu = build_menu(app.handle(), &[])?;
             app.set_menu(menu)?;
             app.on_menu_event(|app, event| {
                 let id = event.id().0.clone();
@@ -99,6 +121,21 @@ pub fn run() {
                         let _ = app.emit("forgemark:close-requested", ());
                     }
                     return;
+                }
+                // An Open Recent entry: look its path up and open it the
+                // way a Finder open is opened.
+                if let Some(index) = id.strip_prefix("recent-") {
+                    if let Ok(index) = index.parse::<usize>() {
+                        let path = {
+                            let state = app.state::<RecentFiles>();
+                            let guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
+                            guard.get(index).cloned()
+                        };
+                        if let Some(path) = path {
+                            let _ = app.emit("forgemark:open-path", path);
+                        }
+                        return;
+                    }
                 }
                 let _ = app.emit("forgemark:menu", id);
             });
@@ -152,7 +189,7 @@ pub fn run() {
     });
 }
 
-fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+fn build_menu(app: &tauri::AppHandle, recent: &[String]) -> tauri::Result<Menu<tauri::Wry>> {
     // App menu — About, Settings, Hide (standard ⌘H), Quit. The
     // Services / Hide Others / Show All conventions are deliberately
     // omitted; Forgemark doesn't surface anything to Services and
@@ -189,6 +226,26 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .id("open")
         .accelerator("CmdOrCtrl+O")
         .build(app)?;
+    // Open Recent: one entry per remembered path, newest first, and a
+    // Clear Menu at the bottom, as every macOS app has it. Entries show
+    // the file name; the full path is what the click opens.
+    let mut open_recent = SubmenuBuilder::new(app, "Open Recent");
+    for (index, path) in recent.iter().enumerate() {
+        let name = path
+            .rsplit(['/', '\\'])
+            .next()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(path.as_str());
+        let item = MenuItemBuilder::new(name)
+            .id(format!("recent-{index}"))
+            .build(app)?;
+        open_recent = open_recent.item(&item);
+    }
+    let clear_recent = MenuItemBuilder::new("Clear Menu")
+        .id("recent-clear")
+        .enabled(!recent.is_empty())
+        .build(app)?;
+    let open_recent = open_recent.separator().item(&clear_recent).build()?;
     let save = MenuItemBuilder::new("Save")
         .id("save")
         .accelerator("CmdOrCtrl+S")
@@ -218,6 +275,7 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let file_submenu = SubmenuBuilder::new(app, "File")
         .item(&new)
         .item(&open)
+        .item(&open_recent)
         .separator()
         .item(&save)
         .item(&save_as)

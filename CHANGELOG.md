@@ -11,6 +11,7 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 
 ### Added
 
+- File > Open Recent. The last files opened are listed in the native menu, newest first, with Clear Menu at the bottom; an entry the app can no longer open is dropped from the list.
 - Every keyboard shortcut is now defined in one table, and a test refuses two commands sharing a chord. ⌘⇧E used to open Clean Export, the edit composer, and Find with the selection all at once; it now opens Clean Export only, and editing your own comment is E with the card focused. Card shortcuts act only while the keyboard focus is in the sidebar, never over an open dialog, and never while typing.
 - Tabs from the keyboard: ⌘⇧] and ⌘⇧[ move between tabs, ⌘1 to ⌘9 jump to one, and arrow keys walk the tab strip. In the sidebar, ↑/↓ (or j/k) move between comment cards.
 - Deleting a comment can be undone for a few seconds from a banner. It restores the thread, its replies, and its markers exactly.
@@ -26,6 +27,7 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 - A persisted "By <author>" filter left the filter menu blank in a file with nothing by that author.
 - Clearing the author name in Settings wrote an empty author into every comment until the next launch.
 - Stepping through Find matches no longer pops the Comment toolbar over each one.
+- The report view no longer re-scans every figure and icon twice per resize, and hidden document panes no longer open their own right-click menu behind the visible one. The comment toolbar no longer inherits the nudge from a previous selection.
 - Replace no longer changes a match that straddles the edge of a comment's anchor, which used to move or remove the anchor silently.
 - ⌘Z after deleting a comment, accepting a suggestion, or reattaching one used to revert the text of that change while the comment records stayed put, leaving markers for a comment that no longer existed. Those changes are no longer undo steps in the editor; undo is for typing.
 - Adding a comment to a Markdown document rewrote the whole file in the editor's dialect: front matter became a heading, bare filenames were autolinked, hard-wrapped paragraphs were unwrapped, reference links inlined, HTML comments deleted. A comment now splices its two markers into the untouched source, so a review-only session leaves every other byte as the author wrote it. When the selected passage appears more than once, its surroundings pick the right one.

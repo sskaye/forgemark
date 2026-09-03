@@ -346,6 +346,9 @@ export function EditorPane({ docId }: Props) {
   //   - anywhere else (incl. rendered editor with no selection):
   //     suppress the default menu, show nothing.
   useEffect(() => {
+    // The active pane's editor matches from every mounted pane's
+    // listener; without this gate each hidden pane opened a menu too.
+    if (!isActive) return;
     const onCtx = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
       if (!target) return;
@@ -371,7 +374,7 @@ export function EditorPane({ docId }: Props) {
     };
     window.addEventListener("contextmenu", onCtx);
     return () => window.removeEventListener("contextmenu", onCtx);
-  }, [state.viewMode]);
+  }, [state.viewMode, isActive]);
 
   // Both views expose `applyAnchor(from, to, id) -> new body`. For HTML
   // it is a byte splice into the source; for Markdown it runs through the

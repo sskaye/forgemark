@@ -3,7 +3,7 @@ import { useWorkspace } from "./DocumentProvider";
 import type { PendingIntent } from "./document";
 import { anyDirty, type DocId } from "./workspace";
 import { invoke } from "@tauri-apps/api/core";
-import { openDocuments, saveDocument, readDocument } from "../services/fileIO";
+import { openDocuments, saveDocument, readDocument, type OpenedFile } from "../services/fileIO";
 import {
   parseForgemarkFile,
   recoverForgemarkFile,
@@ -44,17 +44,17 @@ function recoveryMessage(err: unknown, recovery: RecoveryResult): string {
     : errorMessage("Couldn't parse comment block", err);
 }
 
-// Phase 2 ergonomic bindings — live until Phase 11 wires the native menu
-// bar. Renders nothing.
+// The side effects of one open document. Mounted once per open tab by
+// AppShell (not only the visible one — a background document must keep
+// saving and keep noticing its file change), rendering nothing.
 //
-//   ⌘O / Ctrl+O — open file dialog
-//   ⌘S / Ctrl+S — save (dirty: write body; clean: write original bytes)
-//   ⌘N / Ctrl+N — new untitled buffer (goes through guardDiscard, so
-//                  unsaved work is saved or explicitly discarded first)
-//
-// Auto-save: when a file path is set and the document is dirty, schedules
-// a save 500ms after the last edit. Untitled buffers never auto-save —
-// the user must ⌘S to choose a destination.
+//   - File commands from the keymap and the native menu: open, save,
+//     Save As, new tab. Window-level listeners are gated on `isActive`
+//     so N open documents don't each answer every keystroke.
+//   - Auto-save 500 ms after the last edit, unless the buffer is
+//     Untitled, read-only, or has an unresolved external change.
+//   - The file watcher, and the disk check before every write.
+//   - The unsaved-work guard for closing a tab and quitting.
 export function DocumentBindings({
   docId,
   logger = defaultLogger,
@@ -73,7 +73,7 @@ export function DocumentBindings({
   const isActive = id === workspace.activeId;
 
   const dispatch = useMemo(() => dispatchTo(id), [dispatchTo, id]);
-  const { recordOpened, remove: removeRecent } = useRecentFiles();
+  const { recordOpened } = useRecentFiles();
   const [defaultView] = useDefaultView();
   // Hold the default view in a ref so the load handler reads the
   // freshest value without re-binding the keydown effect.
@@ -81,8 +81,6 @@ export function DocumentBindings({
   defaultViewRef.current = defaultView;
   const recordOpenedRef = useRef(recordOpened);
   recordOpenedRef.current = recordOpened;
-  const removeRecentRef = useRef(removeRecent);
-  removeRecentRef.current = removeRecent;
 
   // Stable refs to read latest state in event handlers without re-binding.
   const stateRef = useRef(state);
@@ -186,63 +184,55 @@ export function DocumentBindings({
     [reportExternalChange],
   );
 
-  // Phase 11: open a specific path (e.g. via Open Recent). Same logic
-  // as ⌘O's chosen-path branch — kept as a callable so non-keyboard
-  // surfaces can drive it.
+  // Put an opened file in a tab. The one place a file becomes a document:
+  // parse it (tolerantly, so a comment missing its markers is kept as an
+  // orphan), fall back to recovery when even that fails, and open the tab
+  // with any recovery message on it — the banner belongs to the tab it
+  // describes. `openTab` focuses an existing tab for the same path and
+  // reuses an untouched Untitled buffer.
+  const openIntoTab = useCallback((opened: OpenedFile) => {
+    let parsed;
+    let openError: string | null = null;
+    try {
+      parsed = parseForgemarkFile(opened.text, { tolerant: true, format: opened.format });
+    } catch (err) {
+      const recovery = recoverForgemarkFile(opened.text, opened.format);
+      parsed = recovery.file;
+      openError = recoveryMessage(err, recovery);
+    }
+    workspaceDispatchRef.current({
+      type: "openTab",
+      initial: {
+        filePath: opened.path,
+        fileName: opened.fileName,
+        originalText: opened.text,
+        body: parsed.body,
+        comments: parsed.comments,
+        format: opened.format,
+        readOnly: opened.readOnly,
+        error: openError,
+        // Seed the preferred view here rather than dispatching a second
+        // action at the freshly created tab.
+        viewMode: defaultViewRef.current,
+      },
+    });
+    recordOpenedRef.current(opened.path, opened.fileName);
+  }, []);
+
+  // Open a known path: Open Recent, a Finder open, a file dropped on the
+  // dock. A failure is reported here and announced as `open-failed` so
+  // the recent-files menu can drop the entry.
   const openPath = useCallback(
     async (path: string) => {
       try {
-        const opened = await readDocument(path);
-        let parsed;
-        let openError: string | null = null;
-        try {
-          parsed = parseForgemarkFile(opened.text, {
-            tolerant: true,
-            format: opened.format,
-          });
-        } catch (err) {
-          // Fail soft: recover as many comments as possible instead of
-          // blanking every comment on a single damaged anchor.
-          const recovery = recoverForgemarkFile(opened.text, opened.format);
-          parsed = recovery.file;
-          openError = recoveryMessage(err, recovery);
-        }
-        // Open in a tab. `openTab` focuses an existing tab if this file
-        // is already open, and reuses the current one if it's an
-        // untouched Untitled buffer.
-        workspaceDispatchRef.current({
-          type: "openTab",
-          initial: {
-            filePath: opened.path,
-            fileName: opened.fileName,
-            originalText: opened.text,
-            body: parsed.body,
-            comments: parsed.comments,
-            format: opened.format,
-            readOnly: opened.readOnly,
-            // The banner belongs on the tab it describes. Dispatching an
-            // error before the tab existed put it on the previous one.
-            error: openError,
-            // Seed the preferred view here rather than dispatching a
-            // second action at the freshly created tab.
-            viewMode: defaultViewRef.current,
-          },
-        });
-        recordOpenedRef.current(opened.path, opened.fileName);
+        openIntoTab(await readDocument(path));
       } catch (err) {
-        // Stale recent-file entry — surface a polite error and the
-        // caller can decide to remove it from the recent list.
         logger("open path failed", err);
         dispatch({ type: "error", message: errorMessage("Open failed", err) });
-        // Tag the error message with the path so the recent-files UI
-        // can decide whether to remove it. Custom events let the UI
-        // act on the failure asynchronously.
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("forgemark:open-failed", { detail: { path } }));
-        }
+        window.dispatchEvent(new CustomEvent("forgemark:open-failed", { detail: { path } }));
       }
     },
-    [dispatch, logger],
+    [dispatch, logger, openIntoTab],
   );
   const openPathRef = useRef(openPath);
   openPathRef.current = openPath;
@@ -250,49 +240,12 @@ export function DocumentBindings({
   // ⌘O. Each chosen file opens in its own tab.
   const runOpenDialog = useCallback(async () => {
     try {
-      const files = await openDocuments();
-      for (const opened of files) {
-        let parsed;
-        let openError: string | null = null;
-        try {
-          // Phase 9: tolerant mode keeps comments that are missing their
-          // marker pair so the lost-anchor banner can surface them,
-          // instead of dropping all comments on a single missing marker.
-          parsed = parseForgemarkFile(opened.text, {
-            tolerant: true,
-            format: opened.format,
-          });
-        } catch (err) {
-          // Fail soft: recover as many comments as possible (coalescing
-          // splattered anchors, detaching unrecoverable ones for
-          // reattachment) instead of dropping every comment.
-          const recovery = recoverForgemarkFile(opened.text, opened.format);
-          parsed = recovery.file;
-          openError = recoveryMessage(err, recovery);
-        }
-        workspaceDispatchRef.current({
-          type: "openTab",
-          initial: {
-            filePath: opened.path,
-            fileName: opened.fileName,
-            originalText: opened.text,
-            body: parsed.body,
-            comments: parsed.comments,
-            format: opened.format,
-            readOnly: opened.readOnly,
-            error: openError,
-            // Seed the preferred view here rather than dispatching a
-            // second action at the freshly created tab.
-            viewMode: defaultViewRef.current,
-          },
-        });
-        recordOpenedRef.current(opened.path, opened.fileName);
-      }
+      for (const opened of await openDocuments()) openIntoTab(opened);
     } catch (err) {
       logger("open failed", err);
       dispatch({ type: "error", message: errorMessage("Open failed", err) });
     }
-  }, [dispatch, logger]);
+  }, [dispatch, logger, openIntoTab]);
 
   // Listen for `forgemark:open-path` custom events from non-keyboard
   // surfaces (Open Recent menu, future native menu bar).
@@ -432,16 +385,6 @@ export function DocumentBindings({
   const runQuitRef = useRef(runQuit);
   runQuitRef.current = runQuit;
 
-  // ⌘N and ⌘O throw away the current buffer. Before this guard they did
-  // it silently, which was survivable only because auto-save had usually
-  // just written the file — but auto-save is skipped for Untitled
-  // documents and while a conflict is pending, and in exactly those two
-  // cases the work was gone with no prompt.
-  //
-  // Forgemark is an auto-save-first app, so prompting to save something
-  // auto-save would have written 500ms later would be incoherent. The
-  // rule is therefore: if we *can* save it for the user, do that and
-  // carry on. Only ask when we can't.
   const guardDiscard = useCallback(
     async (intent: PendingIntent) => {
       const s = stateRef.current;

@@ -5,6 +5,7 @@ import { Sidebar } from "./Sidebar";
 import { EditorPane } from "./EditorPane";
 import { ErrorBanner } from "./ErrorBanner";
 import { commandFor, modalOpen } from "../state/keymap";
+import { useRecentFilesMenu } from "../state/recentFilesMenu";
 import { UndoDeleteBanner } from "./UndoDeleteBanner";
 import { ReattachModal } from "./ReattachModal";
 import { FileConflictBanner } from "./FileConflictBanner";
@@ -18,12 +19,7 @@ import { PrintOptionsModal, type PrintOptions } from "./PrintOptionsModal";
 import { FirstRunWelcome } from "./FirstRunWelcome";
 import { useDocument, useWorkspace } from "../state/DocumentProvider";
 import { DocumentBindings } from "../state/DocumentBindings";
-import {
-  classifyAnchors,
-  insertMarkersIntoBody,
-  removeMarkersFromBody,
-  cleanExport,
-} from "../format";
+import { classifyAnchors, insertMarkersIntoBody, cleanExport } from "../format";
 import { contextSnippet, parseForgemarkFile } from "../format";
 import { useFontSize, useFirstRun } from "../state/preferences";
 import { saveDocument } from "../services/fileIO";
@@ -41,6 +37,7 @@ import SAMPLE_TEXT from "../../assets/sample-onboarding.md?raw";
 export function AppShell() {
   const { state, dispatch, setViewMode } = useDocument();
   const { workspace, dispatch: workspaceDispatch } = useWorkspace();
+  useRecentFilesMenu();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [cleanExportOpen, setCleanExportOpen] = useState(false);
@@ -386,18 +383,10 @@ export function AppShell() {
             });
           }}
           onKeepFloating={() => {
-            // For a true orphan, no markers are present in the body, so
-            // removeMarkersFromBody is a no-op. We still call it
-            // defensively in case markers exist for some other reason
-            // (e.g. partially edited file).
-            const id = reattachTargetComment.id;
-            const newBody = removeMarkersFromBody(state.body, id);
-            dispatch({ type: "convertToFloating", commentId: id, body: newBody });
+            dispatch({ type: "convertToFloating", commentId: reattachTargetComment.id });
           }}
           onDiscard={() => {
-            const id = reattachTargetComment.id;
-            const newBody = removeMarkersFromBody(state.body, id);
-            dispatch({ type: "deleteComment", commentId: id, body: newBody });
+            dispatch({ type: "deleteComment", commentId: reattachTargetComment.id });
           }}
         />
       )}

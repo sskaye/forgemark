@@ -20,6 +20,7 @@
 
 import type { Comment, DocFormat, Reply } from "../format/types";
 import { DEFAULT_FORMAT } from "../format/types";
+import { removeMarkersFromBody } from "../format/compose";
 import type { FileFingerprint } from "../services/conflict";
 
 export type DocumentState = {
@@ -275,7 +276,7 @@ export type DocumentAction =
       editedAt: string;
     }
   | { type: "toggleResolved"; commentId: number }
-  | { type: "deleteComment"; commentId: number; body: string }
+  | { type: "deleteComment"; commentId: number }
   | { type: "undoDelete" }
   | { type: "dismissUndoDelete" }
   | { type: "deleteReply"; commentId: number; replyIndex: number }
@@ -303,7 +304,7 @@ export type DocumentAction =
         context_after: string;
       }[];
     }
-  | { type: "convertToFloating"; commentId: number; body: string }
+  | { type: "convertToFloating"; commentId: number }
   | { type: "openReattach"; commentId: number }
   | { type: "closeReattach" }
   | {
@@ -513,18 +514,20 @@ function reduce(state: DocumentState, action: DocumentAction): DocumentState {
     }
     case "deleteComment": {
       const deleted = state.comments.find((c) => c.id === action.commentId);
+      // The markers go with the record. Computed here rather than by the
+      // caller, so no caller can hand over a body that disagrees with
+      // the comment change.
+      const body = removeMarkersFromBody(state.body, action.commentId);
       return {
         ...state,
-        body: action.body,
+        body,
         comments: state.comments.filter((c) => c.id !== action.commentId),
         dirty: true,
         focusedCommentId:
           state.focusedCommentId === action.commentId ? null : state.focusedCommentId,
         composer: null,
         reattachTarget: state.reattachTarget === action.commentId ? null : state.reattachTarget,
-        lastDeleted: deleted
-          ? { comment: deleted, bodyBefore: state.body, bodyAfter: action.body }
-          : null,
+        lastDeleted: deleted ? { comment: deleted, bodyBefore: state.body, bodyAfter: body } : null,
       };
     }
     case "undoDelete": {
@@ -630,7 +633,7 @@ function reduce(state: DocumentState, action: DocumentAction): DocumentState {
       });
       return {
         ...state,
-        body: action.body,
+        body: removeMarkersFromBody(state.body, action.commentId),
         comments,
         dirty: true,
         composer: null,

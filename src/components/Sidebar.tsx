@@ -2,12 +2,7 @@ import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useDocument } from "../state/DocumentProvider";
 import { useAuthorName } from "../state/preferences";
 import { FMCard } from "./FMCard";
-import {
-  removeMarkersFromBody,
-  replaceAnchoredText,
-  stripAnchoredMarkers,
-  type AnchorStatus,
-} from "../format";
+import { replaceAnchoredText, stripAnchoredMarkers, type AnchorStatus } from "../format";
 import type { Comment, Reply } from "../format/types";
 import type { FilterMode, SortMode } from "../state/document";
 import "./Sidebar.css";
@@ -93,11 +88,7 @@ export function Sidebar({ anchorStatuses }: SidebarProps) {
           return;
         case "delete-comment":
           e.preventDefault();
-          dispatch({
-            type: "deleteComment",
-            commentId: c.id,
-            body: removeMarkersFromBody(state.body, c.id),
-          });
+          dispatch({ type: "deleteComment", commentId: c.id });
           return;
         default:
           return;
@@ -198,8 +189,7 @@ export function Sidebar({ anchorStatuses }: SidebarProps) {
           }
           onResolve={() => dispatch({ type: "toggleResolved", commentId: c.id })}
           onDelete={() => {
-            const newBody = removeMarkersFromBody(state.body, c.id);
-            dispatch({ type: "deleteComment", commentId: c.id, body: newBody });
+            dispatch({ type: "deleteComment", commentId: c.id });
           }}
           onAcceptSuggestion={() => {
             if (!c.suggested_edit) return;

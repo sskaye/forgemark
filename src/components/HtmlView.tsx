@@ -167,7 +167,12 @@ export function HtmlView({
       320,
     );
     frame.style.height = `${height}px`;
-    setBlocks(readBlocks(doc));
+    // Only when something moved: every observer pass used to hand React
+    // a fresh array and re-render every button.
+    setBlocks((prev) => {
+      const next = readBlocks(doc);
+      return sameBlocks(prev, next) ? prev : next;
+    });
 
     // A report fills the frame edge to edge, so a button placed at a
     // block's corner lands on top of its caption. The pane is usually
@@ -466,7 +471,6 @@ export function HtmlView({
       doc.addEventListener("contextmenu", onFrameContextMenu);
 
       syncHeight();
-      setBlocks(readBlocks(doc));
       // Late layout (web fonts, images) can change the height after load.
       const observer = doc.defaultView?.ResizeObserver
         ? new doc.defaultView.ResizeObserver(syncHeight)
@@ -643,6 +647,16 @@ function isHidden(el: Element): boolean {
   }
 }
 
+function sameBlocks(a: BlockAffordance[], b: BlockAffordance[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (x.el !== y.el || x.top !== y.top || x.right !== y.right || x.key !== y.key) return false;
+  }
+  return true;
+}
+
 // The outermost commentable blocks in the report.
 //
 // Outermost because a `<figure>` wrapping a chart is the unit a reviewer
@@ -650,7 +664,9 @@ function isHidden(el: Element): boolean {
 // inside it would be two buttons for one intent.
 function readBlocks(doc: Document): BlockAffordance[] {
   const all = Array.from(doc.querySelectorAll(BLOCK_SELECTOR));
-  const outermost = all.filter((el) => !all.some((other) => other !== el && other.contains(el)));
+  // Outermost: nothing above it matches the selector. A report full of
+  // inline SVG icons made the pairwise version quadratic.
+  const outermost = all.filter((el) => !el.parentElement?.closest(BLOCK_SELECTOR));
   const out: BlockAffordance[] = [];
   outermost.forEach((el, index) => {
     // Reports sometimes carry a hidden <svg> sprite sheet; nobody wants a

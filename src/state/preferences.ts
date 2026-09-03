@@ -101,14 +101,15 @@ function readRecentFiles(): RecentFile[] {
 
 function writeRecentFiles(list: RecentFile[]) {
   if (typeof window === "undefined") return;
+  const json = JSON.stringify(list.slice(0, RECENT_FILES_LIMIT));
   try {
-    window.localStorage.setItem(
-      KEY_RECENT_FILES,
-      JSON.stringify(list.slice(0, RECENT_FILES_LIMIT)),
-    );
+    window.localStorage.setItem(KEY_RECENT_FILES, json);
   } catch {
     // ignore
   }
+  // Same-tab subscribers (the Open Recent menu) hear about it too; the
+  // storage event below only fires in *other* windows.
+  publish(KEY_RECENT_FILES, json);
 }
 
 export function useRecentFiles(): {
@@ -126,7 +127,11 @@ export function useRecentFiles(): {
       if (e.key === KEY_RECENT_FILES) setRecent(readRecentFiles());
     };
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    const unsub = subscribe(KEY_RECENT_FILES, () => setRecent(readRecentFiles()));
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      unsub();
+    };
   }, []);
 
   // Read from localStorage at call-time rather than closing over the
