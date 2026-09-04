@@ -44,6 +44,7 @@ import { FootnoteDef, FootnoteRef } from "./Footnotes";
 import { MarkdownTable } from "./MarkdownTable";
 import { MathBlock, MathInline } from "./Math";
 import { MermaidBlock } from "./Mermaid";
+import { WikiLink } from "./WikiLink";
 import { AssetPaths } from "./AssetPaths";
 import { HeadingIds } from "./HeadingIds";
 import { AnchorEdge } from "./AnchorEdge";
@@ -231,6 +232,7 @@ export function renderedExtensions(
     MathInline,
     MathBlock,
     MermaidBlock,
+    WikiLink,
     SubscriptMark,
     SuperscriptMark,
     AnchorEdge,

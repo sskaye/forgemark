@@ -31,7 +31,7 @@ marker _scanning_ and the rendered view differ.
 - Desktop shell: Tauri 2, Rust, `@tauri-apps/plugin-dialog`, and
   `@tauri-apps/plugin-fs`.
 - Rendered Markdown editor: Tiptap with `tiptap-markdown`.
-- Source view: CodeMirror 6, read-only.
+- Source view: CodeMirror 6, editable for writable files.
 - Tests: Vitest with jsdom for unit/integration/perf, Playwright for the
   browser smoke surface, optional AI-agent tests.
 
@@ -97,6 +97,29 @@ Closing the last tab leaves a fresh Untitled one and keeps the window open
 
 Tabs are a **within-session working set**: they last as long as the app runs and
 do not survive a relaunch. See "Starting clean" below.
+
+## Source view editing
+
+Source view shows the serialized file and, for a writable document, edits it
+as text. While the user types, the document holds `sourceDraft`, the exact
+text of the editor; nothing is re-serialized from a model. The reducer's
+`editSource` sets the draft and reads it _tolerantly_ to refresh `body` and
+`comments` for the sidebar and the anchor statuses, keeping the last readable
+state when a half-typed marker or record does not parse. A save while a draft
+exists (⌘S or auto-save) writes the draft verbatim; `saved` clears `dirty`
+only when what was written is the current draft.
+
+Leaving Source view commits the draft: `setViewMode("rendered")` in the
+reducer parses it for real. A clean parse becomes the document and bumps
+`loadGeneration`, so the rendered editor and the report frame start over as
+after a reload from disk. A failing parse keeps the draft and the view and
+records the parser's message as `error`, so a comments block the user is in
+the middle of typing is never dropped by a click on Rendered. `EditorPane`
+debounces keystrokes a little and flushes the pending text on the shell's
+`forgemark:capture-view-sync` event, which fires before every view switch.
+`SourceView` applies a text prop only while unfocused, so a keystroke coming
+back through state never moves the caret. A read-only document keeps a
+read-only view and its chip.
 
 ## Unsaved work
 
@@ -261,7 +284,7 @@ human should look at.
 | Keyboard        | `src/state/keymap.ts`                                                                              | Every chord in one table, `commandFor(event)` for the listeners, and a test that refuses two commands on one chord. Listeners decide where a command applies: card commands only with focus in the sidebar, nothing over a dialog or into a text field.                                                                          |
 | Selection UI    | `src/components/SelectionToolbar.tsx`                                                              | The Comment / Suggest edit bar that floats above a selection, in both document kinds. Markdown drives it from ProseMirror's `onSelectionUpdate`; a report has no such guarantee and drives it by reading the frame's selection on an interval, nudged by the frame's own events where those are delivered.                       |
 | Rendered editor | `src/components/EditorPane.tsx`, `src/components/RenderedView.tsx`, `src/components/AnchorEdge.ts` | Rendered view carries each Forgemark marker as an inline edge node and highlights the passage between a pair. New comments and suggestions are created here because this layer has selection access. One pane per open document; inactive ones are hidden, not unmounted.                                                        |
-| Source view     | `src/components/SourceView.tsx`                                                                    | Read-only CodeMirror view of the exact serialized Markdown, with decorations for markers and the trailing comments block.                                                                                                                                                                                                        |
+| Source view     | `src/components/SourceView.tsx`                                                                    | CodeMirror view of the exact serialized file, editable when the file is writable, with decorations for markers and the trailing comments block.                                                                                                                                                                                  |
 | Sidebar         | `src/components/Sidebar.tsx`, `src/components/FMCard.tsx`, `src/components/InlineComposer.tsx`     | Thread lifecycle: reply, edit, resolve, delete, accept/reject suggestions, reattach orphaned comments, filter, and sort.                                                                                                                                                                                                         |
 | Format layer    | `src/format/*`                                                                                     | Parser, deterministic YAML emitter, serializer, marker scanning/pairing, marker insertion/removal, lost-anchor candidate ranking, clean export, escaping. This is the domain core and is heavily tested.                                                                                                                         |
 | HTML format     | `src/format/html/*`, `src/format/matching.ts`                                                      | Source ↔ rendered-text offset map, element location by selector or caption, HTML reattachment candidates. `matching.ts` holds the ranking policy both languages share.                                                                                                                                                           |
@@ -365,7 +388,12 @@ width or height is set.
 **Beyond the GFM spec.** `src/format/markdownExtras.ts` teaches markdown-it what
 github.com renders on top of the spec: footnotes, alerts, single-tilde
 strikethrough, `$…$` and `$$` math, and (in the editor only) autolinking of
-scheme, `www.`, and e-mail addresses. `MathInline`/`MathBlock` draw TeX with
+scheme, `www.`, and e-mail addresses. It also reads Obsidian's forms: any
+callout type with an optional `+`/`-` fold marker (`AlertBlockquote` keeps the
+type as written, styling the five GitHub kinds and giving the rest a neutral
+rail), image embeds `![[file|alt]]` (`InlineImage` writes the wikilink form
+back), and wikilinks `[[note|label]]` (`WikiLink`, an inline atom shown as a
+link in name only). `MathInline`/`MathBlock` draw TeX with
 KaTeX and `MermaidBlock` draws a diagram through a node view that loads Mermaid
 on first use. The block splitter and the editor both apply it, so the two agree on
 where a footnote definition starts and ends. `AlertBlockquote`, `FootnoteRef`,

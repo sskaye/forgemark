@@ -32,15 +32,20 @@ async function openShowcase(page: Page) {
 const activeProse = (page: Page) =>
   page.locator(".fm-editor-pane[data-active='true'] .fm-rendered-view .fm-prose");
 
-async function savedFile(page: Page): Promise<string> {
+// The file as last saved, once it holds `marker` (autosave writes after
+// every pause, so the first write may be an earlier keystroke).
+async function savedFile(page: Page, marker = ""): Promise<string> {
   await expect
     .poll(
       () =>
         page.evaluate(
-          (path) =>
-            (window as unknown as { __forgemark_e2e: E2EState }).__forgemark_e2e.files[path] ??
-            null,
-          SHOWCASE,
+          ([path, marker]) => {
+            const text = (window as unknown as { __forgemark_e2e: E2EState }).__forgemark_e2e.files[
+              path
+            ];
+            return text != null && text.includes(marker) ? text : null;
+          },
+          [SHOWCASE, marker] as const,
         ),
       { timeout: 15_000 },
     )
@@ -64,6 +69,9 @@ test("renders what GitHub renders", async ({ page }) => {
   const src = await prose.locator("img").first().getAttribute("src");
   expect(src).toMatch(/\/@fs\/.*\/testing\/images\/swatch\.png$/);
   await expect(prose.locator("a img")).toHaveCount(1);
+  const embed = prose.locator("img[data-wikilink='true']");
+  await expect(embed).toHaveAttribute("alt", "Swatch");
+  expect(await embed.getAttribute("src")).toMatch(/\/@fs\/.*\/testing\/images\/swatch\.png$/);
   // Raw HTML blocks render; the block comment keeps a placeholder.
   await expect(prose.locator(".fm-html-block p[align='center'] img")).toBeVisible();
   await expect(prose.locator(".fm-html-block table td")).toHaveCount(2);
@@ -73,6 +81,10 @@ test("renders what GitHub renders", async ({ page }) => {
   // Alerts, footnotes, strikethrough, links.
   await expect(prose.locator("blockquote[data-alert='note']")).toBeVisible();
   await expect(prose.locator("blockquote[data-alert='warning']")).toBeVisible();
+  await expect(prose.locator("blockquote[data-alert='generic']")).toHaveAttribute(
+    "data-alert-label",
+    "Takeaway",
+  );
   await expect(prose.locator("blockquote:not([data-alert])")).toHaveCount(1);
   await expect(prose.locator("sup.fm-footnote-ref")).toHaveText(["[1]", "[note]"]);
   await expect(prose.locator(".fm-footnote-def")).toHaveCount(2);
@@ -116,8 +128,9 @@ test("an edit reaches the file with everything else untouched", async ({ page })
     const selection = window.getSelection()!;
     selection.collapse(last, last!.data.length);
   });
+  await page.waitForTimeout(50);
   await page.keyboard.type(" Done.");
-  const file = await savedFile(page);
+  const file = await savedFile(page, "word break. Done.");
   const changed = "a<wbr>b has a word break. Done.";
   expect(file).toContain(changed);
   expect(file).toContain("<kbd>Ctrl</kbd>+<kbd>C</kbd>");
@@ -197,7 +210,8 @@ test("typing beside an anchor's edges keeps the markers where they were", async 
               ): void;
             };
           };
-          commands: { focus(): void; setTextSelection(pos: number): void };
+          commands: { setTextSelection(pos: number): void };
+          view: { focus(): void };
         };
       }
     ).__forgemarkEditor;
@@ -205,12 +219,40 @@ test("typing beside an anchor's edges keeps the markers where they were", async 
     editor.state.doc.descendants((node, pos) => {
       if (node.type.name === "anchorEdge" && node.attrs.edge === "close") after = pos + 1;
     });
-    editor.commands.focus();
     editor.commands.setTextSelection(after);
+    editor.view.focus();
   });
   await page.keyboard.press("Backspace");
   await expect(prose.locator("[data-anchor-id='1']")).toHaveText("highlighte");
   await page.keyboard.type("d!");
-  const file = await savedFile(page);
+  const file = await savedFile(page, "highlighte<!-- /fmc:1 -->d!");
   expect(file).toContain("<mark><!-- fmc:1 -->highlighte<!-- /fmc:1 -->d!</mark>");
+});
+
+test("what is typed in Source view is what the file gets, and Rendered shows it", async ({
+  page,
+}) => {
+  const prose = await openShowcase(page);
+  await page.getByRole("tab", { name: "Source" }).click();
+  const host = page.getByTestId("fm-source-view");
+  await expect(host).toBeVisible();
+  await expect(page.getByTestId("fm-source-chip")).toContainText("editable");
+  // Type through the editor itself: the caret after the title line.
+  await host.evaluate((el) => {
+    const view = (el as unknown as { __forgemarkSourceView: import("@codemirror/view").EditorView })
+      .__forgemarkSourceView;
+    const text = view.state.doc.toString();
+    const at = text.indexOf("# GFM showcase\n") + "# GFM showcase\n".length;
+    view.dispatch({ selection: { anchor: at } });
+    view.focus();
+  });
+  await page.keyboard.type("\nTyped in Source view.\n");
+  // The title line already ends in a blank line, so one Enter each side.
+  const expected = SOURCE.replace("# GFM showcase\n", "# GFM showcase\n\nTyped in Source view.\n");
+  expect(await savedFile(page, "Typed in Source view.\n\n")).toBe(expected);
+  await page.getByRole("tab", { name: "Rendered" }).click();
+  await expect(prose.locator("p", { hasText: "Typed in Source view." })).toBeVisible();
+  // Leaving Source view rewrote no other block.
+  await page.waitForTimeout(1500);
+  expect(await savedFile(page, "Typed in Source view.\n\n")).toBe(expected);
 });

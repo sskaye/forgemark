@@ -10,7 +10,7 @@ This file exercises what Forgemark renders beyond plain CommonMark. Each section
 
 Press <kbd>Ctrl</kbd>+<kbd>C</kbd> to copy. This is <mark>highlighted</mark>, this is <ins>inserted</ins>, and H<sub>2</sub>O has a <abbr title="subscript">sub</abbr>. A <span style="color: #d70015">red span</span> keeps its style. Hidden here: <!-- an inline comment --> a comment, and a<wbr>b has a word break.
 
-Inline image with a width: <img src="images/swatch.png" width="40" alt="swatch"> and a linked badge: [![swatch](images/swatch.png)](https://example.com).
+Inline image with a width: <img src="images/swatch.png" width="40" alt="swatch"> and a linked badge: [![swatch](images/swatch.png)](https://example.com). An Obsidian embed: ![[images/swatch.png|Swatch]].
 
 ## Raw HTML blocks
 
@@ -37,6 +37,9 @@ Body of the details block, in **Markdown**.
 
 > [!WARNING]
 > Careful, this can go wrong.
+
+> [!Takeaway]-
+> An Obsidian callout of a type GitHub does not know, with a fold marker.
 
 > A plain quote, for comparison.
 

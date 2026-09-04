@@ -86,9 +86,40 @@ export function EditorPane({ docId }: Props) {
   const isActive = id === workspace.activeId;
 
   const dispatch = useMemo(() => dispatchTo(id), [dispatchTo, id]);
-  const setViewMode = useCallback(
-    (viewMode: "rendered" | "source") => dispatch({ type: "setViewMode", viewMode }),
+  // Source edits reach the state a moment after the keystroke, as the
+  // whole text; the view keeps the caret meanwhile. Whatever is pending
+  // goes in before the draft is committed or the pane goes away.
+  const pendingSourceRef = useRef<{ text: string; timer: number } | null>(null);
+  const flushSource = useCallback(() => {
+    const pending = pendingSourceRef.current;
+    if (!pending) return;
+    window.clearTimeout(pending.timer);
+    pendingSourceRef.current = null;
+    dispatch({ type: "editSource", text: pending.text });
+  }, [dispatch]);
+  const onSourceChange = useCallback(
+    (text: string) => {
+      if (pendingSourceRef.current) window.clearTimeout(pendingSourceRef.current.timer);
+      pendingSourceRef.current = {
+        text,
+        timer: window.setTimeout(() => {
+          pendingSourceRef.current = null;
+          dispatch({ type: "editSource", text });
+        }, 150),
+      };
+    },
     [dispatch],
+  );
+  useEffect(() => () => flushSource(), [flushSource]);
+
+  // Leaving Source view commits what was typed there (the reducer parses
+  // the draft for real); the pending keystrokes go first.
+  const setViewMode = useCallback(
+    (viewMode: "rendered" | "source") => {
+      flushSource();
+      dispatch({ type: "setViewMode", viewMode });
+    },
+    [dispatch, flushSource],
   );
   // Each pane classifies its own anchors. AppShell keeps a separate memo
   // for the sidebar and modals; that duplicates the work for the active
@@ -579,19 +610,23 @@ export function EditorPane({ docId }: Props) {
   // works in read-only Tiptap, which is what the composer needs.
   const editorReadOnly = state.readOnly;
 
-  // Source view always shows the *current* serialized form (body +
-  // trailing comments block) — not the bytes-as-loaded — so toggling
-  // back and forth after edits reflects what would be written to disk.
+  // Source view shows the draft while one is being typed; otherwise the
+  // *current* serialized form (body + trailing comments block) — not
+  // the bytes-as-loaded — so toggling back and forth after edits
+  // reflects what would be written to disk.
   const sourceText = useMemo(
     () =>
-      state.viewMode === "source"
-        ? serializeForgemarkFile(
-            { body: state.body, comments: state.comments },
-            { validate: false },
-          )
-        : "",
-    [state.viewMode, state.body, state.comments],
+      state.sourceDraft != null
+        ? state.sourceDraft
+        : state.viewMode === "source"
+          ? serializeForgemarkFile(
+              { body: state.body, comments: state.comments },
+              { validate: false },
+            )
+          : "",
+    [state.viewMode, state.body, state.comments, state.sourceDraft],
   );
+  const sourceEditable = !state.readOnly;
 
   useEffect(() => {
     if (!isActive) return;
@@ -612,6 +647,8 @@ export function EditorPane({ docId }: Props) {
       const detail = (e as CustomEvent<{ from: "rendered" | "source"; to: "rendered" | "source" }>)
         .detail;
       if (!detail || detail.from !== state.viewMode || detail.from === detail.to) return;
+      // The shell switches views next; what was typed goes in first.
+      if (detail.from === "source") flushSource();
       const pane = paneRef.current;
       if (!pane) return;
       pendingViewSyncRef.current =
@@ -621,7 +658,7 @@ export function EditorPane({ docId }: Props) {
     };
     window.addEventListener("forgemark:capture-view-sync", onCapture);
     return () => window.removeEventListener("forgemark:capture-view-sync", onCapture);
-  }, [state.viewMode, isActive]);
+  }, [state.viewMode, isActive, flushSource]);
 
   useEffect(() => {
     const anchor = pendingViewSyncRef.current;
@@ -808,11 +845,17 @@ export function EditorPane({ docId }: Props) {
         <aside
           className="fm-source-chip"
           data-testid="fm-source-chip"
-          title="You can read here, but commenting only works in Rendered view."
-          aria-label="Source view, read-only review"
+          title={
+            sourceEditable
+              ? "Editing the file as text. It is saved as typed; commenting works in Rendered view."
+              : "You can read here, but commenting only works in Rendered view."
+          }
+          aria-label={sourceEditable ? "Source view, editable" : "Source view, read-only review"}
         >
           <span className="fm-source-chip-dot" aria-hidden="true" />
-          <span>Source view · read-only review</span>
+          <span>
+            {sourceEditable ? "Source view · editable" : "Source view · read-only review"}
+          </span>
         </aside>
       )}
       {/* An HTML report can be commented on but not rewritten. Saying so
@@ -845,7 +888,13 @@ export function EditorPane({ docId }: Props) {
           onReattachConfident={reattachConfident}
         />
         {state.viewMode === "source" && (
-          <SourceView ref={sourceRef} text={sourceText} format={state.format} />
+          <SourceView
+            ref={sourceRef}
+            text={sourceText}
+            format={state.format}
+            editable={sourceEditable}
+            onChange={sourceEditable ? onSourceChange : undefined}
+          />
         )}
         {isHtml ? (
           // Kept mounted behind the source view: a reload would run the

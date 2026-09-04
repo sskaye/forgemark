@@ -50,6 +50,21 @@ describe("alerts", () => {
     );
   });
 
+  it("accepts any Obsidian callout type, with its fold marker, as written", () => {
+    load("> [!Takeaway]-\n> Keep it short.\n\n> [!Executive Summary]+\n> Two lines.\n");
+    const quotes = Array.from(dom().querySelectorAll("blockquote"));
+    expect(quotes.map((q) => q.getAttribute("data-alert"))).toEqual(["generic", "generic"]);
+    expect(quotes.map((q) => q.getAttribute("data-alert-label"))).toEqual([
+      "Takeaway",
+      "Executive Summary",
+    ]);
+    expect(quotes[0].textContent).toBe("Keep it short.");
+    typeAtEnd(0, " Really.");
+    expect(emit()).toBe(
+      "> [!Takeaway]-\n> Keep it short. Really.\n\n> [!Executive Summary]+\n> Two lines.\n",
+    );
+  });
+
   it("is one block to the splitter, marker line included", () => {
     expect(splitBlocks("> [!TIP]\n> One.\n\nTwo.\n").blocks.map((b) => b.text)).toEqual([
       "> [!TIP]\n> One.",

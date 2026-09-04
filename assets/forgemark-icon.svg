@@ -7,7 +7,10 @@
   amber bar of a highlighted passage, on the app's own paper. Chosen
   from a round of drawings as "F6": the bar is 300 × 110 in the 1024
   grid, wide enough to read as a passage rather than a dot, narrow
-  enough to leave the brackets room at 16 px.
+  enough to leave the brackets room at 16 px. The paper is the macOS
+  icon shape, inset the way Apple's template is, so the icon matches
+  its neighbours' size on every macOS version rather than relying on
+  the system to mask it.
 
   The icon stack (.icns, .ico, the PNG sizes Tauri emits) is generated
   from this SVG with:
@@ -17,32 +20,26 @@
   in src-tauri/icons/ are produced output and should not be hand-edited.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <!-- Squircle background: a Bezier-approximated superellipse so the
-       corners read as the standard macOS app icon mask. Paper, with a
-       hairline edge so it keeps a shape on a white desktop. -->
-  <path
-    d="M 512 0
-       C 230 0 0 230 0 512
-       C 0 794 230 1024 512 1024
-       C 794 1024 1024 794 1024 512
-       C 1024 230 794 0 512 0 Z"
-    fill="#FCFCFB" />
-  <path
-    d="M 512 4
-       C 232 4 4 232 4 512
-       C 4 792 232 1020 512 1020
-       C 792 1020 1020 792 1020 512
-       C 1020 232 792 4 512 4 Z"
-    fill="none" stroke="#E3E2DE" stroke-width="8" />
+  <!-- Background: the macOS app-icon shape, an 824 px rounded square
+       centred on the 1024 canvas (Apple's template leaves a 100 px
+       margin all round, so the icon sits level with its neighbours in
+       the Dock and Finder). Paper, with a hairline edge so it keeps a
+       shape on a white desktop. -->
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="#FCFCFB" />
+  <rect x="104" y="104" width="816" height="816" rx="184"
+        fill="none" stroke="#E3E2DE" stroke-width="8" />
 
-  <!-- The highlighted passage. -->
-  <rect x="362" y="457" width="300" height="110" rx="40" fill="#FFC848" />
+  <!-- The marker, drawn on the 1024 grid and scaled into the square. -->
+  <g transform="translate(512 512) scale(0.805) translate(-512 -512)">
+    <!-- The highlighted passage. -->
+    <rect x="362" y="457" width="300" height="110" rx="40" fill="#FFC848" />
 
-  <!-- The markers: an opening and a closing angle bracket. -->
-  <path d="M 352 300 L 176 512 L 352 724"
-        fill="none" stroke="#1B1B1A" stroke-width="72"
-        stroke-linecap="round" stroke-linejoin="round" />
-  <path d="M 672 300 L 848 512 L 672 724"
-        fill="none" stroke="#1B1B1A" stroke-width="72"
-        stroke-linecap="round" stroke-linejoin="round" />
+    <!-- The markers: an opening and a closing angle bracket. -->
+    <path d="M 352 300 L 176 512 L 352 724"
+          fill="none" stroke="#1B1B1A" stroke-width="72"
+          stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M 672 300 L 848 512 L 672 724"
+          fill="none" stroke="#1B1B1A" stroke-width="72"
+          stroke-linecap="round" stroke-linejoin="round" />
+  </g>
 </svg>

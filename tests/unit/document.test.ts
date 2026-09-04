@@ -243,3 +243,111 @@ describe("document reducer — loadGeneration (undo isolation)", () => {
     expect(typed.loadGeneration).toBe(loaded.loadGeneration);
   });
 });
+
+describe("document reducer — editing the source", () => {
+  const FILE =
+    "# T\n\nA <!-- fmc:1 -->word<!-- /fmc:1 --> here.\n\n<!-- forgemark-comments\n- id: 1\n  anchor_text: word\n  author: A\n  timestamp: 2026-01-01T00:00:00Z\n  resolved: false\n  body: |\n    hi\n-->\n";
+  const loaded = reduceDocument(INITIAL_STATE, {
+    ...baseLoad,
+    text: FILE,
+    body: "# T\n\nA <!-- fmc:1 -->word<!-- /fmc:1 --> here.\n",
+    comments: [
+      {
+        id: 1,
+        anchor_text: "word",
+        author: "A",
+        timestamp: "2026-01-01T00:00:00Z",
+        resolved: false,
+        body: "hi\n",
+      },
+    ],
+  });
+
+  it("editSource keeps the text as typed, reads it tolerantly, and marks dirty", () => {
+    const typed = FILE.replace("A <!-- fmc:1 -->word", "A big <!-- fmc:1 -->word");
+    const next = reduceDocument(
+      { ...loaded, viewMode: "source" },
+      { type: "editSource", text: typed },
+    );
+    expect(next.sourceDraft).toBe(typed);
+    expect(next.dirty).toBe(true);
+    expect(next.body).toContain("A big ");
+    expect(next.comments.map((c) => c.id)).toEqual([1]);
+    // The same text again changes nothing.
+    expect(reduceDocument(next, { type: "editSource", text: typed })).toBe(next);
+  });
+
+  it("editSource keeps the last readable comments while a record is half typed", () => {
+    const broken = FILE.replace("  resolved: false\n", "  resolved: fal");
+    const next = reduceDocument(
+      { ...loaded, viewMode: "source" },
+      { type: "editSource", text: broken },
+    );
+    expect(next.sourceDraft).toBe(broken);
+    expect(next.comments.map((c) => c.id)).toEqual([1]);
+  });
+
+  it("commitSource makes a clean draft the document and starts the editor over", () => {
+    const typed = FILE.replace("here.", "there.");
+    const drafted = reduceDocument(
+      { ...loaded, viewMode: "source" },
+      { type: "editSource", text: typed },
+    );
+    const next = reduceDocument(drafted, { type: "commitSource" });
+    expect(next.sourceDraft).toBe(null);
+    expect(next.viewMode).toBe("rendered");
+    expect(next.body).toContain("there.");
+    expect(next.comments).toHaveLength(1);
+    expect(next.loadGeneration).toBe(drafted.loadGeneration + 1);
+    expect(next.dirty).toBe(true);
+  });
+
+  it("commitSource refuses a draft the parser cannot read, and stays in Source", () => {
+    const broken = FILE + "\n<!-- forgemark-comments\n- id: 2\n-->\n";
+    const drafted = reduceDocument(
+      { ...loaded, viewMode: "source" },
+      { type: "editSource", text: broken },
+    );
+    const next = reduceDocument(drafted, { type: "commitSource" });
+    expect(next.viewMode).toBe("source");
+    expect(next.sourceDraft).toBe(broken);
+    expect(next.error).toMatch(/can't be read/);
+  });
+
+  it("commitSource without a draft just leaves Source view", () => {
+    const next = reduceDocument({ ...loaded, viewMode: "source" }, { type: "commitSource" });
+    expect(next.viewMode).toBe("rendered");
+    expect(next.loadGeneration).toBe(loaded.loadGeneration);
+  });
+
+  it("saved clears dirty when the draft is what was written, and not otherwise", () => {
+    const typed = FILE.replace("here.", "there.");
+    const drafted = reduceDocument(
+      { ...loaded, viewMode: "source" },
+      { type: "editSource", text: typed },
+    );
+    const clean = reduceDocument(drafted, {
+      type: "saved",
+      text: typed,
+      body: drafted.body,
+      comments: drafted.comments,
+    });
+    expect(clean.dirty).toBe(false);
+    expect(clean.sourceDraft).toBe(typed);
+    const stale = reduceDocument(drafted, {
+      type: "saved",
+      text: FILE,
+      body: drafted.body,
+      comments: drafted.comments,
+    });
+    expect(stale.dirty).toBe(true);
+  });
+
+  it("a load or a reload from disk drops the draft", () => {
+    const drafted = reduceDocument(
+      { ...loaded, viewMode: "source" },
+      { type: "editSource", text: FILE + "x" },
+    );
+    expect(reduceDocument(drafted, baseLoad).sourceDraft).toBe(null);
+  });
+});

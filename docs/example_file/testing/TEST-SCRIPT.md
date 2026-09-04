@@ -36,7 +36,19 @@ Open `docs/example_file/testing/dashboard/dashboard.html`. Everything below the 
 13. **Theme.** Switch the app to dark mode (Settings): the report follows, since its stylesheet has a dark palette.
 14. **Reload from disk.** With the file open, edit `data.json` in another editor (change a tile label) and save `dashboard.html` untouched — nothing should happen. Then touch `dashboard.html` itself (add a space to the intro paragraph and save): the app offers to reload, and after reloading the report is drawn fresh.
 
-## Part 3 — Round trip
+## Part 3 — Source editing
+
+With `gfm-showcase.md` open:
+
+1. **Chip.** Open Source view (⌘⇧S or the view switch). The chip reads "Source view · editable".
+2. **Type.** Click after the `# GFM showcase` line and type a new paragraph. Wait a second: the window title loses its unsaved mark (auto-save wrote the text as typed). Open the file in another editor to see the paragraph exactly as typed, with nothing else rewritten.
+3. **Sidebar follows.** Leave a comment in Rendered view first, then in Source view delete its whole record from the trailing `forgemark-comments` block. The card stays (the markers are still in the body). Delete the marker pair too: the card goes.
+4. **Back to Rendered.** Type `<!-- fmc:9 -->` and `<!-- /fmc:9 -->` around a word by hand and add a record for id 9 to the block (copy an existing record and change the id and `anchor_text`). Switch to Rendered: the word is highlighted and the card is in the sidebar.
+5. **A broken block.** In Source view, add a line `  timestamp: twice` to a record so it has two timestamps, then click Rendered. The view stays in Source and a message says the file can't be read as written, naming the problem. Fix the line; Rendered now opens.
+6. **HTML report.** Open `dashboard/dashboard.html` with a comment on it, switch to Source, change a word in the intro paragraph, switch back. The report is drawn fresh with the change and the comment's highlight is still there.
+7. **Read-only.** `chmod a-w` a copy of the showcase and open it: the chip reads "read-only review" and the view does not accept typing.
+
+## Part 4 — Round trip
 
 After Part 2, open the saved `dashboard.html` in a browser directly. It should render and work exactly as before; the markers are invisible comments. Run `npm run cli -- lint docs/example_file/testing/dashboard/dashboard.html`: no problems.
 

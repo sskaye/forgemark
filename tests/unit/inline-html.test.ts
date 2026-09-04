@@ -118,3 +118,38 @@ describe("inline images", () => {
     );
   });
 });
+
+describe("Obsidian wikilinks", () => {
+  it("show their label, count as that text, and are kept as written", () => {
+    load("Read [[Meeting notes]] and [[notes/plan|the plan]] first.\n");
+    expect(
+      Array.from(editor.view.dom.querySelectorAll(".fm-wikilink")).map((el) => el.textContent),
+    ).toEqual(["Meeting notes", "the plan"]);
+    expect(plainText(editor.state.doc, 1, editor.state.doc.child(0).nodeSize - 1)).toBe(
+      "Read Meeting notes and the plan first.",
+    );
+    typeAtEnd(" Done.");
+    expect(emit()).toBe("Read [[Meeting notes]] and [[notes/plan|the plan]] first. Done.\n");
+  });
+});
+
+describe("Obsidian image embeds", () => {
+  it("render as images, resolve against the folder, and write back as written", () => {
+    load(
+      "See ![[diagram.png]] and ![[figures/plot.svg|The plot]] but not ![[a note]] or ![[paper.pdf]].\n",
+    );
+    const imgs = Array.from(editor.view.dom.querySelectorAll("img"));
+    expect(imgs.map((i) => [i.getAttribute("src"), i.getAttribute("alt")])).toEqual([
+      ["diagram.png", ""],
+      ["figures/plot.svg", "The plot"],
+    ]);
+    // The other embeds show their label and are kept as written.
+    expect(
+      Array.from(editor.view.dom.querySelectorAll(".fm-wikilink")).map((el) => el.textContent),
+    ).toEqual(["a note", "paper.pdf"]);
+    typeAtEnd(" Done.");
+    expect(emit()).toBe(
+      "See ![[diagram.png]] and ![[figures/plot.svg|The plot]] but not ![[a note]] or ![[paper.pdf]]. Done.\n",
+    );
+  });
+});

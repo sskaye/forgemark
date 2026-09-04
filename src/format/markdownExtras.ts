@@ -5,10 +5,16 @@
 //
 //   - footnotes: `[^label]` in text, `[^label]: text` as a block;
 //   - alerts: a quote whose first line is `[!NOTE]` (or TIP, IMPORTANT,
-//     WARNING, CAUTION) carries the kind on its blockquote;
+//     WARNING, CAUTION) carries the kind on its blockquote; Obsidian's
+//     callouts allow any type (`[!Takeaway]`) and a fold marker after
+//     the bracket (`[!Summary]-`), and both are kept as written;
 //   - strikethrough with a single tilde, which the GFM spec allows and
 //     markdown-it does not;
 //   - math: `$…$` in text and `$$` on its own lines around a block;
+//   - Obsidian wikilinks: `![[file.png]]` and `![[file.png|alt]]` render
+//     as images; `[[note]]`, `[[note|label]]`, and an embed of anything
+//     but an image render as their label and are kept as written, since
+//     escaping their brackets would break them for Obsidian;
 //   - with `linkify`, bare `https://…` and `www.…` addresses and e-mail
 //     addresses become links, as on GitHub, while a bare `example.com`
 //     or `SKILL.md` stays text.
@@ -24,7 +30,8 @@ import type StateCore from "markdown-it/lib/rules_core/state_core.mjs";
 export const ALERT_KINDS = ["note", "tip", "important", "warning", "caution"] as const;
 export type AlertKind = (typeof ALERT_KINDS)[number];
 
-const ALERT_LINE = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*(?:\n|$)/;
+// Any type Obsidian would accept, with its optional fold marker.
+const ALERT_LINE = /^\[!([^\]\r\n]+)\]([-+])?[ \t]*(?:\n|$)/;
 const FOOTNOTE_DEF = /^\[\^([^\]\s]+)\]:[ \t]*/;
 const FOOTNOTE_REF = /^\[\^([^\]\s]+)\]/;
 
@@ -43,11 +50,25 @@ export function markdownExtras(md: MarkdownIt, options: { linkify?: boolean } = 
     alt: ["paragraph", "reference", "blockquote", "list"],
   });
   md.inline.ruler.before("escape", "fm_math_inline", mathInline);
+  md.inline.ruler.before("image", "fm_wiki_embed", wikiEmbed);
+  md.inline.ruler.before("link", "fm_wiki_link", wikiLink);
   md.core.ruler.after("block", "fm_alert", alerts);
   md.renderer.rules.fm_math_block = (tokens, idx) =>
     `<div data-fm-math-block="${escapeAttr(tokens[idx].content)}"></div>\n`;
   md.renderer.rules.fm_math_inline = (tokens, idx) =>
     `<span data-fm-math="${escapeAttr(tokens[idx].content)}"></span>`;
+  md.renderer.rules.fm_wiki_link = (tokens, idx) => {
+    const { raw, label } = tokens[idx].meta as { raw: string; label: string };
+    return `<span data-fm-wiki="${escapeAttr(raw)}">${escapeAttr(label)}</span>`;
+  };
+  md.renderer.rules.fm_wiki_embed = (tokens, idx) => {
+    const { target, alias } = tokens[idx].meta as { target: string; alias: string | null };
+    const alt = alias ?? "";
+    return (
+      `<img src="${escapeAttr(target)}" alt="${escapeAttr(alt)}" ` +
+      `data-wikilink="true" data-wikitarget="${escapeAttr(target)}">`
+    );
+  };
   md.renderer.rules.fm_footnote_ref = (tokens, idx) => {
     const label = escapeAttr(String(tokens[idx].meta.label));
     return `<sup data-fm-footnote="${label}">${label}</sup>`;
@@ -195,6 +216,46 @@ function mathInline(state: StateInline, silent: boolean) {
   return true;
 }
 
+const WIKI_EMBED = /^!\[\[([^\]|\n]+?)(?:\|([^\]\n]*))?\]\]/;
+const WIKI_IMAGE = /\.(svg|png|jpe?g|gif|webp|bmp|avif)$/i;
+
+// `![[file.png]]` or `![[file.png|alt]]`, for image files only: a note
+// or a PDF embed is left as the text it is.
+function wikiEmbed(state: StateInline, silent: boolean) {
+  const { src, pos, posMax } = state;
+  if (src.charCodeAt(pos) !== 0x21 /* ! */ || src.charCodeAt(pos + 1) !== 0x5b) return false;
+  const m = WIKI_EMBED.exec(src.slice(pos, posMax));
+  if (!m || !WIKI_IMAGE.test(m[1].trim())) return false;
+  if (!silent) {
+    const token = state.push("fm_wiki_embed", "img", 0);
+    token.meta = { target: m[1].trim(), alias: m[2] === undefined ? null : m[2].trim() };
+  }
+  state.pos += m[0].length;
+  return true;
+}
+
+const WIKI_LINK = /^!?\[\[([^\]|\n]+?)(?:\|([^\]\n]*))?\]\]/;
+
+// `[[note]]`, `[[note|label]]`, or an embed the rule above left alone:
+// shown as its label, kept as written.
+function wikiLink(state: StateInline, silent: boolean) {
+  const { src, pos, posMax } = state;
+  const first = src.charCodeAt(pos);
+  if (first !== 0x5b && !(first === 0x21 && src.charCodeAt(pos + 1) === 0x5b)) return false;
+  if (src.charCodeAt(pos + (first === 0x21 ? 1 : 0) + 1) !== 0x5b) return false;
+  const m = WIKI_LINK.exec(src.slice(pos, posMax));
+  if (!m) return false;
+  // An image embed is the embed rule's, which runs later in the chain.
+  if (first === 0x21 && WIKI_IMAGE.test(m[1].trim())) return false;
+  if (!silent) {
+    const token = state.push("fm_wiki_link", "span", 0);
+    const label = m[2] !== undefined && m[2].trim() ? m[2].trim() : m[1].trim();
+    token.meta = { raw: m[0], label };
+  }
+  state.pos += m[0].length;
+  return true;
+}
+
 // A quote whose first paragraph starts with `[!KIND]` on its own line.
 function alerts(state: StateCore) {
   const tokens = state.tokens;
@@ -205,7 +266,8 @@ function alerts(state: StateCore) {
     if (paragraph.type !== "paragraph_open" || inline.type !== "inline") continue;
     const m = ALERT_LINE.exec(inline.content);
     if (!m) continue;
-    tokens[i].attrSet("data-alert", m[1].toLowerCase());
+    tokens[i].attrSet("data-alert-type", m[1].trim());
+    if (m[2]) tokens[i].attrSet("data-alert-fold", m[2]);
     inline.content = inline.content.slice(m[0].length);
     if (inline.content === "") tokens.splice(i + 1, 3);
   }
