@@ -58,6 +58,7 @@ describe("editor round trip: must be byte-identical", () => {
     "whole-block anchor": '<!-- fmc:3 -->\n```python\nprint("hi")\n```\n<!-- /fmc:3 -->\n',
     "plain constructs":
       "# H1\n\nA paragraph with *em* and **strong**.\n\n- one\n- two\n\n1. first\n2. second\n\n> quote\n\n---\n\n![alt](a.png)\n",
+    "task list": "- [x] done\n- [ ] not yet\n",
   };
   for (const [name, body] of Object.entries(cases)) {
     it(name, () => {

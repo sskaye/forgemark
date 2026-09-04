@@ -164,6 +164,29 @@ function decoratePair(
   return "inline";
 }
 
+// Whether `text` names the element a passage anchor wraps: its caption,
+// or everything it shows.
+function passageNames(host: Element, text: string): boolean {
+  const wanted = text.replace(/\s+/g, " ").trim();
+  if (wanted.length === 0) return false;
+  const whole = textNodesUnder(host)
+    .map((n) => n.data)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return whole === wanted || describeElement(host).replace(/\s+/g, " ").trim() === wanted;
+}
+
+// Let go of the block mark a passage put on its element when the
+// element no longer shows that passage. Run for every passage before
+// any is decorated, so a passage that now names the element is not
+// kept off it by one that no longer does.
+export function releasePassageRail(doc: Document, id: number, text: string): void {
+  const host = doc.querySelector(`[data-fm-passage-host~="${id}"]`);
+  if (!host || host.getAttribute("data-anchor-id") !== String(id)) return;
+  if (!passageNames(host, text)) host.removeAttribute("data-anchor-id");
+}
+
 // Highlight `text` inside the element a passage anchor wraps, or
 // nothing when the element does not show it at the moment (a tab not
 // selected, a range not chosen). Wraps that no longer match are undone
@@ -185,14 +208,8 @@ export function decoratePassage(doc: Document, id: number, text: string): boolea
   if (wanted.length === 0) return false;
 
   // The passage is the element's own name — its caption, or all it
-  // shows: mark the element, as a block anchor is marked, and let go
-  // when it shows something else.
-  const whole = textNodesUnder(host)
-    .map((n) => n.data)
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
-  const named = whole === wanted || describeElement(host).replace(/\s+/g, " ").trim() === wanted;
+  // shows: mark the element, as a block anchor is marked.
+  const named = passageNames(host, text);
   if (host.getAttribute("data-anchor-id") === String(id)) {
     if (named) return true;
     host.removeAttribute("data-anchor-id");

@@ -564,6 +564,16 @@ also run the relevant integration test and inspect the app in a browser or
 Tauri window — several bugs in the tabs work were reachable only by driving the
 real app, particularly anything crossing into Rust.
 
+**In a browser.** `npm run test:e2e` runs Playwright against the Vite dev server
+in Chromium. Tauri's bridge is replaced in the page by `tests/e2e/tauri-shim.ts`:
+files are read from disk through Vite's `/@fs/` route, writes go to an in-memory
+overlay the test reads back byte for byte, dialogs answer nothing, and a report
+is put into its frame from a blob URL instead of the Rust protocol. Everything
+else is the real app, so these tests cover what jsdom cannot: a report's own
+script running, layout, a highlight surviving the script's redraw, a keycap
+looking like a keycap, and a wide table scrolling. The Rust protocol itself and
+WebKit's quirks still need the app.
+
 ## Design tokens
 
 The current production tokens live in `src/theme/tokens.ts`.

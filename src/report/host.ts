@@ -73,8 +73,12 @@ const tauriLoader: ReportLoader = async (frame, load) => {
 };
 
 // Where the protocol serves a report. Windows cannot use a custom
-// scheme directly and gets the `http://<scheme>.localhost` form.
+// scheme directly and gets the `http://<scheme>.localhost` form. A
+// browser test, which has no protocol, supplies its own.
 export function reportUrl(id: string): string {
+  const test = (window as unknown as { __forgemark_e2e?: { reportUrl(id: string): string } })
+    .__forgemark_e2e;
+  if (test) return test.reportUrl(id);
   const windows = typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent);
   return windows
     ? `http://fmreport.localhost/${encodeURIComponent(id)}/index.html`

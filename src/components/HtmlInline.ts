@@ -36,6 +36,8 @@ const UNDERSTOOD = new Set<string>([
   "br",
   "img",
   "fm-anchor",
+  // The task-list plugin emits its checkbox as inline HTML.
+  "input",
 ]);
 
 export function htmlInlineTag(source: string): string {

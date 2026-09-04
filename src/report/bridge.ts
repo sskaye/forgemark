@@ -19,6 +19,7 @@ import {
   decorateAnchors,
   decoratePassage,
   markerPair,
+  releasePassageRail,
   removeAnchor,
 } from "./decorate";
 import { describeElement, renderedText, textIndexOf, walkTextNodes } from "./dom";
@@ -63,9 +64,9 @@ export function installBridge(win: Window, channel: BridgeChannel): () => void {
 
   const decorate = () => {
     decorateAnchors(doc, passageIds());
-    for (const c of comments) {
-      if (c.kind === "passage" && c.text) decoratePassage(doc, c.id, c.text);
-    }
+    const passages = comments.filter((c) => c.kind === "passage" && c.text);
+    for (const c of passages) releasePassageRail(doc, c.id, c.text!);
+    for (const c of passages) decoratePassage(doc, c.id, c.text!);
     applyAnchorState(doc, state.focused, state.hovered, new Set(state.resolved));
   };
 
@@ -462,6 +463,23 @@ export function installBridge(win: Window, channel: BridgeChannel): () => void {
     channel.send({ type: "contextmenu", x: e.clientX, y: e.clientY });
   };
 
+  // Shortcuts go to the app. A chord with ⌥ as well as ⌘ has no browser
+  // meaning of its own and is stopped here; the rest keep their default
+  // (copy, select all, zoom) and the app decides what else to do.
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (!e.metaKey && !e.ctrlKey) return;
+    if ((e.metaKey || e.ctrlKey) && e.altKey) e.preventDefault();
+    channel.send({
+      type: "keydown",
+      key: e.key,
+      code: e.code,
+      metaKey: e.metaKey,
+      ctrlKey: e.ctrlKey,
+      altKey: e.altKey,
+      shiftKey: e.shiftKey,
+    });
+  };
+
   let refreshTimer: number | null = null;
   const scheduleRefresh = () => {
     if (refreshTimer != null) return;
@@ -477,6 +495,7 @@ export function installBridge(win: Window, channel: BridgeChannel): () => void {
   doc.addEventListener("mouseover", onMouseOver);
   doc.addEventListener("mouseout", onMouseOut);
   doc.addEventListener("contextmenu", onContextMenu);
+  doc.addEventListener("keydown", onKeyDown);
   doc.addEventListener("mouseup", rememberSelection);
   doc.addEventListener("keyup", rememberSelection);
   doc.addEventListener("selectionchange", rememberSelection);
@@ -609,6 +628,7 @@ export function installBridge(win: Window, channel: BridgeChannel): () => void {
     doc.removeEventListener("mouseover", onMouseOver);
     doc.removeEventListener("mouseout", onMouseOut);
     doc.removeEventListener("contextmenu", onContextMenu);
+    doc.removeEventListener("keydown", onKeyDown);
     doc.removeEventListener("mouseup", rememberSelection);
     doc.removeEventListener("keyup", rememberSelection);
     doc.removeEventListener("selectionchange", rememberSelection);

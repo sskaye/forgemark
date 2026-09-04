@@ -14,4 +14,10 @@ export default defineConfig({
     actionTimeout: 5_000,
     trace: "retain-on-failure",
   },
+  webServer: {
+    command: "npm run vite:dev",
+    url: "http://localhost:1420",
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+  },
 });

@@ -66,7 +66,18 @@ export type BridgeToHost =
   | { type: "anchorHover"; id: number | null }
   | { type: "contextmenu"; x: number; y: number }
   | { type: "link"; href: string }
-  | { type: "elementCapture"; element: FrameElement };
+  | { type: "elementCapture"; element: FrameElement }
+  // A shortcut pressed while the report has focus. The frame is its own
+  // document, so the app's key listeners never see it otherwise.
+  | {
+      type: "keydown";
+      key: string;
+      code: string;
+      metaKey: boolean;
+      ctrlKey: boolean;
+      altKey: boolean;
+      shiftKey: boolean;
+    };
 
 export type HostToBridge =
   | { type: "init"; theme: FrameTheme; state: FrameState; comments: FrameComment[] }

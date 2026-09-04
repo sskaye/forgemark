@@ -84,38 +84,36 @@ export function createBlockSync(): BlockSync {
         lastDoc = doc;
         return body;
       };
-      // Nodes beyond the block count are new (an empty paragraph the
-      // editor keeps at the end, or one the reader started typing in).
+      // Trailing empty paragraphs — the one the editor keeps for the
+      // caret after a list or a table, or one the reader just opened
+      // with Enter — are not blocks: an empty paragraph is no Markdown.
+      // They are left out on both sides before anything is compared;
+      // counting one on the new side only used to misalign the suffix
+      // and re-serialize every block after the edit.
+      const isEmptyPara = (n: PMNode) => n.type.name === "paragraph" && n.content.size === 0;
       const old = lastDoc;
-      if (!old || old.childCount < blockCount) return whole();
+      if (!old) return whole();
+      const oldReal = countRealNodes(old, isEmptyPara);
+      if (oldReal !== blockCount) return whole();
 
       // Longest unchanged prefix and suffix, by node identity.
-      const oldReal = blockCount;
-      const newCount = doc.childCount;
+      const newReal = countRealNodes(doc, isEmptyPara);
       let prefix = 0;
-      while (prefix < oldReal && prefix < newCount && old.child(prefix) === doc.child(prefix)) {
+      while (prefix < oldReal && prefix < newReal && old.child(prefix) === doc.child(prefix)) {
         prefix++;
       }
       let suffix = 0;
       while (
         suffix < oldReal - prefix &&
-        suffix < newCount - prefix &&
-        old.child(oldReal - 1 - suffix) === doc.child(newCount - 1 - suffix)
+        suffix < newReal - prefix &&
+        old.child(oldReal - 1 - suffix) === doc.child(newReal - 1 - suffix)
       ) {
         suffix++;
       }
       const oldFrom = prefix;
       const oldTo = oldReal - suffix;
       const changed: PMNode[] = [];
-      for (let i = prefix; i < newCount - suffix; i++) changed.push(doc.child(i));
-
-      // Trailing empty paragraphs — the one the editor keeps for the
-      // caret after a list or a table, or one the reader just opened
-      // with Enter — are not blocks: an empty paragraph is no Markdown.
-      // Keeping one used to splice a blank line onto the end of a
-      // document that ends with a list on every keystroke.
-      const isEmptyPara = (n: PMNode) => n.type.name === "paragraph" && n.content.size === 0;
-      while (changed.length > 0 && isEmptyPara(changed[changed.length - 1])) changed.pop();
+      for (let i = prefix; i < newReal - suffix; i++) changed.push(doc.child(i));
       if (changed.length === 0 && oldTo === oldFrom) {
         mode = "splice";
         lastDoc = doc;
@@ -134,8 +132,7 @@ export function createBlockSync(): BlockSync {
       const next = splitBlocks(body);
       // The splice must leave block i as node i, or the next edit would
       // land in the wrong lines. If it doesn't, take the safe road.
-      const realNodes = countRealNodes(doc, isEmptyPara);
-      if (next.blocks.length !== realNodes) return whole();
+      if (next.blocks.length !== newReal) return whole();
       mode = "splice";
       map = next;
       lastDoc = doc;
@@ -152,6 +149,6 @@ function nodeStart(doc: PMNode, index: number): number {
 
 function countRealNodes(doc: PMNode, isEmptyPara: (n: PMNode) => boolean): number {
   let n = doc.childCount;
-  if (n > 0 && isEmptyPara(doc.child(n - 1))) n--;
+  while (n > 0 && isEmptyPara(doc.child(n - 1))) n--;
   return n;
 }

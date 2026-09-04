@@ -350,6 +350,22 @@ export function HtmlView({
         case "elementCapture":
           latest.current.onRequestElementComment(resolveElement(message.element));
           break;
+        case "keydown":
+          // Replayed on the app's window so its own shortcuts apply, as
+          // they would with the focus anywhere else in the app.
+          window.dispatchEvent(
+            new KeyboardEvent("keydown", {
+              key: message.key,
+              code: message.code,
+              metaKey: message.metaKey,
+              ctrlKey: message.ctrlKey,
+              altKey: message.altKey,
+              shiftKey: message.shiftKey,
+              bubbles: true,
+              cancelable: true,
+            }),
+          );
+          break;
         case "ready":
           break;
       }
@@ -360,10 +376,18 @@ export function HtmlView({
   onMessageRef.current = onMessage;
 
   // Load the report into the frame. Runs on mount and whenever the
-  // source changed in a way the frame was not told about.
+  // source changed in a way the frame was not told about. One load at a
+  // time: a second for the same source while the first is in flight is
+  // skipped, and a load overtaken by a newer one throws its connection
+  // away, or two bridges would be talking to one view.
+  const loadSeq = useRef(0);
+  const loadingRef = useRef<string | null>(null);
   const load = useCallback(async (html: string) => {
     const frame = frameRef.current;
     if (!frame) return;
+    if (loadingRef.current === html) return;
+    loadingRef.current = html;
+    const seq = ++loadSeq.current;
     connectionRef.current?.dispose();
     connectionRef.current = null;
     lastSelectionRef.current = null;
@@ -371,13 +395,15 @@ export function HtmlView({
     try {
       connection = await loadReport(frame, { html, baseDir: latest.current.baseDir });
     } catch (err) {
+      if (loadingRef.current === html) loadingRef.current = null;
       latest.current.onLinkError?.(
         `The report could not be shown: ${err instanceof Error ? err.message : String(err)}`,
       );
       return;
     }
+    if (loadingRef.current === html) loadingRef.current = null;
     // A newer load may have started while this one was in flight.
-    if (frameRef.current !== frame || latest.current.body !== html) {
+    if (seq !== loadSeq.current || frameRef.current !== frame || latest.current.body !== html) {
       connection.dispose();
       return;
     }

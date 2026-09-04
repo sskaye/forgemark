@@ -146,6 +146,17 @@
     }
     return "inline";
   }
+  function passageNames(host, text) {
+    const wanted = text.replace(/\s+/g, " ").trim();
+    if (wanted.length === 0) return false;
+    const whole = textNodesUnder(host).map((n) => n.data).join(" ").replace(/\s+/g, " ").trim();
+    return whole === wanted || describeElement(host).replace(/\s+/g, " ").trim() === wanted;
+  }
+  function releasePassageRail(doc, id, text) {
+    const host = doc.querySelector(`[data-fm-passage-host~="${id}"]`);
+    if (!host || host.getAttribute("data-anchor-id") !== String(id)) return;
+    if (!passageNames(host, text)) host.removeAttribute("data-anchor-id");
+  }
   function decoratePassage(doc, id, text) {
     const host = doc.querySelector(`[data-fm-passage-host~="${id}"]`);
     if (!host) return false;
@@ -157,8 +168,7 @@
       for (const el of current) unwrapSpan(el);
     }
     if (wanted.length === 0) return false;
-    const whole = textNodesUnder(host).map((n) => n.data).join(" ").replace(/\s+/g, " ").trim();
-    const named = whole === wanted || describeElement(host).replace(/\s+/g, " ").trim() === wanted;
+    const named = passageNames(host, text);
     if (host.getAttribute("data-anchor-id") === String(id)) {
       if (named) return true;
       host.removeAttribute("data-anchor-id");
@@ -310,9 +320,9 @@
     const passageIds = () => new Set(comments.filter((c) => c.kind === "passage").map((c) => c.id));
     const decorate = () => {
       decorateAnchors(doc, passageIds());
-      for (const c of comments) {
-        if (c.kind === "passage" && c.text) decoratePassage(doc, c.id, c.text);
-      }
+      const passages = comments.filter((c) => c.kind === "passage" && c.text);
+      for (const c of passages) releasePassageRail(doc, c.id, c.text);
+      for (const c of passages) decoratePassage(doc, c.id, c.text);
       applyAnchorState(doc, state.focused, state.hovered, new Set(state.resolved));
     };
     const style = doc.createElement("style");
@@ -634,6 +644,19 @@
       reportSelection();
       channel.send({ type: "contextmenu", x: e.clientX, y: e.clientY });
     };
+    const onKeyDown = (e) => {
+      if (!e.metaKey && !e.ctrlKey) return;
+      if ((e.metaKey || e.ctrlKey) && e.altKey) e.preventDefault();
+      channel.send({
+        type: "keydown",
+        key: e.key,
+        code: e.code,
+        metaKey: e.metaKey,
+        ctrlKey: e.ctrlKey,
+        altKey: e.altKey,
+        shiftKey: e.shiftKey
+      });
+    };
     let refreshTimer = null;
     const scheduleRefresh = () => {
       if (refreshTimer != null) return;
@@ -648,6 +671,7 @@
     doc.addEventListener("mouseover", onMouseOver);
     doc.addEventListener("mouseout", onMouseOut);
     doc.addEventListener("contextmenu", onContextMenu);
+    doc.addEventListener("keydown", onKeyDown);
     doc.addEventListener("mouseup", rememberSelection);
     doc.addEventListener("keyup", rememberSelection);
     doc.addEventListener("selectionchange", rememberSelection);
@@ -753,6 +777,7 @@
       doc.removeEventListener("mouseover", onMouseOver);
       doc.removeEventListener("mouseout", onMouseOut);
       doc.removeEventListener("contextmenu", onContextMenu);
+      doc.removeEventListener("keydown", onKeyDown);
       doc.removeEventListener("mouseup", rememberSelection);
       doc.removeEventListener("keyup", rememberSelection);
       doc.removeEventListener("selectionchange", rememberSelection);

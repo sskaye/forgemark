@@ -165,6 +165,25 @@ const MarkdownText = Text.extend({
   },
 });
 
+// A task list that remembers whether it was tight. tiptap-markdown gives
+// bullet lists a `tight` attribute its serializer honours; the task list
+// had none, so every task list came back loose, with a blank line
+// between items.
+const MarkdownTaskList = TaskList.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      tight: {
+        default: true,
+        parseHTML: (element: HTMLElement) =>
+          element.getAttribute("data-tight") === "true" || !element.querySelector("p"),
+        renderHTML: (attributes: { tight: boolean }) =>
+          attributes.tight ? { "data-tight": "true" } : {},
+      },
+    };
+  },
+});
+
 // Teaches the parser the syntax the extensions above render.
 const MarkdownSyntax = Extension.create({
   name: "markdownSyntax",
@@ -221,11 +240,12 @@ export function renderedExtensions(
     HtmlInline,
     ...extra,
     InlineImage,
-    MarkdownTable.configure({ resizable: false }),
+    // The wrapper is what scrolls a wide table sideways.
+    MarkdownTable.configure({ resizable: false, renderWrapper: true }),
     TableRow,
     TableHeader,
     TableCell,
-    TaskList,
+    MarkdownTaskList,
     TaskItem.configure({ nested: true }),
     Markdown.configure({
       // html: true is what lets the `<fm-anchor>` edge elements we inject

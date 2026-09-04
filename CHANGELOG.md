@@ -24,6 +24,9 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 
 ### Fixed
 
+- A keyboard shortcut pressed while an HTML report has the focus now reaches the app: ⌘⌥M opens the composer on the selection, ⌘S saves, as they do with the focus anywhere else.
+- Editing a document that ends with a list, table, or code block rewrote every block after the edit; only the edited block is rewritten now.
+- Task lists come back tight after an edit instead of gaining a blank line between items.
 - Images and links written relative to the document work. `![](images/x.png)`, an `<img src="images/x.png">`, and a report's own stylesheet, fonts, or images next to it load from the document's folder. A link to `#heading` scrolls to it (every heading now carries the id GitHub would give it), a link to another `.md` or `.html` file opens it in a tab, a link to any other file opens it with the system, and an address opens outside as before. Links inside an HTML report, which did nothing, do the same.
 - Wide tables scroll sideways instead of squeezing every column.
 - Math is drawn by KaTeX: `$x^2$` in text, `$$` on its own lines around a block, or a ` ```math ` fence, each written back in the form it came in. Mermaid fences are drawn as diagrams; the library loads the first time one is shown.

@@ -193,6 +193,28 @@ describe("block-level splicing", () => {
     expect(out).toContain("[d]: https://x.y");
   });
 
+  it("rewrites only the edited block when the document ends with a list", () => {
+    // The editor keeps an empty paragraph after a trailing list. It used
+    // to be counted on the new side of the diff and not the old, which
+    // pushed the unchanged suffix out of alignment, so every block after
+    // the edit was re-serialized: here the table would lose its alignment.
+    load("One.\n\nTwo.\n\n| a | b |\n|:--|--:|\n| 1 | 2 |\n\n- x\n- y\n");
+    retype(0, "One edited.");
+    expect(emit()).toBe("One edited.\n\nTwo.\n\n| a | b |\n|:--|--:|\n| 1 | 2 |\n\n- x\n- y\n");
+    expect(sync.lastMode()).toBe("splice");
+  });
+
+  it("keeps a task list as one block, checkbox markup and all", () => {
+    // The task-list plugin renders its checkbox as inline HTML; the
+    // inline-HTML placeholder used to swallow it, which broke the list
+    // into several nodes and sent every edit down the whole-document road.
+    load("# Title\n\n- [x] done\n- [ ] not yet\n");
+    expect(editor.state.doc.child(1).type.name).toBe("taskList");
+    retype(0, "Title edited");
+    expect(emit()).toBe("# Title edited\n\n- [x] done\n- [ ] not yet\n");
+    expect(sync.lastMode()).toBe("splice");
+  });
+
   it("adds nothing to a document that ends with a list when another block is edited", () => {
     load("# Title\n\n- one\n- two\n");
     retype(0, "Title edited");

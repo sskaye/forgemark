@@ -231,6 +231,10 @@ describe("what the reader does", () => {
     table.querySelector("td")!.textContent = "43";
     await vi.advanceTimersByTimeAsync(100);
     expect(table.getAttribute("data-anchor-id")).toBe("12");
+    // Back to the first passage while the second still holds the mark.
+    table.querySelector("td")!.textContent = "42";
+    await vi.advanceTimersByTimeAsync(100);
+    expect(table.getAttribute("data-anchor-id")).toBe("11");
     table.querySelector("td")!.textContent = "44";
     await vi.advanceTimersByTimeAsync(100);
     expect(table.hasAttribute("data-anchor-id")).toBe(false);
