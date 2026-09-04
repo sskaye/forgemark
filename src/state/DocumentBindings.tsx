@@ -20,6 +20,7 @@ import {
 } from "../services/fileWatcher";
 import { useRecentFiles, useDefaultView } from "./preferences";
 import { commandFor, modalOpen } from "./keymap";
+import { claimQueuedOpenPaths } from "./menuBridge";
 
 type Logger = (msg: string, err: unknown) => void;
 
@@ -257,6 +258,8 @@ export function DocumentBindings({
       if (detail?.path) void openPathRef.current(detail.path);
     };
     window.addEventListener("forgemark:open-path", handler);
+    // Anything the bridge delivered before this listener existed.
+    for (const path of claimQueuedOpenPaths()) void openPathRef.current(path);
     return () => window.removeEventListener("forgemark:open-path", handler);
   }, [isActive]);
 

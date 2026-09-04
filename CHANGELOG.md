@@ -18,6 +18,7 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 
 ### Fixed
 
+- On Windows, double-clicking a `.md` or `.html` file now opens it: the installer registered the associations but nothing read the path. A second double-click while the app is running opens the file in the existing window instead of starting a second copy. On every platform, a file handed over during a cold start can no longer be dropped by arriving before the app was listening.
 - After printing once, a hidden second copy of the editor stayed mounted and re-parsed the document on every keystroke, slowing typing for the rest of the session.
 - Comment bodies showed code identifiers wrongly: `snake_case_name` lost its underscores and `a * b * c` its stars.
 - "Doc order" in the sidebar sorted by comment id, which is creation order, rather than by where each anchor sits in the document.

@@ -15,7 +15,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-use tauri::{Emitter, Manager as _};
+use tauri::{Emitter, Manager};
 // RunEvent::Opened is macOS-only, so the bare-name import that the
 // file-open handler uses stays gated. (Manager is imported unconditionally
 // above — the quit guard needs `.state()` on every platform.)
@@ -77,9 +77,39 @@ fn approve_exit(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+// The document paths among a launch's arguments. Windows and Linux hand
+// a double-clicked file to the app this way (macOS uses RunEvent::Opened
+// instead); anything that isn't a file we open is left alone.
+fn file_args(args: &[String]) -> Vec<String> {
+    args.iter()
+        .skip(1)
+        .filter(|a| !a.starts_with('-'))
+        .filter(|a| {
+            let lower = a.to_ascii_lowercase();
+            [".md", ".markdown", ".html", ".htm", ".xhtml"]
+                .iter()
+                .any(|ext| lower.ends_with(ext))
+        })
+        .cloned()
+        .collect()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
+        // A second launch — another double-click while the app is running
+        // — hands its arguments to this instance and exits. Registered
+        // first, as the plugin requires. The paths go down the same road
+        // a Finder open takes; the window comes forward so the user sees
+        // the result.
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            for path in file_args(&args) {
+                let _ = app.emit("forgemark:open-path", path);
+            }
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
@@ -107,6 +137,14 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            // A cold launch with a file on the command line: queue it for
+            // the frontend to claim once its listener is up.
+            let from_argv = file_args(&std::env::args().collect::<Vec<_>>());
+            if !from_argv.is_empty() {
+                let state = app.state::<PendingFiles>();
+                let mut guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
+                guard.extend(from_argv);
+            }
             let menu = build_menu(app.handle(), &[])?;
             app.set_menu(menu)?;
             app.on_menu_event(|app, event| {
@@ -421,4 +459,25 @@ fn build_menu(app: &tauri::AppHandle, recent: &[String]) -> tauri::Result<Menu<t
         .item(&comment_submenu)
         .item(&window_submenu)
         .build()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::file_args;
+
+    #[test]
+    fn keeps_document_paths_and_drops_the_rest() {
+        let args = vec![
+            "forgemark".to_string(),
+            "--flag".to_string(),
+            "C:\\notes\\draft.md".to_string(),
+            "report.HTML".to_string(),
+            "not-a-doc.txt".to_string(),
+        ];
+        assert_eq!(
+            file_args(&args),
+            vec!["C:\\notes\\draft.md".to_string(), "report.HTML".to_string()]
+        );
+        assert!(file_args(&["forgemark".to_string()]).is_empty());
+    }
 }

@@ -68,7 +68,7 @@ export async function startMenuBridge(): Promise<UnlistenFn | null> {
     // before the listener was attached, so we also drain the Rust-
     // side queue via take_pending_files().
     const unlistenOpen = await listen<string>("forgemark:open-path", (event) => {
-      dispatchOpenPath(event.payload);
+      deliverOpenPath(event.payload);
     });
 
     // Rust blocks window-close and ⌘Q and asks us first, so unsaved work
@@ -85,7 +85,7 @@ export async function startMenuBridge(): Promise<UnlistenFn | null> {
     try {
       const pending = await invoke<string[]>("take_pending_files");
       for (const path of pending) {
-        dispatchOpenPath(path);
+        deliverOpenPath(path);
       }
     } catch {
       // older Tauri builds without take_pending_files — ignore
@@ -101,10 +101,32 @@ export async function startMenuBridge(): Promise<UnlistenFn | null> {
   }
 }
 
-function dispatchOpenPath(path: string) {
+// Paths delivered before the document bindings attached their listener.
+// The bridge starts before React's first commit, and the cold-start
+// paths from `take_pending_files` can arrive in that gap; they used to
+// be dropped on the floor when they did.
+const unclaimed: string[] = [];
+let listenerReady = false;
+
+export function deliverOpenPath(path: string) {
   if (typeof window === "undefined") return;
   if (!path) return;
+  if (!listenerReady) unclaimed.push(path);
   window.dispatchEvent(new CustomEvent("forgemark:open-path", { detail: { path } }));
+}
+
+// Called by the listener when it attaches. Returns whatever arrived
+// before it did, once, and marks the listener ready so later paths go
+// straight through the event.
+export function claimQueuedOpenPaths(): string[] {
+  listenerReady = true;
+  return unclaimed.splice(0, unclaimed.length);
+}
+
+// For tests: forget the queue and the ready flag.
+export function resetOpenPathQueue() {
+  unclaimed.length = 0;
+  listenerReady = false;
 }
 
 export function route(id: string) {

@@ -4,6 +4,7 @@ import { ThemeProvider } from "../../src/theme/ThemeProvider";
 import { DocumentProvider, useWorkspace } from "../../src/state/DocumentProvider";
 import { AppShell } from "../../src/components/AppShell";
 import { readDocument } from "../../src/services/fileIO";
+import { deliverOpenPath, resetOpenPathQueue } from "../../src/state/menuBridge";
 
 vi.mock("../../src/services/fileIO", () => ({
   openDocument: vi.fn(),
@@ -56,6 +57,23 @@ const handOverFile = async (path: string, name: string, body: string) => {
 describe("cold start", () => {
   beforeEach(() => {
     vi.mocked(readDocument).mockReset();
+    resetOpenPathQueue();
+  });
+
+  it("opens a file the shell handed over before the app was listening", async () => {
+    // The menu bridge starts before React's first commit; a path that
+    // arrives in that gap used to be lost. It is queued and claimed.
+    vi.mocked(readDocument).mockResolvedValue({
+      path: "/tmp/early.md",
+      fileName: "early.md",
+      text: "early\n",
+      readOnly: false,
+    } as never);
+    deliverOpenPath("/tmp/early.md");
+
+    launch();
+    await waitFor(() => expect(screen.getByTestId("active-name").textContent).toBe("early.md"));
+    expect(screen.getByTestId("tab-count").textContent).toBe("1");
   });
 
   it("opens on a single blank document when launched on its own", async () => {

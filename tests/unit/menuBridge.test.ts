@@ -1,5 +1,31 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { route } from "../../src/state/menuBridge";
+import {
+  route,
+  deliverOpenPath,
+  claimQueuedOpenPaths,
+  resetOpenPathQueue,
+} from "../../src/state/menuBridge";
+
+describe("open paths delivered before the app is listening", () => {
+  beforeEach(() => resetOpenPathQueue());
+
+  it("are kept until claimed, then delivered live", () => {
+    const seen: string[] = [];
+    deliverOpenPath("/early/one.md");
+    deliverOpenPath("/early/two.md");
+    expect(claimQueuedOpenPaths()).toEqual(["/early/one.md", "/early/two.md"]);
+    // Claimed once.
+    expect(claimQueuedOpenPaths()).toEqual([]);
+
+    const onOpen = (e: Event) => seen.push((e as CustomEvent<{ path: string }>).detail.path);
+    window.addEventListener("forgemark:open-path", onOpen);
+    deliverOpenPath("/late/three.md");
+    window.removeEventListener("forgemark:open-path", onOpen);
+    expect(seen).toEqual(["/late/three.md"]);
+    // Not queued again: the listener had it.
+    expect(claimQueuedOpenPaths()).toEqual([]);
+  });
+});
 
 describe("menuBridge.route", () => {
   beforeEach(() => {
