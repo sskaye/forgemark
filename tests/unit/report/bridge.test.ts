@@ -12,7 +12,8 @@ const REPORT = `<!doctype html><html><head><title>R</title></head><body>
 <!-- fmc:2 --><figure id="fig-1"><figcaption>Figure 1. Control holds</figcaption><svg viewBox="0 0 10 10"></svg></figure><!-- /fmc:2 -->
 <!-- fmc:3 --><section id="tiles"><div class="tile">Time in range <b>72%</b></div></section><!-- /fmc:3 -->
 <p>Trailing prose with <a href="https://x.y/p">a link</a> and <a href="#fig-1">a fragment</a>.</p>
-<table id="t1"><tr><th>Head</th></tr><tr><td>1</td></tr></table>
+<table id="t1"><tr><th>Head</th></tr><tr><td>42</td></tr></table>
+<section id="tiles2"><div class="tile">Deep sleep <b>1h 05m</b></div></section>
 </body></html>`;
 
 const THEME = {
@@ -156,7 +157,7 @@ describe("what the reader does", () => {
     const capture = sent.filter((m) => m.type === "selection").pop();
     if (!capture || capture.type !== "selection" || !capture.selection)
       throw new Error("no capture");
-    tell({ type: "wrap", token: capture.selection.token, id: 9 });
+    tell({ type: "wrap", token: capture.selection.token, id: 9, kind: "inline" });
     const html = doc.body.innerHTML;
     expect(html).toContain("<!-- fmc:9 -->");
     expect(doc.querySelector("[data-anchor-id='9']")?.textContent).toBe("Trailing prose");
@@ -174,7 +175,7 @@ describe("what the reader does", () => {
     expect(capture.element.elementId).toBe("t1");
     expect(capture.element.description).toBe("table: Head");
     expect(capture.element.existingAnchorId).toBeNull();
-    tell({ type: "wrap", token: capture.element.token, id: 4 });
+    tell({ type: "wrap", token: capture.element.token, id: 4, kind: "element" });
     expect(doc.querySelector("table[data-anchor-id='4']")).not.toBeNull();
     expect(doc.body.innerHTML).toContain("<!-- fmc:4 --><table");
     // The figure's own markers make it an existing anchor.
@@ -182,6 +183,47 @@ describe("what the reader does", () => {
     const again = sent.filter((m) => m.type === "elementCapture").pop();
     if (!again || again.type !== "elementCapture") throw new Error("no capture");
     expect(again.element.existingAnchorId).toBe(2);
+  });
+
+  it("wraps a passage as one from the start and finds it again after a redraw", async () => {
+    init([]);
+    select("1h 05m");
+    doc.dispatchEvent(new Event("selectionchange"));
+    const capture = sent.filter((m) => m.type === "selection").pop();
+    if (!capture || capture.type !== "selection" || !capture.selection)
+      throw new Error("no capture");
+    expect(capture.selection.contextBefore).toContain("Deep sleep");
+    expect(capture.selection.containerIds).toEqual(["tiles2"]);
+    tell({
+      type: "wrap",
+      token: capture.selection.token,
+      id: 8,
+      kind: "passage",
+      text: "1h 05m",
+      selector: "#tiles2",
+    });
+    const section = doc.querySelector("section#tiles2")!;
+    // The markers go around the section, as in the source; the section
+    // holds the passage and is not itself an anchor.
+    expect(doc.body.innerHTML).toMatch(/<!-- fmc:8 --><section id="tiles2"[^>]*>/);
+    expect(section.hasAttribute("data-anchor-id")).toBe(false);
+    expect(section.getAttribute("data-fm-passage-host")).toBe("8");
+    expect(section.querySelector("[data-anchor-id='8']")?.textContent).toBe("1h 05m");
+    // The report redraws the section, as a tab switch does.
+    section.innerHTML =
+      '<div class="tile">Average <b>7h 12m</b></div><div class="tile">Deep sleep <b>1h 05m</b> today</div>';
+    await vi.advanceTimersByTimeAsync(100);
+    expect(section.querySelector("[data-anchor-id='8']")?.textContent).toBe("1h 05m");
+  });
+
+  it("puts a space between blocks in a selection's surroundings", () => {
+    init([]);
+    select("42");
+    doc.dispatchEvent(new Event("selectionchange"));
+    const capture = sent.filter((m) => m.type === "selection").pop();
+    if (!capture || capture.type !== "selection" || !capture.selection)
+      throw new Error("no capture");
+    expect(capture.selection.contextBefore).toMatch(/fragment\. Head$/);
   });
 
   it("forwards clicks on anchors and links, and follows a fragment itself", () => {

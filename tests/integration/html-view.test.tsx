@@ -139,6 +139,26 @@ describe("HtmlView", () => {
     expect(labels.filter((l) => l?.includes("Figure 1"))).toHaveLength(1);
   });
 
+  it("anchors a figure a script filled as a passage, not as the container", async () => {
+    const onElement = vi.fn();
+    const body = '<html><body><p>Intro.</p><figure id="chart"></figure></body></html>';
+    const { container } = render(<Harness body={body} onRequestElementComment={onElement} />);
+    await waitFor(() => expect(frameDoc(container).querySelector("figure")).not.toBeNull());
+    // What the report's script would have drawn.
+    const figure = frameDoc(container).querySelector("figure")!;
+    figure.innerHTML =
+      '<svg viewBox="0 0 10 10"></svg><figcaption>Figure 2. Sleep, 7 points.</figcaption>';
+    await waitFor(() =>
+      expect(frameDoc(container).querySelector("button[data-forgemark='block']")).not.toBeNull(),
+    );
+    frameDoc(container).querySelector<HTMLButtonElement>("button[data-forgemark='block']")!.click();
+    await waitFor(() => expect(onElement).toHaveBeenCalled());
+    const capture = onElement.mock.calls[0][0];
+    expect(capture.kind).toBe("passage");
+    expect(capture.anchorSelector).toBe("#chart");
+    expect(capture.text).toBe("Figure 2. Sleep, 7 points.");
+  });
+
   it("raises an element capture when a block button is clicked", async () => {
     const onElement = vi.fn();
     const { container } = render(<Harness onRequestElementComment={onElement} />);

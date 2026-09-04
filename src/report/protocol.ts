@@ -73,8 +73,18 @@ export type HostToBridge =
   | { type: "theme"; theme: FrameTheme }
   | { type: "state"; state: FrameState }
   | { type: "comments"; comments: FrameComment[] }
-  // Put marker comments around the range or element the token names.
-  | { type: "wrap"; token: string; id: number }
+  // Put marker comments around the range or element the token names,
+  // for a comment of this kind. A passage's markers go around the
+  // element its selector names, as they do in the source, and its text
+  // is what to highlight inside it.
+  | {
+      type: "wrap";
+      token: string;
+      id: number;
+      kind: FrameComment["kind"];
+      text?: string;
+      selector?: string;
+    }
   // Take the markers for a comment out again.
   | { type: "unwrap"; id: number }
   | { type: "scrollTo"; id: number }

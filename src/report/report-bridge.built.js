@@ -61,8 +61,14 @@
       );
       if (elements.length > 0 && prose.length === 0) {
         for (const el of elements) {
-          if (passage) el.setAttribute("data-fm-passage-host", String(id));
-          else el.setAttribute("data-anchor-id", String(id));
+          if (passage) {
+            el.setAttribute("data-fm-passage-host", String(id));
+            if (el.getAttribute("data-anchor-id") === String(id))
+              el.removeAttribute("data-anchor-id");
+          } else {
+            el.setAttribute("data-anchor-id", String(id));
+            el.removeAttribute("data-fm-passage-host");
+          }
         }
         return "element";
       }
@@ -268,6 +274,7 @@
 
   // src/report/bridge.ts
   var BLOCK_SELECTOR = "figure, table, blockquote, pre, img, video, svg, canvas";
+  var BLOCKISH = "p, div, section, article, main, aside, header, footer, nav, li, td, th, tr, h1, h2, h3, h4, h5, h6, figcaption, blockquote, pre, dt, dd";
   function scrollInto(el, block) {
     if (el && typeof el.scrollIntoView === "function") {
       el.scrollIntoView({ block, behavior: "smooth" });
@@ -431,26 +438,46 @@
       return Number.isFinite(id) ? id : null;
     };
     const newToken = () => `c${++captureCount}`;
+    const contextAround = (range) => {
+      const nodes = walkTextNodes(doc);
+      const blockOf = (n) => n.parentElement?.closest(BLOCKISH) ?? null;
+      const start = textIndexOf(doc, range.startContainer, range.startOffset);
+      const end = textIndexOf(doc, range.endContainer, range.endOffset);
+      if (start == null || end == null) return { before: "", after: "" };
+      let at = 0;
+      let before = "";
+      let after = "";
+      let prev = null;
+      for (const node of nodes) {
+        const gap = prev && blockOf(prev) !== blockOf(node) ? " " : "";
+        const from = at;
+        const to = at + node.data.length;
+        if (from < start)
+          before += gap + node.data.slice(0, Math.min(node.data.length, start - from));
+        if (to > end) after += (from >= end ? gap : "") + node.data.slice(Math.max(0, end - from));
+        at = to;
+        prev = node;
+      }
+      return {
+        before: before.replace(/\s+/g, " ").trimStart().slice(-80).trim(),
+        after: after.replace(/\s+/g, " ").trimEnd().slice(0, 80).trim()
+      };
+    };
     const captureSelection = () => {
       const selection = doc.getSelection();
       if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
       const range = selection.getRangeAt(0);
       const text = selection.toString().replace(/\s+/g, " ").trim();
       if (text.length === 0) return null;
-      const nodes = walkTextNodes(doc);
-      const all = nodes.map((n) => n.data).join("");
-      const start = textIndexOf(doc, range.startContainer, range.startOffset);
-      const end = textIndexOf(doc, range.endContainer, range.endOffset);
-      const before = start == null ? "" : all.slice(Math.max(0, start - 80), start);
-      const after = end == null ? "" : all.slice(end, end + 80);
+      const { before, after } = contextAround(range);
       const token = newToken();
       captures.set(token, { range: range.cloneRange() });
       if (captures.size > 20) captures.delete(captures.keys().next().value);
       return {
         token,
         text,
-        contextBefore: before.replace(/\s+/g, " ").trim(),
-        contextAfter: after.replace(/\s+/g, " ").trim(),
+        contextBefore: before,
+        contextAfter: after,
         containerIds: containerIds(range.commonAncestorContainer),
         overlappingAnchorId: overlappingAnchor(range),
         rect: rectOfRange(range)
@@ -615,15 +642,27 @@
     }) : null;
     const isOurs = (node) => {
       const el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
-      return !!el?.closest?.("[data-forgemark], [data-anchor-id]");
+      return !!el?.closest?.("[data-forgemark], span[data-anchor-id]");
     };
     observer?.observe(doc.documentElement, { childList: true, subtree: true, characterData: true });
-    const wrap = (token, id) => {
+    const wrap = (token, id, kind, text, selector) => {
       const capture = captures.get(token);
       if (!capture) return;
+      if (!comments.some((c) => c.id === id)) comments = [...comments, { id, kind, text }];
       const open = doc.createComment(` fmc:${id} `);
       const close = doc.createComment(` /fmc:${id} `);
-      if (capture.el) {
+      let host = null;
+      if (kind === "passage" && selector) {
+        try {
+          host = doc.querySelector(selector);
+        } catch {
+          host = null;
+        }
+      }
+      if (host) {
+        host.parentNode?.insertBefore(open, host);
+        host.parentNode?.insertBefore(close, host.nextSibling);
+      } else if (capture.el) {
         const el = capture.el;
         el.parentNode?.insertBefore(open, el);
         el.parentNode?.insertBefore(close, el.nextSibling);
@@ -664,7 +703,7 @@
           decorate();
           break;
         case "wrap":
-          wrap(message.token, message.id);
+          wrap(message.token, message.id, message.kind, message.text, message.selector);
           break;
         case "unwrap":
           removeAnchor(doc, message.id);

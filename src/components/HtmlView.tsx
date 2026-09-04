@@ -249,6 +249,26 @@ export function HtmlView({
       if (e.elementId && findBySelector(body, `#${e.elementId}`)) {
         try {
           const p = locateElement(body, `#${e.elementId}`, "html");
+          // An element the source has but whose content it does not — a
+          // chart a script draws into an empty figure — is anchored as a
+          // passage, so the highlight follows what it shows now, not the
+          // container it will show something else in after a redraw.
+          const sourceText = body
+            .slice(p.start, p.end)
+            .replace(/<[^>]*>/g, "")
+            .replace(/\s+/g, " ")
+            .trim();
+          const generated = e.textHead.length > 0 && !sourceText.includes(e.textHead.slice(0, 30));
+          if (generated) {
+            const passage = locatePassage(body, `#${e.elementId}`, e.description, "html");
+            return {
+              ...base,
+              from: passage.start,
+              to: passage.end,
+              kind: "passage",
+              anchorSelector: `#${e.elementId}`,
+            };
+          }
           return {
             ...base,
             from: p.start,
@@ -392,7 +412,21 @@ export function HtmlView({
           // now inside an anchor, if it is still there.
           lastSelectionRef.current = null;
           lastElementRef.current = null;
-          connection.send({ type: "wrap", token: capture.token, id: added[0].id });
+          const c = added[0];
+          connection.send({
+            type: "wrap",
+            token: capture.token,
+            id: c.id,
+            kind:
+              c.anchor_kind === "passage"
+                ? "passage"
+                : c.anchor_kind === "element"
+                  ? "element"
+                  : "inline",
+            ...(c.anchor_kind === "passage"
+              ? { text: c.anchor_text ?? "", selector: c.anchor_selector }
+              : {}),
+          });
           connection.send({ type: "comments", comments: latestFrame.current.frameComments });
           shownBodyRef.current = body;
           return;

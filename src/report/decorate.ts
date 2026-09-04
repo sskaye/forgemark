@@ -120,8 +120,14 @@ function decoratePair(
     );
     if (elements.length > 0 && prose.length === 0) {
       for (const el of elements) {
-        if (passage) el.setAttribute("data-fm-passage-host", String(id));
-        else el.setAttribute("data-anchor-id", String(id));
+        if (passage) {
+          el.setAttribute("data-fm-passage-host", String(id));
+          if (el.getAttribute("data-anchor-id") === String(id))
+            el.removeAttribute("data-anchor-id");
+        } else {
+          el.setAttribute("data-anchor-id", String(id));
+          el.removeAttribute("data-fm-passage-host");
+        }
       }
       return "element";
     }

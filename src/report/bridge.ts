@@ -36,6 +36,8 @@ import type {
 void _unused;
 
 const BLOCK_SELECTOR = "figure, table, blockquote, pre, img, video, svg, canvas";
+const BLOCKISH =
+  "p, div, section, article, main, aside, header, footer, nav, li, td, th, tr, h1, h2, h3, h4, h5, h6, figcaption, blockquote, pre, dt, dd";
 
 // A document without a layout engine has no scrollIntoView to call.
 function scrollInto(el: Element | null, block: ScrollLogicalPosition): void {
@@ -249,26 +251,50 @@ export function installBridge(win: Window, channel: BridgeChannel): () => void {
 
   const newToken = () => `c${++captureCount}`;
 
+  // The rendered text either side of a range, with a space wherever
+  // two text nodes sit in different blocks, so "Deep sleep" and "1h 05m"
+  // in neighbouring tiles do not run together.
+  const contextAround = (range: Range): { before: string; after: string } => {
+    const nodes = walkTextNodes(doc);
+    const blockOf = (n: Text) => n.parentElement?.closest(BLOCKISH) ?? null;
+    const start = textIndexOf(doc, range.startContainer, range.startOffset);
+    const end = textIndexOf(doc, range.endContainer, range.endOffset);
+    if (start == null || end == null) return { before: "", after: "" };
+    let at = 0;
+    let before = "";
+    let after = "";
+    let prev: Text | null = null;
+    for (const node of nodes) {
+      const gap = prev && blockOf(prev) !== blockOf(node) ? " " : "";
+      const from = at;
+      const to = at + node.data.length;
+      if (from < start)
+        before += gap + node.data.slice(0, Math.min(node.data.length, start - from));
+      if (to > end) after += (from >= end ? gap : "") + node.data.slice(Math.max(0, end - from));
+      at = to;
+      prev = node;
+    }
+    return {
+      before: before.replace(/\s+/g, " ").trimStart().slice(-80).trim(),
+      after: after.replace(/\s+/g, " ").trimEnd().slice(0, 80).trim(),
+    };
+  };
+
   const captureSelection = (): FrameSelection | null => {
     const selection = doc.getSelection();
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
     const range = selection.getRangeAt(0);
     const text = selection.toString().replace(/\s+/g, " ").trim();
     if (text.length === 0) return null;
-    const nodes = walkTextNodes(doc);
-    const all = nodes.map((n) => n.data).join("");
-    const start = textIndexOf(doc, range.startContainer, range.startOffset);
-    const end = textIndexOf(doc, range.endContainer, range.endOffset);
-    const before = start == null ? "" : all.slice(Math.max(0, start - 80), start);
-    const after = end == null ? "" : all.slice(end, end + 80);
+    const { before, after } = contextAround(range);
     const token = newToken();
     captures.set(token, { range: range.cloneRange() });
     if (captures.size > 20) captures.delete(captures.keys().next().value as string);
     return {
       token,
       text,
-      contextBefore: before.replace(/\s+/g, " ").trim(),
-      contextAfter: after.replace(/\s+/g, " ").trim(),
+      contextBefore: before,
+      contextAfter: after,
       containerIds: containerIds(range.commonAncestorContainer),
       overlappingAnchorId: overlappingAnchor(range),
       rect: rectOfRange(range),
@@ -469,20 +495,43 @@ export function installBridge(win: Window, channel: BridgeChannel): () => void {
         scheduleRefresh();
       })
     : null;
+  // Only what the bridge itself adds: its UI, and the spans it wraps
+  // text in. An element the report owns is never ours, even when it
+  // carries an anchor, since the report may redraw what is inside it.
   const isOurs = (node: Node): boolean => {
     const el = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
-    return !!el?.closest?.("[data-forgemark], [data-anchor-id]");
+    return !!el?.closest?.("[data-forgemark], span[data-anchor-id]");
   };
   observer?.observe(doc.documentElement, { childList: true, subtree: true, characterData: true });
 
   // ── messages from the app ───────────────────────────────────────────
 
-  const wrap = (token: string, id: number) => {
+  const wrap = (
+    token: string,
+    id: number,
+    kind: FrameComment["kind"],
+    text?: string,
+    selector?: string,
+  ) => {
     const capture = captures.get(token);
     if (!capture) return;
+    // Known before the app's comment list catches up, so the first
+    // decoration is already the right kind.
+    if (!comments.some((c) => c.id === id)) comments = [...comments, { id, kind, text }];
     const open = doc.createComment(` fmc:${id} `);
     const close = doc.createComment(` /fmc:${id} `);
-    if (capture.el) {
+    let host: Element | null = null;
+    if (kind === "passage" && selector) {
+      try {
+        host = doc.querySelector(selector);
+      } catch {
+        host = null;
+      }
+    }
+    if (host) {
+      host.parentNode?.insertBefore(open, host);
+      host.parentNode?.insertBefore(close, host.nextSibling);
+    } else if (capture.el) {
       const el = capture.el;
       el.parentNode?.insertBefore(open, el);
       el.parentNode?.insertBefore(close, el.nextSibling);
@@ -526,7 +575,7 @@ export function installBridge(win: Window, channel: BridgeChannel): () => void {
         decorate();
         break;
       case "wrap":
-        wrap(message.token, message.id);
+        wrap(message.token, message.id, message.kind, message.text, message.selector);
         break;
       case "unwrap":
         removeAnchor(doc, message.id);
