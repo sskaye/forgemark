@@ -193,6 +193,15 @@ describe("block-level splicing", () => {
     expect(out).toContain("[d]: https://x.y");
   });
 
+  it("adds nothing to a document that ends with a list when another block is edited", () => {
+    load("# Title\n\n- one\n- two\n");
+    retype(0, "Title edited");
+    expect(emit()).toBe("# Title edited\n\n- one\n- two\n");
+    expect(sync.lastMode()).toBe("splice");
+    retype(0, "Title again");
+    expect(emit()).toBe("# Title again\n\n- one\n- two\n");
+  });
+
   it("appends a new paragraph typed after the last block", () => {
     load("One.\n\nTwo.\n");
     // Move to the end and split off a new paragraph, as Enter does.

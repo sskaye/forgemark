@@ -109,13 +109,13 @@ export function createBlockSync(): BlockSync {
       const changed: PMNode[] = [];
       for (let i = prefix; i < newCount - suffix; i++) changed.push(doc.child(i));
 
-      // Trailing empty paragraph the editor keeps for the caret: not a
-      // block, unless it's the only thing that changed and has content.
+      // Trailing empty paragraphs — the one the editor keeps for the
+      // caret after a list or a table, or one the reader just opened
+      // with Enter — are not blocks: an empty paragraph is no Markdown.
+      // Keeping one used to splice a blank line onto the end of a
+      // document that ends with a list on every keystroke.
       const isEmptyPara = (n: PMNode) => n.type.name === "paragraph" && n.content.size === 0;
-      while (changed.length > 0 && isEmptyPara(changed[changed.length - 1])) {
-        if (oldTo > oldFrom || changed.length > 1) changed.pop();
-        else break;
-      }
+      while (changed.length > 0 && isEmptyPara(changed[changed.length - 1])) changed.pop();
       if (changed.length === 0 && oldTo === oldFrom) {
         mode = "splice";
         lastDoc = doc;
