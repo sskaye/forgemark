@@ -28,10 +28,10 @@ The Forgemark app ships two artifacts that contain identical bytes:
 Both files are produced from a single zip operation; they differ only in extension. Pick the one your AI tool expects:
 
 - **From the app:** Settings → AI agents installs and updates the skill for Claude Code, Codex, the Claude desktop app, and the shared `~/.agents/skills` folder, and says when an installed copy is behind.
-- **Claude Code:** unzip the `.skill` to `~/.claude/skills/forgemark/`. The agent loads `SKILL.md` automatically when relevant and runs the tool from the skill directory.
-- **Codex CLI and app:** extract the `.zip` to `~/.codex/skills/forgemark/` (user-global) or `.codex/skills/forgemark/` in a repo.
+- **Claude Code:** `unzip forgemark-skill.skill -d ~/.claude/skills`; the zip holds one `forgemark/` folder, so that lands at `~/.claude/skills/forgemark/`. The agent loads `SKILL.md` automatically when relevant and runs the tool from the skill directory.
+- **Codex CLI and app:** `unzip forgemark-skill.zip -d ~/.codex/skills` (user-global) or into `.codex/skills` in a repo.
 - **Claude app and claude.ai:** upload the `.skill` under Settings → Capabilities → Skills.
-- **Anything else:** extract the `.zip` to `~/.agents/skills/forgemark/`, or feed `SKILL.md` to your agent as system context, and make sure it can run `node`.
+- **Anything else:** `unzip forgemark-skill.zip -d ~/.agents/skills`, or feed `SKILL.md` to your agent as system context, and make sure it can run `node`.
 
 `forgemark-skill.json` names the Forgemark version the skill shipped with and a hash of its files; the app reads it to tell an installed copy's state. Leave it in place.
 

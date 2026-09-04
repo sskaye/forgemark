@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 // Build the Forgemark skill artifacts.
 //
-// Walks `assets/forgemark-skill/`, produces a deterministic ZIP, and
+// Walks `assets/forgemark-skill/`, produces a deterministic ZIP whose
+// entries sit inside one `forgemark/` folder (the shape the Claude app
+// and claude.ai accept on upload, and what `unzip -d ~/.claude/skills`
+// expects: the folder name is the skill's name), and
 // emits both `assets/forgemark-skill.skill` and
 // `assets/forgemark-skill.zip` from the same buffer (so they're
 // byte-identical by construction). Determinism is kept by:
@@ -38,6 +41,8 @@ const SIZE_BUDGET = 512 * 1024;
 // The hash rule is the one in src/services/skillTree.ts, repeated here
 // in plain Node; tests/unit/skill-bundle.test.ts holds the two together.
 const MANIFEST = "forgemark-skill.json";
+// The one folder inside the zip; must match the skill's `name`.
+const FOLDER = "forgemark";
 const APP_VERSION = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version;
 
 // Files in the source tree that aren't part of the skill payload.
@@ -81,13 +86,14 @@ async function main() {
   files = listFiles(SRC);
 
   const zip = new JSZip();
-  // Pinned to Unix epoch; jszip otherwise reads file mtime, which
-  // breaks byte-determinism across machines.
-  const epoch = new Date(0);
+  // Pinned to the DOS epoch (zip dates start in 1980; an earlier date
+  // wraps to 2098 and trips strict readers); jszip otherwise reads file
+  // mtime, which breaks byte-determinism across machines.
+  const epoch = new Date(1980, 0, 1);
   for (const full of files) {
     const rel = relative(SRC, full).split(sep).join("/");
     const data = readFileSync(full);
-    zip.file(rel, data, { date: epoch, binary: true });
+    zip.file(`${FOLDER}/${rel}`, data, { date: epoch, binary: true, createFolders: false });
   }
 
   const buffer = await zip.generateAsync({

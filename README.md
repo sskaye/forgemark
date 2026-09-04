@@ -113,7 +113,7 @@ The saved file is a regular zip. Every tool that follows the Agent Skills standa
 | Claude app and claude.ai                       | Settings → Capabilities → Skills, upload the `.skill` or `.zip`                     |
 
 ```bash
-unzip ~/Downloads/forgemark-skill.skill -d ~/.claude/skills/forgemark
+unzip ~/Downloads/forgemark-skill.skill -d ~/.claude/skills   # creates ~/.claude/skills/forgemark/
 ```
 
 Restart any running Claude Code sessions; new sessions discover the skill on startup. To verify, type `/` in Claude Code — `/forgemark` should appear in the autocomplete. A tool without a skill mechanism can be given `SKILL.md` as system context.
