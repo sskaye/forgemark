@@ -1,37 +1,27 @@
 # Forgemark
 
-A desktop application for collaborative review of Markdown documents and generated HTML reports — by humans **and** AI agents working as peers. Comments, threaded replies, and suggested edits all live inside the file itself, so an AI agent reading the raw file sees the full review context with no special tooling.
+A desktop app for reviewing Markdown documents and generated HTML reports, where the reviewers are people and AI agents. Comments, replies, and suggested edits live inside the file as plain text, so an agent reading the file sees the whole review and can answer it.
 
-> **Status:** v1.3.0 — see [CHANGELOG](CHANGELOG.md) for what shipped.
+## What it does
 
-## What it is
+- **Review in the app.** Select text and a Comment / Suggest edit bar appears. Threads show in a sidebar. Several documents open in tabs and reopen where you left them.
+- **Review generated reports.** Open an `.html` file and review it the same way. The report renders as its author built it, scripts included, and you can comment on a passage or on a whole figure.
+- **Let agents take part.** The bundled skill gives Claude Code, Codex, and other agents a command-line tool that reads, adds, and answers comments without touching the markup by hand. Settings installs it where each tool looks.
+- **Keep the file yours.** The comments are HTML comments and a YAML block at the end of the file. Everything else is left as it was, byte for byte. `git diff` shows the review as text.
 
-- **For humans:** a quiet, native macOS / Windows app that feels like Word commenting — select text and a **Comment / Suggest edit** bar appears above it, type a note, see threads in a sidebar. Open several documents at once in tabs; they reopen where you left them.
-- **For generated reports:** open an `.html` file and review it the same way. The report renders exactly as its author designed it — its own CSS, its own charts — and you can comment on a passage or on a whole figure. See [HTML reports](#html-reports).
-- **For AI agents:** the same comments are plain text in the file, and the bundled [skill package](#ai-agents) ships a command-line tool that reads, adds, and answers them safely — an agent never composes the YAML or places a marker by hand.
-- **Not** a Google Docs replacement, not a real-time co-editor, not a git client. Specifically a review tool.
-
-For contributors and agents, the current code map is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+It is a review tool, not a shared editor: no accounts, no server, no real-time collaboration.
 
 ## Install
 
-Pre-built binaries: see the [Releases page](https://github.com/sskaye/forgemark/releases) for a signed, notarized `.dmg` (macOS 11+) and an `.msi` / `.exe` (Windows 10+). On first launch you get a welcome screen — pick a name and click **Open sample →** to land in a pre-annotated review document.
+Download from the [Releases page](https://github.com/sskaye/forgemark/releases): a signed and notarized `.dmg` for macOS 11 and later, and an `.msi` or `.exe` for Windows 10 and later. On first launch, pick a name and click Open sample to see a reviewed document.
 
-### Installing on Windows (unsigned)
-
-The Windows installers are **not code-signed** yet, so Windows SmartScreen will warn before it runs. Nothing is blocked — to install:
-
-1. If your browser flags the download, choose **Keep**.
-2. Run the `.msi` (or `-setup.exe`). On the blue **"Windows protected your PC"** screen, click **More info**, then **Run anyway**.
-3. The UAC prompt will show **Publisher: Unknown** — that's expected for an unsigned build.
-
-(macOS builds are signed + notarized, so they open with no prompt.)
+**Windows installers are not code-signed.** SmartScreen warns before running one. To install: keep the download if the browser flags it, run the installer, click More info on the "Windows protected your PC" screen, then Run anyway. The UAC prompt shows Publisher: Unknown. macOS builds are signed and open without a prompt.
 
 To build from source, see [Build](#build).
 
 ## File format
 
-A Forgemark file is plain markdown plus two small additions:
+A Forgemark file is the document plus two additions: marker pairs around the commented passages, and one HTML comment at the end holding the comment records as YAML.
 
 ```markdown
 Across <!-- fmc:1 -->fourteen interviews with new enterprise customers<!-- /fmc:1 -->,
@@ -50,135 +40,120 @@ the strongest predictor of week-two retention was completing a real piece of wor
 -->
 ```
 
-Inline `<!-- fmc:N -->...<!-- /fmc:N -->` markers wrap commented passages; a single trailing HTML comment holds a YAML list of records (id, anchor_text, author, body, replies, suggested edits, floating notes). The file round-trips byte-equivalent through the parser; comments survive `git diff` because they're plain text.
+Records carry the id, the anchored text, the author, the body, replies, suggested edits, and floating notes. The parser reads a file back to the same bytes it wrote. The full reference is in [`assets/forgemark-skill/SKILL.md`](assets/forgemark-skill/SKILL.md).
 
-The canonical spec lives in [`assets/forgemark-skill/SKILL.md`](assets/forgemark-skill/SKILL.md).
+Beyond CommonMark, the rendered view shows what GitHub shows: tables, task lists, footnotes, alerts, math, Mermaid diagrams, syntax-highlighted code, and inline HTML. It also shows Obsidian callouts, wikilinks, and image embeds. Editing a paragraph rewrites only that paragraph in the file, and keeps the syntax it was written in.
 
 ## HTML reports
 
-`<!-- fmc:N -->` is already valid HTML, and so is the trailing comments block, so the storage format is identical in an `.html` file — no translation, no second format to learn.
+The markers and the comments block are valid HTML, so a report uses the same format with no translation. What you can do differs:
 
-What differs is what you can do with the document:
+|                                      | Markdown | HTML report                  |
+| ------------------------------------ | -------- | ---------------------------- |
+| Comment, reply, resolve              | yes      | yes                          |
+| Suggest an edit                      | yes      | on plain prose only          |
+| Accept or reject a suggestion        | yes      | yes                          |
+| Comment on a figure, chart, or table | no       | yes, from a button beside it |
+| Edit the text                        | yes      | in Source view               |
+| Find and replace                     | yes      | in Source view               |
 
-|                                      | Markdown | HTML report         |
-| ------------------------------------ | -------- | ------------------- |
-| Comment, reply, resolve              | yes      | yes                 |
-| Suggest an edit                      | yes      | on plain prose only |
-| Accept / reject a suggestion         | yes      | yes                 |
-| Comment on a figure, chart, or table | —        | yes                 |
-| Edit the prose                       | yes      | no                  |
-| Find (⌘F)                            | yes      | Source view only    |
+A report renders in a frame of its own, on a separate origin, where its scripts run as they would in a browser. Tabs, charts drawn in JavaScript, and controls all work. The app never edits a report through a document model, which would drop the styles, SVG, and attributes a generated report is made of; it splices markers into the source at exact byte offsets, and Source view edits the text directly.
 
-Commenting works exactly as it does in a Markdown document — select a passage and the **Comment / Suggest edit** bar appears above it, or press ⌘⌥M — with one addition and one subtraction. The addition is figures: every chart, table, and image carries a **Comment** button in the margin beside it, which is the only way to point at something with no text to select. The subtraction is right-click: inside the report frame that menu belongs to the system webview, which answers it with Look Up / Translate / Copy and does not reliably let the app replace it.
+A comment on text that a script produced anchors the nearest enclosing element with an `id`, and keeps the passage as its text. Without such an element, it becomes a floating note that quotes the text.
 
-**Reports are review-only by design.** Editing one would mean modelling the document, and any model that round-trips through an editor destroys the `<style>` block, the inline `<svg>`, and every unrecognised attribute a generated report is made of. So Forgemark renders the file verbatim in a sandboxed frame and only ever splices markers into the source at exact byte offsets — the file you save differs from the one you opened by the comments you added, and nothing else.
-
-**Scripts inside a report never run.** A chart drawn in JavaScript renders empty; static and inline-SVG charts are unaffected.
-
-**Rebuilding a report keeps the review.** Reports are usually regenerated rather than edited, which drops every anchor. Forgemark puts back the ones it is sure about in one click and asks about anything ambiguous. Comments on a figure record its `id`, so they reattach exactly even if the caption was renumbered — worth telling your agent to keep ids stable, which the bundled skill already does.
+Reports are usually regenerated rather than edited, which drops every anchor. On reload, Forgemark puts back the anchors it is sure about and asks about the rest. A comment on a figure records the figure's `id`, so it reattaches exactly when the id survives a rebuild. The skill tells agents to keep ids stable.
 
 ## AI agents
 
-Settings → AI agents installs the skill where your agents look, and keeps it current:
+Settings, then AI agents, installs the skill where each tool looks and says when an installed copy is behind:
 
-- **Claude Code** (`~/.claude/skills/forgemark`), **Codex** (`~/.codex/skills/forgemark`), and **Other tools** (`~/.agents/skills/forgemark`, the shared location read by Cursor, Gemini CLI, GitHub Copilot, and others) are written directly. Each row shows whether the skill is installed, up to date, or behind the one this app ships, with an Install or Update button. A folder Forgemark did not write is never overwritten without asking.
-- **Claude app** hands the `.skill` file to the Claude desktop app, which asks to install it for your account, the same as double-clicking the file.
-- **Save skill file…** writes the bundle anywhere, for claude.ai in a browser or a tool not listed.
+- **Claude Code** at `~/.claude/skills/forgemark`, **Codex** at `~/.codex/skills/forgemark`, and **Other tools** at `~/.agents/skills/forgemark`, the shared folder read by Cursor, Gemini CLI, GitHub Copilot, and others. Each row shows Not installed, Up to date, or the installed and shipped versions, with an Install or Update button. A folder Forgemark did not write is replaced only after asking.
+- **Claude app** hands the `.skill` file to the Claude desktop app, which asks to install it for your account.
+- **Save skill file** writes the bundle anywhere, for claude.ai in a browser or a tool not listed.
 
-Nothing is installed without a click. When a Forgemark update ships a newer skill than the one installed, the sidebar shows a one-line notice with an Update link, once per version. Help → Install AI Skill… opens the same section.
+Nothing is installed without a click. When an update ships a newer skill than the one installed, the sidebar shows a one-line notice, once per version.
 
-With the skill installed, asking your agent to "add a comment", "address that review note", or "suggest a tighter wording" produces well-formed Forgemark output that the app reads back without complaint.
-
-The skill's centrepiece is `scripts/forgemark.mjs`, a self-contained command-line tool (Node 18+, no install) built from the app's own format layer:
+With the skill installed, asking an agent to add a comment, address a review note, or suggest a wording produces a file the app reads back without complaint. The skill's tool is `scripts/forgemark.mjs`, one file that runs on Node 18 or later with nothing to install:
 
 ```bash
-forgemark list report.md                      # every comment, one per entry
-forgemark show report.md 3                    # one thread in full
+forgemark list report.md
+forgemark show report.md 3
 forgemark comment report.md --anchor "the evening and the small hours" --body "Too strong." --author Claude
-forgemark reply report.md 3 --body "Softened in §2." --author Claude
-forgemark lint report.md                      # what the app would refuse, what the reviewer would rather not meet
+forgemark reply report.md 3 --body "Softened in section 2." --author Claude
+forgemark lint report.md
 ```
 
-Every write is parsed back before the file is replaced and written atomically, so the tool cannot produce a file the app can't read. `SKILL.md` tells the agent to use it for every read and write and keeps the format reference for understanding a file, or as a fallback when the tool can't run. The tool is equally usable by a person: `npx forgemark lint` from a checkout, or `node forgemark.mjs` from an extracted skill.
+Every write is parsed back before the file is replaced, and the replacement is atomic, so the tool cannot leave a file the app cannot read. `lint` reports what the app would refuse and what a reviewer would want to know about, such as an orphaned comment or a drifted anchor description. The tool works for people too: `npm run cli -- lint file.md` from a checkout, or `node forgemark.mjs` from an installed skill.
 
 ### Installing by hand
 
-The saved file is a regular zip. Every tool that follows the Agent Skills standard reads a folder with a `SKILL.md` under the home directory, the same dot-folders on macOS, Windows (`%USERPROFILE%`), and Linux:
+The saved file is a zip holding one `forgemark` folder. Tools that follow the Agent Skills standard read such a folder from the home directory, the same paths on macOS, Windows (`%USERPROFILE%`), and Linux:
 
 | Tool                                           | Folder                                                                              |
 | ---------------------------------------------- | ----------------------------------------------------------------------------------- |
 | Claude Code                                    | `~/.claude/skills/forgemark/` (project-local: `<repo>/.claude/skills/forgemark/`)   |
 | Codex CLI and app                              | `~/.codex/skills/forgemark/` (project-local: `.codex/skills/` or `.agents/skills/`) |
 | Cursor, Gemini CLI, GitHub Copilot, and others | `~/.agents/skills/forgemark/`                                                       |
-| Claude app and claude.ai                       | Settings → Capabilities → Skills, upload the `.skill` or `.zip`                     |
+| Claude app and claude.ai                       | Settings, Capabilities, Skills: upload the `.skill` or `.zip`                       |
 
 ```bash
-unzip ~/Downloads/forgemark-skill.skill -d ~/.claude/skills   # creates ~/.claude/skills/forgemark/
+unzip ~/Downloads/forgemark-skill.skill -d ~/.claude/skills
 ```
 
-Restart any running Claude Code sessions; new sessions discover the skill on startup. To verify, type `/` in Claude Code — `/forgemark` should appear in the autocomplete. A tool without a skill mechanism can be given `SKILL.md` as system context.
+New Claude Code sessions pick the skill up on start; `/forgemark` appears in the slash-command list. A tool with no skill mechanism can be given `SKILL.md` as system context.
 
 ## Build
 
-Requires:
+Requirements:
 
-- **Node.js 20+** and **npm 11+**
-- **Rust** (stable, via [rustup](https://rustup.rs/)) — needed by Tauri
-- **macOS:** Xcode Command Line Tools
-- **Windows:** Microsoft Visual Studio C++ Build Tools
+- Node.js 20 or later and npm 11 or later
+- Rust, stable, via [rustup](https://rustup.rs/)
+- macOS: Xcode Command Line Tools
+- Windows: Visual Studio C++ Build Tools
 
 ```bash
 git clone https://github.com/sskaye/forgemark.git
 cd forgemark
 npm install
-npm run dev          # opens the Tauri window
+npm run dev
 ```
 
-Other useful scripts:
+Scripts:
 
 ```bash
-npm test                  # Vitest unit + integration
-npm run test:perf         # the timing assertions, which the default run skips
-npm run test:e2e          # Playwright E2E (against the Vite dev surface)
+npm test                  # unit and integration tests (Vitest)
+npm run test:e2e          # browser tests (Playwright, against the Vite dev server)
+npm run test:perf         # timing assertions, skipped by the default run
 npm run lint              # ESLint
-npm run typecheck         # tsc --noEmit
-npm run format            # Prettier write
+npm run typecheck         # tsc
+npm run format            # Prettier
 npm run build             # production Tauri bundle
-npm run build:cli         # rebuild the CLI bundle inside the skill source tree
-npm run build:skill       # rebuild the CLI bundle and the .skill / .zip artefacts
-npm run build:icons       # regenerate the icon stack from forgemark-icon.svg
-npm run cli -- <args>     # run the CLI from source (vite-node), e.g. npm run cli -- lint file.md
-npm run verify-ai-output  # lint a captured AI output with the built CLI
+npm run build:skill       # rebuild the CLI and the .skill and .zip bundles
+npm run build:icons       # regenerate the icon set from assets/forgemark-icon.svg
+npm run cli -- <args>     # run the CLI from source
 ```
 
-For release engineering (signing, notarization, distribution), see [`RELEASING.md`](RELEASING.md).
+Agent tests under `tests/ai/` call a live model and are run by hand, never in CI: give a sub-agent a fixture, the skill, and a case file, and record the outcome on the case's "Last run" line.
 
-## AI testing
+Releases are built with `npm run release`; see [`RELEASING.md`](RELEASING.md).
 
-AI-agent tests are **never run in CI** — they call live LLMs and are stochastic. Run them locally:
-
-- **Primary path (recommended):** open Claude Code, invoke a sub-agent with a fixture from `tests/ai/fixtures/`, the skill content at `assets/forgemark-skill/SKILL.md`, and a prompt from `tests/ai/cases/`. Capture the result in the PR description.
-- Record the outcome in the case file's "Last run" line.
-
-The prompt fixtures and expected behaviors live under `tests/ai/`.
-
-## Repo layout
+## Repository layout
 
 ```
-src/                React + TypeScript UI
-cli/                The forgemark command-line tool, built from src/format
+src/                React and TypeScript app
+cli/                the forgemark command-line tool, built from src/format
 src-tauri/          Tauri shell (Rust)
-tests/              Unit, integration, E2E, perf, AI-agent tests
-docs/               Current architecture notes and retained token source
-assets/             Skill package, sample documents, app icon
-scripts/            Build helpers (CLI bundle, skill packaging, icon generation)
-.github/workflows/  CI (no AI tests)
+tests/              unit, integration, browser, perf, and agent tests
+assets/             the skill package, sample documents, the app icon
+docs/               architecture notes, example files, design reviews and plans
+scripts/            build helpers: CLI bundle, skill packaging, icons, release
+.github/workflows/  CI and the Windows release build
 ```
 
 ## Contributing
 
-See [`CONVENTIONS.md`](CONVENTIONS.md) for branch naming, commit style, code style, and the testing layout.
+Contributions are welcome through pull requests; see [`CONTRIBUTING.md`](CONTRIBUTING.md). Every change to `main` is reviewed by the maintainer. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) is the code map, and [`CONVENTIONS.md`](CONVENTIONS.md) covers style and testing.
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
+MIT. See [`LICENSE`](LICENSE).

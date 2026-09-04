@@ -274,9 +274,9 @@ caret, which only ever _sets_ focus.
 
 **Consequences that are deliberate, not gaps:**
 
-- HTML documents are review-only. Commenting, replying, suggesting and
-  accepting a suggestion all still work, because those are splices on the
-  source rather than edits through a model.
+- HTML documents are not edited through a model. Commenting, replying,
+  suggesting and accepting a suggestion all work, because those are splices
+  on the source; changing the markup itself is done as text in Source view.
 - Suggestions are offered only when the source between the markers contains no
   `<`. Accepting replaces everything between them, so a suggestion spanning
   markup would replace tags with a sentence.
