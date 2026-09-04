@@ -13,6 +13,13 @@ vi.mock("@tauri-apps/plugin-dialog", () => fake.dialog);
 vi.mock("@tauri-apps/plugin-opener", () => fake.opener);
 vi.mock("@tauri-apps/api/core", () => fake.core);
 
+// Report frames get their content written in and the bridge installed
+// by hand, since jsdom has neither the protocol nor script execution.
+// Imported after the fake exists: the loader reaches the mocked Tauri
+// module, whose factory needs `fake`.
+const { installReportLoader } = await import("./utils/reportFrame");
+installReportLoader();
+
 beforeEach(() => {
   fake.reset();
 });

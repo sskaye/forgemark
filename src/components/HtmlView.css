@@ -1,68 +1,23 @@
-/* The frame and the host-side controls that sit over it share an origin,
- * so a block's offset inside the frame is usable for positioning here
- * without translation. */
+/* The report frame fills the pane and scrolls itself, like a browser
+   tab: the report's own sticky headers, tabs, and viewport units work
+   as its author intended. Comment cards reach the report through
+   messages, not through the pane's scroll position. */
 .fm-html-frame {
-  position: relative;
+  flex: 1;
+  align-self: stretch;
+  min-width: 0;
+  display: flex;
 }
 
-/* The way to comment on a chart or a table. Deliberately in the host
- * document rather than injected into the frame: an injected control has
- * to be reached by an event delivered to a host-attached listener inside
- * the frame, and not every embedder does that. */
-.fm-block-comment {
-  position: absolute;
-  margin-top: 6px;
-  z-index: 2;
-  font-family: var(--fm-ui);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  color: var(--fm-prose-muted);
-  background: var(--fm-card-bg);
-  border: 0.5px solid var(--fm-card-border);
-  border-radius: 5px;
-  padding: 4px 8px;
-  cursor: default;
-  /* Present but quiet: a dozen blocks should not read as a dozen
-     buttons competing with the report. */
-  opacity: 0.6;
-  transition:
-    opacity 100ms ease-out,
-    color 100ms ease-out,
-    border-color 100ms ease-out;
+.fm-html-frame[hidden] {
+  display: none;
 }
 
-/* On top of the report rather than beside it, when the window is too
-   narrow for a margin. Needs to stay legible over whatever it covers. */
-.fm-block-comment[data-placement="inset"] {
-  background: var(--fm-card-bg-elevated);
-  box-shadow: var(--fm-card-shadow);
-}
-
-.fm-block-comment:hover,
-.fm-block-comment:focus-visible {
-  opacity: 1;
-  color: var(--fm-accent);
-  border-color: var(--fm-accent);
-}
-
-.fm-block-comment:focus-visible {
-  outline: 2px solid var(--fm-accent);
-  outline-offset: 1px;
-}
-
-/* The report frame.
- *
- * Sized to its content by HtmlView so the editor pane owns scrolling —
- * an iframe with its own scrollbar would decouple the report from the
- * comment sidebar, the scroll restoration, and the view-sync machinery
- * that all assume one scrolling surface per document. */
 .fm-html-view {
-  display: block;
+  flex: 1;
   width: 100%;
+  height: 100%;
   border: 0;
-  /* Replaced by an exact pixel height once the document has laid out. */
-  height: 320px;
   background: var(--fm-editor-paper);
   color-scheme: light dark;
 }

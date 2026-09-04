@@ -163,62 +163,59 @@ marker-shaped text inside `<script>` or an attribute value as a real anchor —
 which invents a marker with no YAML record, an error that blanks every comment
 in the file.
 
-**How the document is rendered.** `HtmlView` writes the source verbatim into an
-iframe. It is _not_ parsed into an editor model, and can't be: a generated
-report is a `<style>` block, inline `<svg>`, and a pile of CSS classes, none of
-which survives a round trip through a ProseMirror schema. Two details carry
-weight:
+**How the document is rendered.** The report is shown in an iframe on an origin
+of its own, where its scripts run as they would in a browser. `HtmlView` hands
+the source to Rust (`set_report`), which serves it under the `fmreport` custom
+protocol (`http://fmreport.localhost` on Windows) together with any file beside
+it — a stylesheet, an image, a data file — so the report loads as it would from
+disk. That origin is not the app's: the report can reach nothing of Forgemark,
+and the app's Content Security Policy does not apply inside it. The frame fills
+the pane and scrolls itself, so the report's sticky headers, tabs, and viewport
+units behave as its author intended. It is _not_ parsed into an editor model,
+and can't be: a generated report is a `<style>` block, inline `<svg>`, and a
+pile of CSS classes, none of which survives a round trip through a ProseMirror
+schema.
 
-- `sandbox="allow-same-origin"` **without** `allow-scripts`. The report's own
-  scripts never run, while the host can still reach `contentDocument` to
-  decorate anchors and read selections. The two flags together would be
-  equivalent to no sandbox, so `allow-scripts` is not offered.
-- An iframe rather than a shadow root. The example report defines its whole
-  palette on `:root` with a `prefers-color-scheme` block, and `:root` does not
-  resolve inside a shadow root.
-
-The document is written with `document.write` rather than handed over as
-`srcdoc`: writing is synchronous, so there is no load event to race, and it is
-the only one of the two that jsdom implements.
+**The bridge.** Since the app cannot reach into the frame, Forgemark's own code
+runs inside it. `src/report/bridge.ts` is spliced into the report as a script
+before it is served (built by `scripts/build-bridge.mjs` into a committed file a
+test keeps fresh). It turns marker comments into highlights (`report/decorate.ts`),
+watches the reader's selection, puts a Comment button beside each chart and
+table, and forwards clicks on anchors and links. It speaks to `HtmlView` only
+through the messages in `src/report/protocol.ts`, over `postMessage`; tests
+install a loader (`tests/utils/reportFrame.ts`) that writes the report into a
+jsdom frame and wires the same bridge to the host through an in-memory channel.
 
 **How a selection becomes an anchor.** The source is never re-serialized —
 the browser's serializer re-quotes attributes and re-encodes entities, so
 saving would rewrite the whole file and the round-trip guarantee would die on
-the first comment. Instead `format/html/textmap.ts` builds a per-character map
-from the rendered text to source bytes (parse5 for a spec-correct tree with
-source spans; its decoded text doubles as an oracle for our own entity decode),
-and markers are spliced at exact offsets.
+the first comment. The frame reports what the reader selected as text with its
+surroundings and the ids of the elements enclosing it; `HtmlView` finds the
+passage in the source with the same locator the CLI uses (`locateAnchor`, with
+the surroundings disambiguating a repeated phrase) and markers are spliced at
+exact offsets. Text the report's own script produced has no place in the
+source: the comment then anchors the nearest enclosing element that has an
+`id` (`locatePassage`, `anchor_kind: passage`) and keeps the passage as its
+text, which the bridge finds and highlights inside that element, again after
+the script redraws it. With no such element the comment is a floating note that
+keeps the quoted text. A block captured from its button is located by its id,
+by its text, or by an enclosing id in the same order.
 
-The DOM side (`services/htmlDom.ts`) and the source map meet on one shared
-coordinate: an index into the concatenated rendered text. Going through a
-character index rather than node identity is what keeps it valid after
-decoration wraps anchored passages in spans and splits those very nodes. **Both
-walks must cover the same tree** — the DOM walk starts at the Document, not
-`<body>`, because whitespace between `</head>` and `<body>` is parsed as a text
-node child of `<html>`, and starting at body puts every later offset one
-character short. UI that Forgemark injects into the frame is tagged
-`data-forgemark` and skipped for the same reason.
+Adding or removing a comment does not reload the report — a reload would run
+its scripts again and lose the tab or range the reader chose. `HtmlView` keeps
+the source the frame shows; when the source changes by exactly the markers of
+the last capture, the frame is told to put the same markers around the range it
+kept (`wrap`), and when it changes by exactly a removed pair, to take them out
+(`unwrap`). Anything else — an accepted suggestion, a reattached anchor, a
+reload from disk — reloads the frame.
 
-**Nothing may depend on an event reaching the frame.** WKWebView does not
-deliver `contextmenu`, `mouseover`, or `click` to listeners the host attaches
-inside the frame — it answers a right-click with its own Look Up / Translate /
-Copy menu, and never runs ours. Chromium does deliver them, so this is not
-reproducible in a browser harness and was found only by driving the Tauri
-window. Anything the reader must be able to do is therefore built on what the
-host can _read_ across the boundary, which `allow-same-origin` grants and which
-has never failed:
-
-- The Comment / Suggest edit toolbar watches the selection, polling on an
-  interval and nudged by the frame's events where they happen to arrive.
-- The per-block Comment buttons live in the _host_ document, positioned over
-  the frame. They sit in the pane's margin, falling back onto the block itself
-  when the window is too narrow for one.
-- Clicking an anchored passage focuses its card via the caret, which the click
-  moves and which we can read. It only ever _sets_ focus — clearing from there
-  would fight the sidebar.
-
-The in-frame listeners are still attached, because where they do work they are
-immediate. They are an optimisation, never the mechanism.
+**Nothing may depend on an event reaching the frame from outside.** WKWebView
+does not deliver `contextmenu`, `mouseover`, or `click` to listeners a host
+attaches inside a frame. Every listener is now attached by the bridge, which is
+the report's own script and is delivered to like any page's. The selection
+watcher still polls on an interval as a floor, nudged by `selectionchange`
+where it fires, and clicking an anchored passage focuses its card via the
+caret, which only ever _sets_ focus.
 
 **Consequences that are deliberate, not gaps:**
 

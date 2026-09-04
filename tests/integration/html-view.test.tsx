@@ -5,10 +5,11 @@
 // become live, clickable highlights inside the frame.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, cleanup, fireEvent } from "@testing-library/react";
+import { render, waitFor, cleanup } from "@testing-library/react";
 import { useRef } from "react";
 import { HtmlView, type HtmlViewHandle } from "../../src/components/HtmlView";
 import { fakeTauri } from "../utils/harness";
+import { lastReportLoad } from "../utils/reportFrame";
 import { ThemeProvider } from "../../src/theme/ThemeProvider";
 import type { Comment } from "../../src/format/types";
 
@@ -88,14 +89,14 @@ describe("HtmlView", () => {
     expect(doc.title).toBe("Modelling meals");
   });
 
-  it("never runs the report's own scripts", async () => {
+  it("runs the report's scripts, on the report's own origin", async () => {
     const { container } = render(<Harness />);
     await waitFor(() => expect(frameDoc(container).querySelector("body")).not.toBeNull());
     const frame = container.querySelector<HTMLIFrameElement>("[data-testid='fm-html-view']")!;
-    // The sandbox pairing is the whole safety story: same-origin so the
-    // host can decorate, no allow-scripts so the report can't act.
-    expect(frame.getAttribute("sandbox")).toBe("allow-same-origin");
-    expect(frame.getAttribute("sandbox")).not.toContain("allow-scripts");
+    // Scripts run; same-origin is the report's own origin, which the
+    // loader gives it, not the app's.
+    expect(frame.getAttribute("sandbox")).toContain("allow-scripts");
+    expect(lastReportLoad?.html).toContain('<script data-forgemark="bridge">');
   });
 
   it("turns inline markers into highlighted spans", async () => {
@@ -126,27 +127,14 @@ describe("HtmlView", () => {
     expect(styles).toHaveLength(2);
   });
 
-  it("puts a comment button on every block, in the host document", async () => {
-    // The button used to be injected into the frame and reached by a
-    // click delivered to a host-attached listener inside it. WKWebView
-    // does not deliver those, so it was silently dead on macOS. Out here
-    // it is an ordinary part of the app.
+  it("puts a comment button beside every block, inside the frame", async () => {
     const { container } = render(<Harness />);
-    await waitFor(() => expect(frameDoc(container).querySelector("figure")).not.toBeNull());
-    const buttons = await screen.findAllByTestId("fm-block-comment");
-    expect(buttons.length).toBeGreaterThan(0);
-    // Host document, not the frame's.
-    expect(buttons[0].ownerDocument).toBe(document);
-    expect(frameDoc(container).querySelector("[data-testid='fm-block-comment']")).toBeNull();
-    expect(buttons.some((b) => b.getAttribute("aria-label")?.includes("Figure 1"))).toBe(true);
-  });
-
-  it("offers the figure, not the chart nested inside it", async () => {
-    const { container } = render(<Harness />);
-    await waitFor(() => expect(frameDoc(container).querySelector("svg")).not.toBeNull());
-    const labels = (await screen.findAllByTestId("fm-block-comment")).map((b) =>
-      b.getAttribute("aria-label"),
+    await waitFor(() =>
+      expect(frameDoc(container).querySelector("button[data-forgemark='block']")).not.toBeNull(),
     );
+    const labels = Array.from(
+      frameDoc(container).querySelectorAll("button[data-forgemark='block']"),
+    ).map((b) => b.getAttribute("aria-label"));
     // One button for the figure; the <svg> inside it is not a second one.
     expect(labels.filter((l) => l?.includes("Figure 1"))).toHaveLength(1);
   });
@@ -154,75 +142,14 @@ describe("HtmlView", () => {
   it("raises an element capture when a block button is clicked", async () => {
     const onElement = vi.fn();
     const { container } = render(<Harness onRequestElementComment={onElement} />);
-    await waitFor(() => expect(frameDoc(container).querySelector("figure")).not.toBeNull());
-    const figureButton = (await screen.findAllByTestId("fm-block-comment")).find((b) =>
-      b.getAttribute("aria-label")?.includes("Figure 1"),
-    )!;
-    fireEvent.click(figureButton);
+    await waitFor(() =>
+      expect(frameDoc(container).querySelector("button[data-forgemark='block']")).not.toBeNull(),
+    );
+    frameDoc(container).querySelector<HTMLButtonElement>("button[data-forgemark='block']")!.click();
     await waitFor(() => expect(onElement).toHaveBeenCalled());
     const capture = onElement.mock.calls[0][0];
     expect(capture.kind).toBe("element");
     expect(capture.text).toBe("Figure 1. Control holds");
-  });
-
-  // A report fills its frame edge to edge, so a button at a block's corner
-  // lands on its caption. The pane is normally much wider than the
-  // document, so the buttons go beside it — but not every window is wide
-  // enough, and then they have to come back inside.
-  //
-  // jsdom has no layout, so the geometry is stated rather than measured.
-  function withGeometry(paneRight: number, frameRight: number) {
-    const original = Element.prototype.getBoundingClientRect;
-    Element.prototype.getBoundingClientRect = function (this: Element) {
-      if (this.classList?.contains("fm-editor-pane")) {
-        return {
-          right: paneRight,
-          left: 0,
-          top: 0,
-          bottom: 0,
-          width: paneRight,
-          height: 0,
-        } as DOMRect;
-      }
-      if (this.classList?.contains("fm-html-view")) {
-        return {
-          right: frameRight,
-          left: 0,
-          top: 0,
-          bottom: 0,
-          width: frameRight,
-          height: 0,
-        } as DOMRect;
-      }
-      return original.call(this);
-    };
-    return () => {
-      Element.prototype.getBoundingClientRect = original;
-    };
-  }
-
-  it("puts the block buttons in the margin when the pane is wide enough", async () => {
-    const restore = withGeometry(1150, 890); // ~260px of margin
-    try {
-      const { container } = render(<Harness />);
-      await waitFor(() => expect(frameDoc(container).querySelector("figure")).not.toBeNull());
-      const button = (await screen.findAllByTestId("fm-block-comment"))[0];
-      expect(button.getAttribute("data-placement")).toBe("gutter");
-    } finally {
-      restore();
-    }
-  });
-
-  it("brings them back onto the block when there is no margin", async () => {
-    const restore = withGeometry(660, 612); // 48px, not enough
-    try {
-      const { container } = render(<Harness />);
-      await waitFor(() => expect(frameDoc(container).querySelector("figure")).not.toBeNull());
-      const button = (await screen.findAllByTestId("fm-block-comment"))[0];
-      expect(button.getAttribute("data-placement")).toBe("inset");
-    } finally {
-      restore();
-    }
   });
 
   it("reports which comment was clicked", async () => {
@@ -254,12 +181,10 @@ describe("HtmlView", () => {
 describe("HtmlView relative references and links", () => {
   beforeEach(() => cleanup());
 
-  it("points the frame at the report's folder", async () => {
+  it("tells the loader which folder the report is in", async () => {
     const { container } = render(<Harness baseDir="/reports" />);
-    await waitFor(() => expect(frameDoc(container).querySelector("base")).toBeTruthy());
-    expect(frameDoc(container).querySelector("base")?.getAttribute("href")).toBe(
-      "asset://localhost/" + encodeURIComponent("/reports/"),
-    );
+    await waitFor(() => expect(frameDoc(container).querySelector("figure")).not.toBeNull());
+    expect(lastReportLoad?.baseDir).toBe("/reports");
   });
 
   it("opens an address outside, another document in a tab, and scrolls to a fragment", async () => {
@@ -272,15 +197,17 @@ describe("HtmlView relative references and links", () => {
     window.addEventListener("forgemark:open-path", opened as (e: Event) => void);
 
     (doc.querySelector("a[href='https://x.y/p']") as HTMLElement).click();
-    expect(fakeTauri.opener.openUrl).toHaveBeenCalledWith("https://x.y/p");
+    await waitFor(() => expect(fakeTauri.opener.openUrl).toHaveBeenCalledWith("https://x.y/p"));
 
     (doc.querySelector("a[href='other.md']") as HTMLElement).click();
+    await waitFor(() => expect(opened).toHaveBeenCalled());
     window.removeEventListener("forgemark:open-path", opened as (e: Event) => void);
     expect((opened.mock.calls[0][0] as CustomEvent).detail.path).toBe("/reports/other.md");
 
-    const pane = container.querySelector(".fm-editor-pane") as HTMLElement;
-    pane.scrollTo = vi.fn();
+    // A fragment is followed inside the frame, which scrolls itself.
+    const target = doc.getElementById("sec") as HTMLElement;
+    target.scrollIntoView = vi.fn();
     (doc.querySelector("a[href='#sec']") as HTMLElement).click();
-    expect(pane.scrollTo).toHaveBeenCalled();
+    expect(target.scrollIntoView).toHaveBeenCalled();
   });
 });

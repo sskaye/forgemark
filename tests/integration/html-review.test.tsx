@@ -6,7 +6,7 @@
 // so nothing about adding a comment rewrote the report.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
 import { ThemeProvider } from "../../src/theme/ThemeProvider";
 import { DocumentProvider, useDocument } from "../../src/state/DocumentProvider";
 import { AppShell } from "../../src/components/AppShell";
@@ -84,9 +84,23 @@ function selectPhrase(phrase: string) {
     const selection = doc.getSelection()!;
     selection.removeAllRanges();
     selection.addRange(range);
+    doc.dispatchEvent(new Event("selectionchange"));
     return;
   }
   throw new Error(`phrase not found in frame: ${phrase}`);
+}
+
+// The frame reports the selection to the app by message; let it arrive.
+async function settled() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+async function pressComment() {
+  await settled();
+  fireEvent.keyDown(window, { key: "m", metaKey: true, altKey: true });
 }
 
 async function loadReport() {
@@ -109,7 +123,7 @@ describe("reviewing an HTML report", () => {
   it("anchors a comment on a selected passage without rewriting the file", async () => {
     await loadReport();
     selectPhrase("variable projection");
-    fireEvent.keyDown(window, { key: "m", metaKey: true, altKey: true });
+    await pressComment();
 
     await waitFor(() => expect(screen.getByTestId("fm-composer-textarea")).toBeTruthy());
     fireEvent.change(screen.getByTestId("fm-composer-textarea"), {
@@ -128,7 +142,7 @@ describe("reviewing an HTML report", () => {
   it("produces a file that parses and re-serializes unchanged", async () => {
     await loadReport();
     selectPhrase("variable projection");
-    fireEvent.keyDown(window, { key: "m", metaKey: true, altKey: true });
+    await pressComment();
     await waitFor(() => expect(screen.getByTestId("fm-composer-textarea")).toBeTruthy());
     fireEvent.change(screen.getByTestId("fm-composer-textarea"), {
       target: { value: "Gloss this." },
@@ -155,12 +169,16 @@ describe("reviewing an HTML report", () => {
 
   it("anchors a whole figure, captioned and with its id kept as a hint", async () => {
     await loadReport();
-    // Every commentable block carries a button, in the *host* document
-    // rather than inside the frame. This is the only way to comment on a
-    // chart, which has no text to select.
-    const button = await screen.findByTestId("fm-block-comment");
-    expect(button.getAttribute("aria-label")).toContain("Figure 1. Control holds");
-    fireEvent.click(button);
+    // Every commentable block carries a button the bridge put beside it
+    // inside the frame. This is the only way to comment on a chart, which
+    // has no text to select.
+    let button: HTMLButtonElement | null = null;
+    await waitFor(() => {
+      button = frameDoc().querySelector<HTMLButtonElement>("button[data-forgemark='block']");
+      expect(button).not.toBeNull();
+    });
+    expect(button!.getAttribute("aria-label")).toContain("Figure 1. Control holds");
+    button!.click();
 
     await waitFor(() => expect(screen.getByTestId("fm-composer-textarea")).toBeTruthy());
     fireEvent.change(screen.getByTestId("fm-composer-textarea"), {
@@ -179,7 +197,7 @@ describe("reviewing an HTML report", () => {
   it("offers a suggestion on plain prose", async () => {
     await loadReport();
     selectPhrase("variable projection");
-    fireEvent.keyDown(window, { key: "m", metaKey: true, altKey: true });
+    await pressComment();
     await waitFor(() => expect(screen.getByTestId("fm-composer-suggest-toggle")).toBeTruthy());
   });
 
@@ -196,8 +214,9 @@ describe("reviewing an HTML report", () => {
     const selection = doc.getSelection()!;
     selection.removeAllRanges();
     selection.addRange(range);
+    doc.dispatchEvent(new Event("selectionchange"));
 
-    fireEvent.keyDown(window, { key: "m", metaKey: true, altKey: true });
+    await pressComment();
     await waitFor(() =>
       expect(screen.getByTestId("fm-composer-suggest-unavailable").textContent).toContain(
         "spans markup",
@@ -209,7 +228,7 @@ describe("reviewing an HTML report", () => {
   it("offers a reply instead of an overlapping anchor", async () => {
     await loadReport();
     selectPhrase("variable projection");
-    fireEvent.keyDown(window, { key: "m", metaKey: true, altKey: true });
+    await pressComment();
     await waitFor(() => expect(screen.getByTestId("fm-composer-textarea")).toBeTruthy());
     fireEvent.change(screen.getByTestId("fm-composer-textarea"), { target: { value: "First." } });
     fireEvent.keyDown(screen.getByTestId("fm-composer-textarea"), { key: "Enter", metaKey: true });
@@ -219,7 +238,7 @@ describe("reviewing an HTML report", () => {
     // pair over the first — the format can't represent that.
     await waitFor(() => expect(frameDoc().querySelector("[data-anchor-id='1']")).not.toBeNull());
     selectPhrase("variable projection");
-    fireEvent.keyDown(window, { key: "m", metaKey: true, altKey: true });
+    await pressComment();
     await waitFor(() => expect(screen.getByTestId("fm-overlap-prompt")).toBeTruthy());
     expect(screen.getByTestId("probe-count").textContent).toBe("1");
   });

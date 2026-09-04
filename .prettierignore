@@ -32,3 +32,4 @@ docs/example_file/
 
 # Review documents are opened in Forgemark; reformatting would move its markers.
 docs/reviews/
+src/report/report-bridge.built.js

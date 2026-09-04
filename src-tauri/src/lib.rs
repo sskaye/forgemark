@@ -12,6 +12,8 @@
 // items (text-size, sidebar) live in Settings; comment-card actions
 // (Reply, Resolve, Edit, Delete, Reattach) live on the card itself.
 
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
@@ -48,6 +50,146 @@ fn set_recent_files(app: tauri::AppHandle, paths: Vec<String>) -> Result<(), Str
     let menu = build_menu(&app, &paths).map_err(|e| e.to_string())?;
     app.set_menu(menu).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+// HTML reports under review, served to their frames by the `fmreport`
+// protocol below. A report runs its own scripts, so it must not share
+// the app's origin: the protocol gives every report an origin of its
+// own, from which the app's IPC is unreachable, and serves the files
+// beside the report (a stylesheet, an image, a data file) from the same
+// origin so the report loads as it would from disk in a browser. The
+// frontend registers a report before pointing a frame at it and clears
+// it when the frame goes.
+struct Report {
+    html: String,
+    base_dir: Option<PathBuf>,
+}
+
+#[derive(Default)]
+struct Reports(Mutex<HashMap<String, Report>>);
+
+#[tauri::command]
+fn set_report(
+    state: tauri::State<Reports>,
+    id: String,
+    html: String,
+    base_dir: Option<String>,
+) -> Result<(), String> {
+    let mut guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
+    guard.insert(
+        id,
+        Report {
+            html,
+            base_dir: base_dir.map(PathBuf::from),
+        },
+    );
+    Ok(())
+}
+
+#[tauri::command]
+fn clear_report(state: tauri::State<Reports>, id: String) {
+    let mut guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
+    guard.remove(&id);
+}
+
+// `/<id>/<path>` from a report URL, percent-decoded. The path is what
+// the report asked for relative to itself; empty or `index.html` is the
+// report.
+fn report_request(path: &str) -> Option<(String, String)> {
+    let trimmed = path.trim_start_matches('/');
+    let decoded = percent_decode(trimmed);
+    let mut parts = decoded.splitn(2, '/');
+    let id = parts.next()?.to_string();
+    if id.is_empty() {
+        return None;
+    }
+    let rest = parts.next().unwrap_or("").to_string();
+    Some((id, rest))
+}
+
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                out.push(v);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+fn mime_for(path: &str) -> &'static str {
+    let ext = Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .unwrap_or_default();
+    match ext.as_str() {
+        "html" | "htm" => "text/html; charset=utf-8",
+        "css" => "text/css; charset=utf-8",
+        "js" | "mjs" => "text/javascript; charset=utf-8",
+        "json" => "application/json; charset=utf-8",
+        "csv" => "text/csv; charset=utf-8",
+        "txt" | "md" => "text/plain; charset=utf-8",
+        "svg" => "image/svg+xml",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "ico" => "image/x-icon",
+        "woff" => "font/woff",
+        "woff2" => "font/woff2",
+        "ttf" => "font/ttf",
+        "otf" => "font/otf",
+        "mp4" => "video/mp4",
+        "webm" => "video/webm",
+        "mp3" => "audio/mpeg",
+        "wav" => "audio/wav",
+        "pdf" => "application/pdf",
+        "wasm" => "application/wasm",
+        _ => "application/octet-stream",
+    }
+}
+
+// A file beside the report, if `rel` stays inside the report's folder.
+fn sibling_file(base_dir: &Path, rel: &str) -> Option<Vec<u8>> {
+    let base = base_dir.canonicalize().ok()?;
+    let target = base.join(rel).canonicalize().ok()?;
+    if !target.starts_with(&base) {
+        return None;
+    }
+    std::fs::read(target).ok()
+}
+
+fn report_response(
+    reports: &Reports,
+    path: &str,
+) -> (u16, &'static str, Vec<u8>) {
+    let Some((id, rest)) = report_request(path) else {
+        return (404, "text/plain", b"not found".to_vec());
+    };
+    let guard = reports.0.lock().unwrap_or_else(|e| e.into_inner());
+    let Some(report) = guard.get(&id) else {
+        return (404, "text/plain", b"no such report".to_vec());
+    };
+    if rest.is_empty() || rest == "index.html" {
+        return (200, "text/html; charset=utf-8", report.html.clone().into_bytes());
+    }
+    match report
+        .base_dir
+        .as_deref()
+        .and_then(|dir| sibling_file(dir, &rest))
+    {
+        Some(bytes) => (200, mime_for(&rest), bytes),
+        None => (404, "text/plain", b"not found".to_vec()),
+    }
 }
 
 #[tauri::command]
@@ -116,11 +258,24 @@ pub fn run() {
         .manage(PendingFiles::default())
         .manage(ExitApproved::default())
         .manage(RecentFiles::default())
+        .manage(Reports::default())
+        .register_uri_scheme_protocol("fmreport", |ctx, request| {
+            let reports = ctx.app_handle().state::<Reports>();
+            let (status, mime, body) = report_response(&reports, request.uri().path());
+            tauri::http::Response::builder()
+                .status(status)
+                .header("Content-Type", mime)
+                .header("Cache-Control", "no-store")
+                .body(body)
+                .unwrap_or_else(|_| tauri::http::Response::new(Vec::new()))
+        })
         .invoke_handler(tauri::generate_handler![
             take_pending_files,
             print_current_webview,
             approve_exit,
-            set_recent_files
+            set_recent_files,
+            set_report,
+            clear_report
         ])
         // Closing the window (red button / ⌘W) must not throw away
         // unsaved work. Rust can't know whether there is any, so hand the
@@ -463,7 +618,7 @@ fn build_menu(app: &tauri::AppHandle, recent: &[String]) -> tauri::Result<Menu<t
 
 #[cfg(test)]
 mod tests {
-    use super::file_args;
+    use super::*;
 
     #[test]
     fn keeps_document_paths_and_drops_the_rest() {
@@ -479,5 +634,40 @@ mod tests {
             vec!["C:\\notes\\draft.md".to_string(), "report.HTML".to_string()]
         );
         assert!(file_args(&["forgemark".to_string()]).is_empty());
+    }
+
+    #[test]
+    fn report_paths_are_split_and_decoded() {
+        assert_eq!(
+            report_request("/r1/index.html"),
+            Some(("r1".to_string(), "index.html".to_string()))
+        );
+        assert_eq!(report_request("/r1/"), Some(("r1".to_string(), String::new())));
+        assert_eq!(
+            report_request("/r1/data%20files/a.json"),
+            Some(("r1".to_string(), "data files/a.json".to_string()))
+        );
+        assert_eq!(report_request("/"), None);
+    }
+
+    #[test]
+    fn report_is_served_and_siblings_stay_inside_the_folder() {
+        let dir = std::env::temp_dir().join(format!("fm-report-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        std::fs::write(dir.join("style.css"), "p{}").unwrap();
+        let reports = Reports::default();
+        reports.0.lock().unwrap().insert(
+            "r1".to_string(),
+            Report { html: "<p>hi</p>".to_string(), base_dir: Some(dir.clone()) },
+        );
+        let (status, mime, body) = report_response(&reports, "/r1/index.html");
+        assert_eq!((status, mime, body), (200, "text/html; charset=utf-8", b"<p>hi</p>".to_vec()));
+        let (status, mime, body) = report_response(&reports, "/r1/style.css");
+        assert_eq!((status, mime, body), (200, "text/css; charset=utf-8", b"p{}".to_vec()));
+        let (status, _, _) = report_response(&reports, "/r1/../../etc/passwd");
+        assert_eq!(status, 404);
+        let (status, _, _) = report_response(&reports, "/r2/index.html");
+        assert_eq!(status, 404);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

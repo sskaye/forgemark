@@ -49,6 +49,11 @@ export default [
         Document: "readonly",
         DOMParser: "readonly",
         DocumentFragment: "readonly",
+        Window: "readonly",
+        MessageEvent: "readonly",
+        MutationObserver: "readonly",
+        MutationRecord: "readonly",
+        ScrollLogicalPosition: "readonly",
         Text: "readonly",
         Comment: "readonly",
         Range: "readonly",
@@ -125,6 +130,7 @@ export default [
   {
     ignores: [
       "dist",
+      "src/report/report-bridge.built.js",
       "node_modules",
       "src-tauri/target",
       "src-tauri/gen",

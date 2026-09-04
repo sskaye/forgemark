@@ -17,6 +17,11 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 - Tabs from the keyboard: ⌘⇧] and ⌘⇧[ move between tabs, ⌘1 to ⌘9 jump to one, and arrow keys walk the tab strip. In the sidebar, ↑/↓ (or j/k) move between comment cards.
 - Deleting a comment can be undone for a few seconds from a banner. It restores the thread, its replies, and its markers exactly.
 
+### Changed
+
+- An HTML report now runs its own scripts. A dashboard built by script, with tabs, charts, and controls, works as it does in a browser, on an origin of its own from which the app is unreachable; the files beside the report load from the same origin. The frame fills the pane and scrolls itself, so sticky headers and viewport units behave. Adding or removing a comment no longer reloads the report, so the tab or range the reader chose stays chosen.
+- A comment on text the report's script produced anchors the nearest enclosing element with an `id` and keeps the passage as its text (`anchor_kind: passage`), highlighted wherever the element shows it; with no such element it becomes a floating note that keeps the quoted text. Suggestions are not offered on such text.
+
 ### Fixed
 
 - Images and links written relative to the document work. `![](images/x.png)`, an `<img src="images/x.png">`, and a report's own stylesheet, fonts, or images next to it load from the document's folder. A link to `#heading` scrolls to it (every heading now carries the id GitHub would give it), a link to another `.md` or `.html` file opens it in a tab, a link to any other file opens it with the system, and an address opens outside as before. Links inside an HTML report, which did nothing, do the same.

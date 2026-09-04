@@ -6,8 +6,8 @@
 // exactly what the iframe hands the decorator.
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { anchorElement, applyAnchorState, decorateAnchors } from "../../src/services/htmlDecorate";
-import { renderedText, selectionTextRange, textIndexOf } from "../../src/services/htmlDom";
+import { anchorElement, applyAnchorState, decorateAnchors } from "../../src/report/decorate";
+import { renderedText, selectionTextRange, textIndexOf } from "../../src/report/dom";
 
 function parse(html: string): Document {
   return new DOMParser().parseFromString(html, "text/html");

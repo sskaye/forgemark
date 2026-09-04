@@ -54,6 +54,7 @@ function fromMarkdownCapture(c: CapturedSelection): HtmlCapturedSelection {
         : undefined,
     overlappingAnchorId: c.overlappingAnchorId,
     rect: c.rect,
+    token: "",
   };
 }
 
@@ -178,7 +179,10 @@ export function EditorPane({ docId }: Props) {
           selectionText: captured.text,
           contextBefore: captured.contextBefore,
           contextAfter: captured.contextAfter,
-          ...(captured.kind === "element" ? { anchorKind: "element" as const } : {}),
+          ...(captured.kind === "element" || captured.kind === "passage"
+            ? { anchorKind: captured.kind }
+            : {}),
+          ...(captured.kind === "floating" ? { floating: true } : {}),
           ...(captured.anchorSelector ? { anchorSelector: captured.anchorSelector } : {}),
           x: captured.rect.left,
           y: captured.rect.bottom + 6,
@@ -445,6 +449,26 @@ export function EditorPane({ docId }: Props) {
       const c = state.composer;
       if (!c || c.mode !== "new") return;
       const id = nextCommentId(state.comments);
+      if (c.floating) {
+        // Nothing in the source to anchor to: a script produced the
+        // passage and no element with an id holds it. The note keeps
+        // the quoted text so a reader or an agent can still tell what it
+        // is about.
+        dispatch({
+          type: "addComment",
+          body: state.body,
+          comment: {
+            id,
+            floating: true,
+            ...anchorFields(c),
+            author,
+            timestamp: new Date().toISOString(),
+            resolved: false,
+            body: commentBody,
+          },
+        });
+        return;
+      }
       const spliced = spliceAnchor(c, id);
       const newBody = spliced?.body ?? applyAnchor(c.from, c.to, id);
       if (newBody == null) return;
@@ -461,7 +485,16 @@ export function EditorPane({ docId }: Props) {
         },
       });
     },
-    [state.composer, state.comments, author, dispatch, applyAnchor, spliceAnchor, anchorFields],
+    [
+      state.composer,
+      state.comments,
+      state.body,
+      author,
+      dispatch,
+      applyAnchor,
+      spliceAnchor,
+      anchorFields,
+    ],
   );
 
   // Phase 7: suggested-edit submission. The composer captures both the
@@ -647,12 +680,12 @@ export function EditorPane({ docId }: Props) {
   // suggestions actually are, pass this test; anything else is offered
   // as a plain comment instead.
   const canSuggest = useCallback(
-    (anchorKind: "element" | undefined, from: number, to: number) => {
+    (anchorKind: "element" | "passage" | "floating" | undefined, from: number, to: number) => {
       // Markdown anchors are always plain text. In a report the markers
       // may enclose markup, and accepting a suggestion replaces
       // everything between them — see `suggestion` below.
       if (!isHtml) return true;
-      if (anchorKind === "element") return false;
+      if (anchorKind) return false;
       return !state.body.slice(from, to).includes("<");
     },
     [isHtml, state.body],
@@ -663,6 +696,9 @@ export function EditorPane({ docId }: Props) {
     if (!c || c.mode !== "new" || !isHtml) return { allowed: true };
     if (c.anchorKind === "element") {
       return { allowed: false, reason: "Comment only — this is a figure" };
+    }
+    if (c.anchorKind === "passage" || c.floating) {
+      return { allowed: false, reason: "Comment only — this text is produced by the report" };
     }
     if (state.body.slice(c.from, c.to).includes("<")) {
       return { allowed: false, reason: "Comment only — this passage spans markup" };
@@ -804,11 +840,15 @@ export function EditorPane({ docId }: Props) {
           confidentCount={confidentReattachments.length}
           onReattachConfident={reattachConfident}
         />
-        {state.viewMode === "source" ? (
+        {state.viewMode === "source" && (
           <SourceView ref={sourceRef} text={sourceText} format={state.format} />
-        ) : isHtml ? (
+        )}
+        {isHtml ? (
+          // Kept mounted behind the source view: a reload would run the
+          // report's scripts again and lose the state the reader chose.
           <HtmlView
             key={state.loadGeneration}
+            hidden={state.viewMode === "source"}
             body={state.body}
             comments={state.comments}
             focusedCommentId={state.focusedCommentId}
@@ -830,7 +870,7 @@ export function EditorPane({ docId }: Props) {
             onSelectionChange={isActive ? showAffordance : undefined}
             handleRef={htmlRef}
           />
-        ) : (
+        ) : state.viewMode === "source" ? null : (
           <RenderedView
             // Remount on every content-replacing load so the Tiptap undo
             // stack can't outlive the document it belongs to.
@@ -865,7 +905,7 @@ export function EditorPane({ docId }: Props) {
             x={selectionAffordance.rect.left}
             y={selectionAffordance.rect.top}
             allowSuggest={canSuggest(
-              selectionAffordance.kind === "element" ? "element" : undefined,
+              selectionAffordance.kind === "inline" ? undefined : selectionAffordance.kind,
               selectionAffordance.from,
               selectionAffordance.to,
             )}

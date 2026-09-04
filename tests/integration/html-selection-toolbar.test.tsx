@@ -81,13 +81,16 @@ function selectPhrase(phrase: string) {
     const selection = doc.getSelection()!;
     selection.removeAllRanges();
     selection.addRange(range);
+    doc.dispatchEvent(new Event("selectionchange"));
     return;
   }
   throw new Error(`phrase not found: ${phrase}`);
 }
 
 function clearSelection() {
-  frameDoc().getSelection()!.removeAllRanges();
+  const doc = frameDoc();
+  doc.getSelection()!.removeAllRanges();
+  doc.dispatchEvent(new Event("selectionchange"));
 }
 
 // The watcher polls; advance past one tick. Deliberately not driven by any
@@ -168,6 +171,7 @@ describe("selection toolbar in a report", () => {
     const selection = doc.getSelection()!;
     selection.removeAllRanges();
     selection.addRange(range);
+    doc.dispatchEvent(new Event("selectionchange"));
     await settle();
     await waitFor(() => expect(screen.getByTestId("fm-selection-toolbar")).toBeTruthy());
     expect(screen.queryByTestId("fm-selection-suggest")).toBeNull();
@@ -226,6 +230,7 @@ describe("focusing a comment from the report", () => {
     const selection = doc.getSelection()!;
     selection.removeAllRanges();
     selection.addRange(range);
+    doc.dispatchEvent(new Event("selectionchange"));
     await settle();
 
     await waitFor(() => expect(screen.getByTestId("probe-focused").textContent).toBe("7"));
@@ -255,6 +260,7 @@ describe("focusing a comment from the report", () => {
     const selection = doc.getSelection()!;
     selection.removeAllRanges();
     selection.addRange(range);
+    doc.dispatchEvent(new Event("selectionchange"));
     await settle();
     await settle();
 

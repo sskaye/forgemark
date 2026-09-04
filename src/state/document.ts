@@ -153,6 +153,9 @@ export type NewComposerState = {
   // block whose script-produced text the comment is about. Recorded on
   // the comment so the sidebar and the reattach flow can tell them apart.
   anchorKind?: "element" | "passage";
+  // Nothing in the source to anchor to: the comment is written as a
+  // floating note that keeps the quoted text.
+  floating?: boolean;
   // A stable CSS selector for an element anchor, when the report gave
   // the element an id. Used as an exact reattachment hint after the
   // report is regenerated.
