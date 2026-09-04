@@ -3,6 +3,7 @@ import { readFileSync, existsSync, statSync, readdirSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { createHash } from "node:crypto";
 import JSZip from "jszip";
+import { hashSkillTree, parseManifest, type SkillFile } from "../../src/services/skillTree";
 
 const ROOT = resolve(__dirname, "..", "..");
 const SKILL_PATH = join(ROOT, "assets", "forgemark-skill.skill");
@@ -107,5 +108,28 @@ describe("skill bundle — built artifacts", () => {
         `${rel} differs from source — run \`npm run build:skill\` and commit`,
       ).toBe(true);
     }
+  });
+});
+
+describe("skill bundle — manifest", () => {
+  const manifest = parseManifest(readFileSync(join(SRC, "forgemark-skill.json"), "utf8"));
+
+  it("carries the app's version", () => {
+    const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { version: string };
+    expect(manifest?.version).toBe(pkg.version);
+  });
+
+  it("carries the tree hash the app computes over the same files", async () => {
+    const files: SkillFile[] = [];
+    const walk = (dir: string, prefix: string) => {
+      for (const name of readdirSync(dir).sort()) {
+        if (name === ".DS_Store") continue;
+        const full = join(dir, name);
+        if (statSync(full).isDirectory()) walk(full, `${prefix}${name}/`);
+        else files.push({ path: `${prefix}${name}`, text: readFileSync(full, "utf8") });
+      }
+    };
+    walk(SRC, "");
+    expect(await hashSkillTree(files)).toBe(manifest?.tree);
   });
 });

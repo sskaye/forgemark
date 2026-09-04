@@ -32,9 +32,28 @@ const OUT_DIR = join(ROOT, "assets");
 const SKILL_OUT = join(OUT_DIR, "forgemark-skill.skill");
 const ZIP_OUT = join(OUT_DIR, "forgemark-skill.zip");
 const SIZE_BUDGET = 512 * 1024;
+// The manifest the app reads to tell one build of the skill from
+// another: the app's version and a hash of every other file. Written
+// into the source tree before zipping, so an installed copy carries it.
+// The hash rule is the one in src/services/skillTree.ts, repeated here
+// in plain Node; tests/unit/skill-bundle.test.ts holds the two together.
+const MANIFEST = "forgemark-skill.json";
+const APP_VERSION = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version;
 
 // Files in the source tree that aren't part of the skill payload.
 const IGNORE = new Set([".DS_Store"]);
+
+const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
+
+function hashTree(files) {
+  const entries = files
+    .map((full) => ({ rel: relative(SRC, full).split(sep).join("/"), full }))
+    .filter((e) => e.rel !== MANIFEST)
+    .sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
+  let lines = "";
+  for (const e of entries) lines += `${e.rel}\n${sha256(readFileSync(e.full))}\n`;
+  return sha256(Buffer.from(lines, "utf8"));
+}
 
 function listFiles(dir) {
   const out = [];
@@ -52,11 +71,14 @@ function listFiles(dir) {
 }
 
 async function main() {
-  const files = listFiles(SRC);
+  let files = listFiles(SRC);
   if (files.length === 0) {
     console.error(`No files found under ${SRC}`);
     process.exit(1);
   }
+  const manifest = { version: APP_VERSION, tree: hashTree(files) };
+  writeFileSync(join(SRC, MANIFEST), JSON.stringify(manifest, null, 2) + "\n");
+  files = listFiles(SRC);
 
   const zip = new JSZip();
   // Pinned to Unix epoch; jszip otherwise reads file mtime, which
@@ -112,6 +134,7 @@ async function main() {
   console.log(`  skill: ${SKILL_OUT}`);
   console.log(`  zip:   ${ZIP_OUT}`);
   console.log(`  sha256: ${skillHash}`);
+  console.log(`  manifest: ${MANIFEST} version ${manifest.version} tree ${manifest.tree}`);
 }
 
 main().catch((err) => {
