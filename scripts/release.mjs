@@ -48,9 +48,11 @@ const DMG = join(
   `Forgemark_${VERSION}_universal.dmg`,
 );
 
+// `display` is what gets logged when the command carries a secret.
 function run(cmd, opts = {}) {
-  console.log(`\n$ ${cmd}`);
-  execSync(cmd, { stdio: "inherit", ...opts });
+  const { display, ...execOpts } = opts;
+  console.log(`\n$ ${display ?? cmd}`);
+  execSync(cmd, { stdio: "inherit", ...execOpts });
 }
 
 function step(label) {
@@ -108,13 +110,13 @@ if (profile) {
       );
     }
   }
-  run(
+  const submit = (password) =>
     `xcrun notarytool submit "${DMG}" ` +
-      `--apple-id "${process.env.APPLE_ID}" ` +
-      `--password "${process.env.APPLE_PASSWORD}" ` +
-      `--team-id "${process.env.APPLE_TEAM_ID}" ` +
-      `--wait`,
-  );
+    `--apple-id "${process.env.APPLE_ID}" ` +
+    `--password "${password}" ` +
+    `--team-id "${process.env.APPLE_TEAM_ID}" ` +
+    `--wait`;
+  run(submit(process.env.APPLE_PASSWORD), { display: submit("••••••••") });
 }
 
 step("Stapling app and DMG");

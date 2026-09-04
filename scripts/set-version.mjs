@@ -22,9 +22,11 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // hand-maintained files and reformatting them would bury the real change.
 const FILES = [
   {
+    // Two-space indent = top level. A nested "version" key (engines,
+    // overrides) must not be the one that matches.
     path: "package.json",
-    read: (s) => s.match(/"version":\s*"([^"]+)"/)?.[1],
-    write: (s, v) => s.replace(/("version":\s*)"[^"]+"/, `$1"${v}"`),
+    read: (s) => s.match(/^ {2}"version":\s*"([^"]+)"/m)?.[1],
+    write: (s, v) => s.replace(/^( {2}"version":\s*)"[^"]+"/m, `$1"${v}"`),
   },
   {
     path: "src-tauri/tauri.conf.json",
