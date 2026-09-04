@@ -32,7 +32,7 @@ export type Placement = {
   anchor_text: string;
   context_before: string;
   context_after: string;
-  anchor_kind?: "element";
+  anchor_kind?: "element" | "passage";
   anchor_selector?: string;
 };
 
@@ -92,6 +92,31 @@ export function locateElement(body: string, selector: string, format: DocFormat)
     context_after: around.after,
     anchor_kind: "element",
     anchor_selector: selector.trim(),
+  };
+}
+
+// A passage the report's own script produces at load — a tile's figure,
+// a chart's caption — has no place of its own in the source. The markers
+// wrap the element that will hold it, named by selector, and the record
+// carries the passage so the app can highlight it wherever the element
+// shows it and an agent can tell what was meant. `near` is the rendered
+// text either side of the passage, as the reader saw it.
+export function locatePassage(
+  body: string,
+  selector: string,
+  phrase: string,
+  format: DocFormat,
+  near?: { before: string; after: string },
+): Placement {
+  const text = normalizeAnchorText(phrase);
+  if (text.length === 0) throw new AnchorError("The anchor text is empty.");
+  const base = locateElement(body, selector, format);
+  return {
+    ...base,
+    anchor_kind: "passage",
+    anchor_text: text,
+    context_before: near ? contextSnippet(near.before, "before") : base.context_before,
+    context_after: near ? contextSnippet(near.after, "after") : base.context_after,
   };
 }
 

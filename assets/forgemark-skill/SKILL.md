@@ -99,7 +99,7 @@ Some prose with <!-- fmc:1 -->an anchored passage<!-- /fmc:1 --> and more prose.
 -->
 ```
 
-**Markers.** `<!-- fmc:N -->` and `<!-- /fmc:N -->`, one pair per comment, wrapping one contiguous passage. Pairs never overlap or nest. A pair may enclose inline formatting (`*em*`, `[links](…)`, `` `code` ``) but never sits inside backticks or a fenced code block; to anchor a whole code block, the pair goes on its own lines around the fence. In HTML, a marker never sits inside `<script>`, `<style>`, `<textarea>`, `<title>`, or an attribute value; a pair may cross tags, and may wrap a whole element (`anchor_kind: element`).
+**Markers.** `<!-- fmc:N -->` and `<!-- /fmc:N -->`, one pair per comment, wrapping one contiguous passage. Pairs never overlap or nest. A pair may enclose inline formatting (`*em*`, `[links](…)`, `` `code` ``) but never sits inside backticks or a fenced code block; to anchor a whole code block, the pair goes on its own lines around the fence. In HTML, a marker never sits inside `<script>`, `<style>`, `<textarea>`, `<title>`, or an attribute value; a pair may cross tags, and may wrap a whole element (`anchor_kind: element`), or wrap the element that a script fills at load when the comment is about text inside it (`anchor_kind: passage`).
 
 **The block.** One per file, at the very end: `<!-- forgemark-comments` on its own line, a YAML list, `-->` on its own line. A file with no comments has no block. Two blocks in one file means the app reads only the last and the rest of the review is invisible.
 
@@ -109,7 +109,7 @@ Some prose with <!-- fmc:1 -->an anchored passage<!-- /fmc:1 --> and more prose.
 | --- | --- | --- |
 | `id` | yes | Positive integer, unique in the file, never reused. Ids are sparse after deletions — do not renumber. |
 | `anchor_text` | unless `floating: true` | The passage as rendered: Markdown formatting and HTML tags stripped, whitespace collapsed. Advisory — the markers attach the comment; this is what the sidebar shows and what recovery searches for if the markers are lost. For an element anchor, the caption. |
-| `anchor_kind` | optional | Only `element`: the markers wrap a whole figure, chart, or table. |
+| `anchor_kind` | optional | `element`: the markers wrap a whole figure, chart, or table. `passage`: the markers wrap an element the report's own script fills at load, and `anchor_text` is the passage inside it the comment is about — text that has no place of its own in the source. Find it in the rendered report, or in the script that produces it. |
 | `anchor_selector` | optional | `#id` of an anchored element, for exact reattachment after a rebuild. |
 | `context_before`, `context_after` | recommended | About a sentence either side, for recovery. |
 | `author` | yes | Free-form name. |

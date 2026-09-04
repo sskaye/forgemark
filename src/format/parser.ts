@@ -350,10 +350,10 @@ function parseCommentRecord(raw: Record<string, unknown>, index: number): Commen
   }
 
   const anchorKind = raw["anchor_kind"];
-  if (anchorKind !== undefined && anchorKind !== "element") {
+  if (anchorKind !== undefined && anchorKind !== "element" && anchorKind !== "passage") {
     throw new ForgemarkParseError(
       "schema",
-      `Comment id=${idValue}: 'anchor_kind' must be "element" if present`,
+      `Comment id=${idValue}: 'anchor_kind' must be "element" or "passage" if present`,
     );
   }
   const anchorSelector = raw["anchor_selector"];
@@ -425,7 +425,7 @@ function parseCommentRecord(raw: Record<string, unknown>, index: number): Commen
   };
   if (floating === true) out.floating = true;
   if (anchorText !== undefined) out.anchor_text = unescapeContent(anchorText);
-  if (anchorKind !== undefined) out.anchor_kind = "element";
+  if (anchorKind !== undefined) out.anchor_kind = anchorKind;
   if (anchorSelector !== undefined) out.anchor_selector = unescapeContent(anchorSelector);
   if (contextBefore !== undefined) out.context_before = unescapeContent(contextBefore);
   if (contextAfter !== undefined) out.context_after = unescapeContent(contextAfter);

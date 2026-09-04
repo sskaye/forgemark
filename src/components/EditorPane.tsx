@@ -419,7 +419,7 @@ export function EditorPane({ docId }: Props) {
       selectionText: string;
       contextBefore: string;
       contextAfter: string;
-      anchorKind?: "element";
+      anchorKind?: "element" | "passage";
       anchorSelector?: string;
     }) => ({
       anchor_text: c.selectionText,

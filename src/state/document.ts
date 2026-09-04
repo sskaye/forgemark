@@ -149,9 +149,10 @@ export type NewComposerState = {
   contextBefore: string;
   contextAfter: string;
   // Set when the anchor wraps a whole block rather than a run of text —
-  // a figure, chart, or table in an HTML report. Recorded on the comment
-  // so the sidebar and the reattach flow can tell the two apart.
-  anchorKind?: "element";
+  // a figure, chart, or table in an HTML report — or, as "passage", a
+  // block whose script-produced text the comment is about. Recorded on
+  // the comment so the sidebar and the reattach flow can tell them apart.
+  anchorKind?: "element" | "passage";
   // A stable CSS selector for an element anchor, when the report gave
   // the element an id. Used as an exact reattachment hint after the
   // report is regenerated.

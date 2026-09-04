@@ -71,7 +71,7 @@ export function addComment(file: ParsedFile, format: DocFormat, input: CommentIn
 
   if (input.suggest !== undefined) {
     const from = file.body.slice(placement.start, placement.end);
-    if (placement.block || placement.anchor_kind === "element") {
+    if (placement.block || placement.anchor_kind) {
       throw new CommandError(
         "A suggestion can replace a run of text, not a code block or an element.",
       );

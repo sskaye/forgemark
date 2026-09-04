@@ -27,7 +27,12 @@ export type Comment = {
   // markers wrap a whole block — a figure, chart, or table — which is the
   // only way to comment on something that has no text to select, and the
   // thing reviewers most want to point at in a generated report.
-  anchor_kind?: "element";
+  // "passage" means the markers wrap a whole element too, but the comment
+  // is about a passage inside it that the report's own script produces
+  // at load, so it has no place of its own in the source: `anchor_text`
+  // is that passage, and the app highlights it wherever the element
+  // shows it.
+  anchor_kind?: "element" | "passage";
   // A CSS selector that identifies the anchored element, written when
   // the report gives it a stable id. Tried before any text matching when
   // reattaching, which turns recovery after a regenerated report from

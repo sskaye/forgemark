@@ -130,7 +130,10 @@ export function lintText(text: string, format: DocFormat): LintReport {
     }
 
     counts.attached++;
-    if (c.anchor_kind === "element") continue;
+    // An element anchor's text is its caption; a passage anchor's is a
+    // passage the report's script produces. Neither sits between the
+    // markers in the source.
+    if (c.anchor_kind === "element" || c.anchor_kind === "passage") continue;
     const between = file.body.slice(pair.open.end, pair.close.start);
     if (c.anchor_text !== undefined && !anchorTextMatches(c.anchor_text, between, format)) {
       problems.push({
