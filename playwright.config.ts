@@ -14,10 +14,12 @@ export default defineConfig({
     actionTimeout: 5_000,
     trace: "retain-on-failure",
   },
+  // CI starts Vite itself before running the tests; locally a running
+  // `npm run dev` serves the same URL. Either is reused.
   webServer: {
     command: "npm run vite:dev",
     url: "http://localhost:1420",
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: true,
     timeout: 120_000,
   },
 });

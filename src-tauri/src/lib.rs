@@ -168,10 +168,7 @@ fn sibling_file(base_dir: &Path, rel: &str) -> Option<Vec<u8>> {
     std::fs::read(target).ok()
 }
 
-fn report_response(
-    reports: &Reports,
-    path: &str,
-) -> (u16, &'static str, Vec<u8>) {
+fn report_response(reports: &Reports, path: &str) -> (u16, &'static str, Vec<u8>) {
     let Some((id, rest)) = report_request(path) else {
         return (404, "text/plain", b"not found".to_vec());
     };
@@ -180,7 +177,11 @@ fn report_response(
         return (404, "text/plain", b"no such report".to_vec());
     };
     if rest.is_empty() || rest == "index.html" {
-        return (200, "text/html; charset=utf-8", report.html.clone().into_bytes());
+        return (
+            200,
+            "text/html; charset=utf-8",
+            report.html.clone().into_bytes(),
+        );
     }
     match report
         .base_dir
@@ -642,7 +643,10 @@ mod tests {
             report_request("/r1/index.html"),
             Some(("r1".to_string(), "index.html".to_string()))
         );
-        assert_eq!(report_request("/r1/"), Some(("r1".to_string(), String::new())));
+        assert_eq!(
+            report_request("/r1/"),
+            Some(("r1".to_string(), String::new()))
+        );
         assert_eq!(
             report_request("/r1/data%20files/a.json"),
             Some(("r1".to_string(), "data files/a.json".to_string()))
@@ -658,12 +662,21 @@ mod tests {
         let reports = Reports::default();
         reports.0.lock().unwrap().insert(
             "r1".to_string(),
-            Report { html: "<p>hi</p>".to_string(), base_dir: Some(dir.clone()) },
+            Report {
+                html: "<p>hi</p>".to_string(),
+                base_dir: Some(dir.clone()),
+            },
         );
         let (status, mime, body) = report_response(&reports, "/r1/index.html");
-        assert_eq!((status, mime, body), (200, "text/html; charset=utf-8", b"<p>hi</p>".to_vec()));
+        assert_eq!(
+            (status, mime, body),
+            (200, "text/html; charset=utf-8", b"<p>hi</p>".to_vec())
+        );
         let (status, mime, body) = report_response(&reports, "/r1/style.css");
-        assert_eq!((status, mime, body), (200, "text/css; charset=utf-8", b"p{}".to_vec()));
+        assert_eq!(
+            (status, mime, body),
+            (200, "text/css; charset=utf-8", b"p{}".to_vec())
+        );
         let (status, _, _) = report_response(&reports, "/r1/../../etc/passwd");
         assert_eq!(status, 404);
         let (status, _, _) = report_response(&reports, "/r2/index.html");
