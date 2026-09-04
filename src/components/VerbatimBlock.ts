@@ -1,4 +1,5 @@
 import { Node, mergeAttributes } from "@tiptap/core";
+import { sanitizeHtml } from "../services/sanitizeHtml";
 
 // A block the editor cannot hold — raw HTML: a comment, a <div>, a
 // <details> — shown read-only and written back byte for byte.
@@ -8,6 +9,13 @@ import { Node, mergeAttributes } from "@tiptap/core";
 // before it reaches the editor (src/format/blocks.ts); each raw-HTML
 // block arrives as `<div data-fm-src="…">` carrying its own source,
 // URL-encoded so it survives the attribute, and leaves the same way.
+//
+// What the block shows is its HTML, rendered as GitHub renders it: a
+// centred image, a table, a <details> summary, sanitized to nothing
+// that runs or loads (src/services/sanitizeHtml.ts). A block with no
+// visible output — a comment, a lone closing tag, a stripped <script> —
+// shows a quiet placeholder with its source, so the reader knows it is
+// there.
 
 interface SerializerState {
   write(text: string): void;
@@ -45,6 +53,18 @@ export const VerbatimBlock = Node.create({
 
   renderHTML({ node, HTMLAttributes }) {
     const source = String(node.attrs.source);
+    const shown = typeof document === "undefined" ? null : sanitizeHtml(source, document);
+    if (shown && hasVisibleContent(shown)) {
+      const wrapper = document.createElement("div");
+      for (const [name, value] of Object.entries(HTMLAttributes)) {
+        if (value != null) wrapper.setAttribute(name, String(value));
+      }
+      wrapper.className = "fm-html-block";
+      wrapper.setAttribute("contenteditable", "false");
+      wrapper.setAttribute("title", "Raw HTML is kept exactly as written; edit it in Source view.");
+      wrapper.appendChild(shown);
+      return wrapper;
+    }
     const label = source.trimStart().startsWith("<!--") ? "HTML comment" : "HTML";
     return [
       "div",
@@ -70,6 +90,14 @@ export const VerbatimBlock = Node.create({
     };
   },
 });
+
+function hasVisibleContent(fragment: DocumentFragment): boolean {
+  for (const child of Array.from(fragment.childNodes)) {
+    if (child.nodeType === 1) return true; // element
+    if (child.nodeType === 3 && (child.textContent ?? "").trim() !== "") return true; // text
+  }
+  return false;
+}
 
 // The editor-side form of a verbatim block: one HTML block markdown-it
 // passes through and the node above parses.

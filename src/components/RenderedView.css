@@ -215,7 +215,33 @@
   flex: 1;
 }
 
-/* A raw-HTML block the editor keeps verbatim (see VerbatimBlock). */
+/* A raw-HTML block the editor keeps verbatim (see VerbatimBlock),
+   rendered as the page would render it. */
+.fm-html-block {
+  margin: 0.6em 0;
+}
+.fm-html-block img {
+  max-width: 100%;
+  height: auto;
+}
+.fm-html-block table {
+  border-collapse: collapse;
+}
+.fm-html-block th,
+.fm-html-block td {
+  border: 0.5px solid var(--fm-rule);
+  padding: 4px 10px;
+}
+.fm-html-block summary {
+  cursor: default;
+  font-weight: 600;
+}
+.ProseMirror-selectednode.fm-html-block {
+  outline: 2px solid var(--fm-accent);
+  outline-offset: 2px;
+}
+
+/* A raw-HTML block with nothing to show: a comment, a lone closing tag. */
 .fm-verbatim {
   margin: 0.6em 0;
   padding: 6px 10px;

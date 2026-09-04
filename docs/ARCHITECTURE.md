@@ -317,7 +317,8 @@ markdown-it token; a whole-code-block anchor's marker lines are merged
 with their fence; raw HTML becomes a "verbatim" block), and
 `components/blockSync.ts` keeps the editor in step: `load` gives the
 editor one node per block (raw HTML as a read-only `VerbatimBlock`
-carrying its own source), `emit` finds the run of top-level nodes that
+carrying its own source and showing it rendered, through
+`services/sanitizeHtml.ts`), `emit` finds the run of top-level nodes that
 changed by identity, serializes just that run, and splices it into
 those blocks' lines. A count mismatch after the splice falls back to
 whole-document serialization rather than risk a wrong splice; tests

@@ -48,6 +48,7 @@ export default [
         // in the report's iframe, so these come up outside React.
         Document: "readonly",
         DOMParser: "readonly",
+        DocumentFragment: "readonly",
         Text: "readonly",
         Comment: "readonly",
         Range: "readonly",
