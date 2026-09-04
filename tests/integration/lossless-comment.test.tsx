@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { useDocument } from "../../src/state/DocumentProvider";
 import { renderApp as mount } from "../utils/harness";
 import { parseForgemarkFile } from "../../src/format";
+import { typeIntoEditor } from "../utils/typing";
 
 // Adding a comment used to re-serialize the whole document through the
 // editor: front matter became a heading, hard wraps were unwrapped,
@@ -140,6 +141,33 @@ beforeEach(() => {
   window.localStorage.setItem("forgemark.author", "Maya");
   latestBody = "";
   latestComments = [];
+});
+
+describe("typing leaves every other block untouched", () => {
+  it("rewrites only the paragraph typed into", async () => {
+    const { container } = renderApp();
+    await waitFor(() => expect(latestBody).toBe(BODY));
+
+    // Paragraphs in DOM order: the hard-wrapped one, the two list items'
+    // (a list item holds a paragraph), then "The evening and the small
+    // hours appear twice…".
+    typeIntoEditor(container, "Rewritten by typing.", 3);
+
+    await waitFor(() => expect(latestBody).not.toBe(BODY));
+    expect(latestBody).toBe(
+      BODY.replace(
+        "The evening and the small hours appear twice: over\nthe evening and the small hours again.",
+        "Rewritten by typing.",
+      ),
+    );
+    // Front matter, the hard wrap, the HTML comment, the star bullets,
+    // and the reference definition are all still there.
+    expect(latestBody.startsWith("---\ntitle: Field notes\n")).toBe(true);
+    expect(latestBody).toContain("too high over\nthe evening");
+    expect(latestBody).toContain("<!-- editors: keep the wrap -->");
+    expect(latestBody).toContain("* star bullet");
+    expect(latestBody).toContain("[r]: https://example.com/report");
+  });
 });
 
 describe("adding a comment leaves the rest of the file untouched", () => {

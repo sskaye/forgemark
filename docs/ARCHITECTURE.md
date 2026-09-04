@@ -311,13 +311,23 @@ the selection's surroundings disambiguating a repeated phrase — and
 splices the two markers in. The rest of the file is byte-identical. The
 editor path below is the fallback for a passage the locator can't place.
 
-Typing still re-serializes through the editor. `editorExtensions.ts`
-holds the one extension list (editor, print, and the parity test all use
-it) and the settings chosen to narrow the damage: `linkify` and
-`autolink` off, a Code mark that doesn't exclude the anchor and bold
-marks, `CodeBlockAnchor` sizing its fence to the content. Front matter
-is split off before the body reaches the editor and put back on every
-edit (`src/format/frontmatter.ts`). `markers-display.ts` only rewrites
+Typing rewrites only the block typed in. `src/format/blocks.ts`
+splits the body into top-level blocks with their line ranges (one per
+markdown-it token; a whole-code-block anchor's marker lines are merged
+with their fence; raw HTML becomes a "verbatim" block), and
+`components/blockSync.ts` keeps the editor in step: `load` gives the
+editor one node per block (raw HTML as a read-only `VerbatimBlock`
+carrying its own source), `emit` finds the run of top-level nodes that
+changed by identity, serializes just that run, and splices it into
+those blocks' lines. A count mismatch after the splice falls back to
+whole-document serialization rather than risk a wrong splice; tests
+assert the mode. `editorExtensions.ts` holds the one extension list
+(editor, print, and the parity test all use it) and the settings chosen
+to narrow what an edited block loses: `linkify` and `autolink` off, a
+Code mark that doesn't exclude the anchor and bold marks,
+`CodeBlockAnchor` sizing its fence to the content. Front matter is split
+off before the body reaches the editor and put back on every edit
+(`src/format/frontmatter.ts`). `markers-display.ts` only rewrites
 markers the scanner recognises, so a marker quoted in a code fence is
 left alone.
 

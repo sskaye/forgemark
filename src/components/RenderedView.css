@@ -214,3 +214,33 @@
 .fm-rendered-view .fm-prose ul[data-type="taskList"] > li > div {
   flex: 1;
 }
+
+/* A raw-HTML block the editor keeps verbatim (see VerbatimBlock). */
+.fm-verbatim {
+  margin: 0.6em 0;
+  padding: 6px 10px;
+  border: 1px dashed var(--fm-divider-strong);
+  border-radius: 6px;
+  background: var(--fm-code);
+  font-family: var(--fm-mono);
+  font-size: 0.82em;
+  color: var(--fm-prose-muted);
+  user-select: none;
+}
+.fm-verbatim-label {
+  display: block;
+  font-family: var(--fm-ui);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fm-prose-faint);
+  margin-bottom: 2px;
+}
+.fm-verbatim-source {
+  margin: 0;
+  white-space: pre-wrap;
+  font: inherit;
+}
+.ProseMirror-selectednode.fm-verbatim {
+  outline: 2px solid var(--fm-accent);
+}

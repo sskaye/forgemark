@@ -30,6 +30,7 @@ import { Markdown } from "tiptap-markdown";
 import type { AnyExtension } from "@tiptap/core";
 import { AnchorMark } from "./AnchorMark";
 import { CodeBlockAnchor } from "./CodeBlockAnchor";
+import { VerbatimBlock } from "./VerbatimBlock";
 
 // Subscript / superscript with an explicit markdown serialize spec so
 // `<sub>`/`<sup>` round-trip instead of flattening to plain text.
@@ -78,6 +79,7 @@ export function renderedExtensions(extra: AnyExtension[] = []): AnyExtension[] {
     SuperscriptMark,
     AnchorMark,
     CodeInAnchor,
+    VerbatimBlock,
     ...extra,
     Image,
     Table.configure({ resizable: false }),

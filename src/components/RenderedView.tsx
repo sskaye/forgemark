@@ -6,7 +6,8 @@ import type { EditorView } from "@tiptap/pm/view";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration as PMDecoration, DecorationSet } from "@tiptap/pm/view";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { bodyFromAnchorSpans, bodyWithAnchorSpans, splitFrontmatter } from "../format";
+import { splitFrontmatter } from "../format";
+import { createBlockSync, type BlockSync, type Serializer } from "./blockSync";
 import { renderedExtensions } from "./editorExtensions";
 import { anchorIdOf } from "../services/anchorDom";
 import { normalizeExternalUrl } from "../services/externalLinks";
@@ -48,6 +49,11 @@ export type CapturedSelection = {
   // the top of its *first* line, for floating the toolbar just above.
   rect: { left: number; top: number; bottom: number };
 };
+
+// tiptap-markdown's serializer, which takes a fragment.
+function markdownSerializer(editor: { storage: unknown }): Serializer {
+  return (editor.storage as { markdown: { serializer: Serializer } }).markdown.serializer;
+}
 
 export type RenderedViewHandle = {
   // Captures the current selection. Returns null when the selection is
@@ -129,7 +135,12 @@ export function RenderedView({
   const { front, rest } = useMemo(() => splitFrontmatter(body), [body]);
   const frontRef = useRef(front);
   frontRef.current = front;
-  const initialMarkdown = useMemo(() => bodyWithAnchorSpans(rest), [rest]);
+  // One node per source block, and only edited blocks are ever
+  // re-serialized (see blockSync.ts). The editor never rewrites the
+  // document as a whole.
+  const blockSyncRef = useRef<BlockSync | null>(null);
+  if (!blockSyncRef.current) blockSyncRef.current = createBlockSync();
+  const initialMarkdown = useMemo(() => blockSyncRef.current!.load(rest), [rest]);
   // Seeded with the same value handed to `content:` below, so the sync
   // effect correctly treats the mount as already-applied and skips a
   // redundant setContent.
@@ -158,7 +169,8 @@ export function RenderedView({
     // The editor is constructed with the right content already, so it's
     // ready for user input immediately. Later content swaps re-close the
     // gate themselves in the sync effect below.
-    onCreate: () => {
+    onCreate: ({ editor }) => {
+      blockSyncRef.current!.settle(editor.state.doc);
       editorReadyRef.current = true;
     },
     onSelectionUpdate: ({ editor }) => {
@@ -182,22 +194,17 @@ export function RenderedView({
       // `emitUpdate: false`. Without this gate, the editor would
       // dispatch an "edit" with stale content and clobber state.body.
       if (!editorReadyRef.current) return;
-      const storage = editor.storage as unknown as {
-        markdown?: { getMarkdown?: () => string };
-      };
-      const md = storage.markdown?.getMarkdown?.() ?? "";
-      // Convert any anchor `<span data-anchor-id>` wrappers back to
-      // the canonical marker comments so the document state's body
-      // always holds the format-layer source of truth. This is the
-      // single editor → state boundary; the inverse
-      // `bodyWithAnchorSpans` is applied on the way back in.
-      const restBody = bodyFromAnchorSpans(md);
+      // Only the blocks whose nodes changed are re-serialized (anchor
+      // spans back to markers on the way) and spliced into the source.
+      // This is the single editor → state boundary.
+      const restBody = blockSyncRef.current!.emit(editor.state.doc, markdownSerializer(editor));
       // Pre-emptively update the ref so the upcoming setContent
       // useEffect (triggered when the new state.body propagates back
       // as initialMarkdown) sees a match and skips the rewrite —
       // otherwise every keystroke would re-render the editor and
-      // reset the cursor.
-      lastInitialRef.current = bodyWithAnchorSpans(restBody);
+      // reset the cursor. The display form must be what `load` would
+      // produce for this body, so it is computed the same way.
+      lastInitialRef.current = createBlockSync().load(restBody);
       onEdit(frontRef.current + restBody);
     },
   });
@@ -220,6 +227,7 @@ export function RenderedView({
       .setMeta("addToHistory", false)
       .setContent(initialMarkdown, { emitUpdate: false })
       .run();
+    blockSyncRef.current!.settle(editor.state.doc);
     // Defer the ready flip past the current task so any synchronous
     // setContent-induced onUpdate firings still see ready=false.
     queueMicrotask(() => {
@@ -321,13 +329,11 @@ export function RenderedView({
             .setMark("anchor", { anchorId: String(id) })
             .run();
         }
-        const storage = editor.storage as unknown as {
-          markdown?: { getMarkdown?: () => string };
-        };
-        const md = storage.markdown?.getMarkdown?.() ?? "";
-        // Inline anchors serialize as `<span data-anchor-id>`; convert back
-        // to markers. Block anchors already serialize as markers.
-        return frontRef.current + bodyFromAnchorSpans(md);
+        // Only the anchored block is re-serialized; the markers come out
+        // of the span (or the fence info string) on the way.
+        const restBody = blockSyncRef.current!.emit(editor.state.doc, markdownSerializer(editor));
+        lastInitialRef.current = createBlockSync().load(restBody);
+        return frontRef.current + restBody;
       },
       selectedText: () => {
         if (!editor) return null;

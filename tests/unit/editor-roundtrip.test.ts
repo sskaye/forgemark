@@ -5,15 +5,14 @@ import { Editor } from "@tiptap/core";
 import { renderedExtensions } from "../../src/components/editorExtensions";
 import { bodyWithAnchorSpans, bodyFromAnchorSpans, splitFrontmatter } from "../../src/format";
 
-// What the rendered editor does to a Markdown body on the way through.
+// What the rendered editor does to a Markdown block on the way through.
 //
-// The format layer's round trip is byte-exact and gated elsewhere; this
-// is the *editor's* round trip, which is what a save writes after a
-// keystroke. It is the characterization test the lossless-Markdown work
-// is measured against: the first block lists constructs that must come
-// back byte-identical, the second lists the ones the editor still
-// normalizes — each marked `it.fails`, so when one starts surviving the
-// test says so and the case moves up.
+// A save no longer writes the editor's whole-document serialization:
+// only edited blocks are re-serialized and spliced (blockSync.ts, with
+// its own tests). What remains at stake here is the *edited* block. The
+// first list is what the editor round-trips exactly; the second is what
+// it still normalizes when that particular block is edited — each marked
+// `it.fails`, so when one starts surviving the test says so.
 
 const FIXTURES = resolve(__dirname, "..", "ai", "fixtures");
 
@@ -61,7 +60,7 @@ describe("editor round trip: must be byte-identical", () => {
   }
 });
 
-describe("editor round trip: still normalized (known, pending the typing work)", () => {
+describe("editor round trip: still normalized when that block is edited", () => {
   const cases: Record<string, string> = {
     "hard-wrapped paragraph": "A paragraph\nwrapped across\nlines.\n",
     // The anchor is a mark ranked outside bold, so its markers land
