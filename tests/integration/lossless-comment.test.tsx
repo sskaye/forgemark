@@ -160,6 +160,16 @@ describe("typing leaves every other block untouched", () => {
         "Rewritten by typing.",
       ),
     );
+    // A second keystroke goes through the same path, against the body
+    // the first one produced.
+    typeIntoEditor(container, "Rewritten by typing, twice.", 3);
+    await waitFor(() => expect(latestBody).toContain("Rewritten by typing, twice."));
+    expect(latestBody).toBe(
+      BODY.replace(
+        "The evening and the small hours appear twice: over\nthe evening and the small hours again.",
+        "Rewritten by typing, twice.",
+      ),
+    );
     // Front matter, the hard wrap, the HTML comment, the star bullets,
     // and the reference definition are all still there.
     expect(latestBody.startsWith("---\ntitle: Field notes\n")).toBe(true);

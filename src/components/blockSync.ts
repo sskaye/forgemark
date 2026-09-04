@@ -41,13 +41,32 @@ export function createBlockSync(): BlockSync {
   let lastDoc: PMNode | null = null;
   let mode: "splice" | "whole" | null = null;
 
-  const display = (m: BlockMap) =>
-    m.blocks
+  // Link reference definitions live in the gaps between blocks (markdown-it
+  // consumes them without a token). They are appended to what the editor
+  // parses so `[text][ref]` in an edited block resolves — and comes back
+  // as an inline link — instead of being escaped to literal brackets.
+  // They produce no node, so the block-to-node correspondence holds.
+  const definitions = (m: BlockMap) => {
+    const covered = new Set<number>();
+    for (const b of m.blocks) for (let i = b.start; i < b.end; i++) covered.add(i);
+    return m.lines.filter((line, i) => !covered.has(i) && /^ {0,3}\[[^\]]+\]:\s*\S/.test(line));
+  };
+
+  const display = (m: BlockMap) => {
+    const shown = m.blocks
       .map((b) => (b.kind === "verbatim" ? verbatimTag(b.text) : bodyWithAnchorSpans(b.text)))
       .join("\n\n");
+    const defs = definitions(m);
+    return defs.length ? `${shown}\n\n${defs.join("\n")}` : shown;
+  };
 
   return {
     load(body) {
+      // The body just emitted comes straight back here when the state
+      // re-renders the editor. The map already describes it; forgetting
+      // the document we diff against would send the next edit down the
+      // whole-document road.
+      if (map.lines.join("\n") === body && lastDoc) return display(map);
       map = splitBlocks(body);
       lastDoc = null;
       return display(map);

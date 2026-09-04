@@ -155,6 +155,35 @@ describe("block-level splicing", () => {
     expect(out).toContain("[d]: https://x.y");
   });
 
+  it("keeps splicing after the emitted body is loaded back, as the editor does", () => {
+    // RenderedView hands each emitted body straight back to load(); that
+    // used to drop the document being diffed against, so every keystroke
+    // after the first fell back to rewriting the whole document.
+    load(BODY);
+    retype(0, "One");
+    const first = emit();
+    expect(sync.load(first)).toBe(sync.load(first));
+    retype(0, "Two");
+    const second = emit();
+    expect(sync.lastMode()).toBe("splice");
+    expect(second).toBe(BODY.replace("# Title", "# Two"));
+    expect(second).toContain("* star bullet");
+    expect(second).toContain("[d]: https://x.y");
+  });
+
+  it("inlines a reference link in an edited block instead of escaping it", () => {
+    // The definition lives in a gap the editor never held, so the link
+    // used to come back as literal brackets when its paragraph was edited.
+    load(BODY);
+    const doc = editor.state.doc;
+    const end = doc.child(0).nodeSize + doc.child(1).nodeSize - 1;
+    editor.view.dispatch(editor.state.tr.insertText(" Appended.", end, end));
+    const out = emit();
+    expect(out).toContain("[the docs](https://x.y). Appended.");
+    expect(out).not.toContain("\\[");
+    expect(out).toContain("[d]: https://x.y");
+  });
+
   it("appends a new paragraph typed after the last block", () => {
     load("One.\n\nTwo.\n");
     // Move to the end and split off a new paragraph, as Enter does.
