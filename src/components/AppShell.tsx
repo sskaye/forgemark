@@ -154,7 +154,7 @@ export function AppShell() {
   useEffect(() => {
     const onCustom = async (e: Event) => {
       const detail = (e as CustomEvent<string>).detail;
-      if (detail === "settings") {
+      if (detail === "settings" || detail === "install-skill") {
         setSettingsOpen(true);
         return;
       }

@@ -19,16 +19,20 @@ import { writeFile } from "@tauri-apps/plugin-fs";
 import skillUrl from "../../assets/forgemark-skill.skill?url";
 import zipUrl from "../../assets/forgemark-skill.zip?url";
 
-export type SkillTarget = "claude" | "codex";
+// "any" offers the .skill name with both extensions in the dialog's
+// filter; the bytes are the same whichever the user picks.
+export type SkillTarget = "claude" | "codex" | "any";
 
 const DEFAULT_NAMES: Record<SkillTarget, string> = {
   claude: "forgemark-skill.skill",
   codex: "forgemark-skill.zip",
+  any: "forgemark-skill.skill",
 };
 
 const URLS: Record<SkillTarget, string> = {
   claude: skillUrl,
   codex: zipUrl,
+  any: skillUrl,
 };
 
 // Trigger the download dialog and write the bundle to the chosen
@@ -37,17 +41,28 @@ export async function downloadSkill(target: SkillTarget): Promise<string | null>
   const defaultName = DEFAULT_NAMES[target];
   const chosen = await save({
     defaultPath: defaultName,
-    filters: [
-      target === "claude"
-        ? { name: "Claude skill", extensions: ["skill"] }
-        : { name: "Zip archive", extensions: ["zip"] },
-    ],
+    filters:
+      target === "any"
+        ? [
+            { name: "Skill bundle", extensions: ["skill"] },
+            { name: "Zip archive", extensions: ["zip"] },
+          ]
+        : [
+            target === "claude"
+              ? { name: "Claude skill", extensions: ["skill"] }
+              : { name: "Zip archive", extensions: ["zip"] },
+          ],
   });
   if (!chosen) return null;
 
   const bytes = await fetchSkillBytes(URLS[target]);
   await writeFile(chosen, bytes);
   return chosen;
+}
+
+// The .skill bundle's bytes, for the hand-off to the Claude app.
+export function fetchSkillBundle(): Promise<Uint8Array> {
+  return fetchSkillBytes(skillUrl);
 }
 
 async function fetchSkillBytes(url: string): Promise<Uint8Array> {

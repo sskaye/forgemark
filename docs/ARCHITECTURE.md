@@ -32,6 +32,7 @@ marker _scanning_ and the rendered view differ.
   `@tauri-apps/plugin-fs`.
 - Rendered Markdown editor: Tiptap with `tiptap-markdown`.
 - Source view: CodeMirror 6, editable for writable files.
+- Agent skill: installed from Settings into the tools' skill folders.
 - Tests: Vitest with jsdom for unit/integration/perf, Playwright for the
   browser smoke surface, optional AI-agent tests.
 
@@ -120,6 +121,37 @@ debounces keystrokes a little and flushes the pending text on the shell's
 `SourceView` applies a text prop only while unfocused, so a keystroke coming
 back through state never moves the caret. A read-only document keeps a
 read-only view and its chip.
+
+## Installing the agent skill
+
+The skill's source tree (`assets/forgemark-skill/`) ships in the app twice: as
+the `.skill` zip the Save button writes, and as raw files bundled by Vite
+(`import.meta.glob` in `src/services/skillInstall.ts`), so an installed copy
+is the source byte for byte and nothing is unpacked at runtime.
+`scripts/build-skill.mjs` writes `forgemark-skill.json` into the tree before
+zipping: the app's version and a hash over every other file. The hash rule
+lives in `src/services/skillTree.ts` and is repeated in the build script;
+`tests/unit/skill-bundle.test.ts` holds the two together over the real tree.
+
+`detectTargets` lists the tools on this machine by their folders under the
+home directory (`~/.claude`, `~/.codex`, the Claude app bundle) plus the shared
+`~/.agents/skills`, always. `skillStatus` hashes an installed folder the same
+way and lands on one of four states: absent, current (hash matches the shipped
+tree), outdated (an intact older build: its manifest still describes its
+files), or foreign (no manifest, or edited since), which the UI replaces only
+after a confirmation. `installSkill` writes to `<folder>.installing`, reads it
+back and checks the hash, renames the old folder aside, renames the new one in,
+and removes the old; a failure at any step leaves what was there. The Claude
+desktop app keeps skills per account, so its row writes the `.skill` to the app
+data folder and opens it with Claude through the opener plugin (`open -a
+Claude`), which shows its own install prompt; what was last handed over, and
+when, is remembered in localStorage.
+
+`SkillInstallRows` renders the rows in Settings; `SkillNotice` at the bottom
+of the sidebar checks at launch and after an install, shows one line when a
+folder install is behind, and is dismissed per app version. Both only check;
+nothing is written without a click. The native Help menu's "Install AI
+Skill…" routes through the menu bridge to open Settings.
 
 ## Unsaved work
 

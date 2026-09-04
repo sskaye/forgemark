@@ -79,12 +79,15 @@ Commenting works exactly as it does in a Markdown document — select a passage 
 
 ## AI agents
 
-The Settings → AI Participation panel exposes two download buttons:
+Settings → AI agents installs the skill where your agents look, and keeps it current:
 
-- **Download for Claude (`.skill`)**
-- **Download for Codex (`.zip`)**
+- **Claude Code** (`~/.claude/skills/forgemark`), **Codex** (`~/.codex/skills/forgemark`), and **Other tools** (`~/.agents/skills/forgemark`, the shared location read by Cursor, Gemini CLI, GitHub Copilot, and others) are written directly. Each row shows whether the skill is installed, up to date, or behind the one this app ships, with an Install or Update button. A folder Forgemark did not write is never overwritten without asking.
+- **Claude app** hands the `.skill` file to the Claude desktop app, which asks to install it for your account, the same as double-clicking the file.
+- **Save skill file…** writes the bundle anywhere, for claude.ai in a browser or a tool not listed.
 
-Both files contain identical content; the extension is what your AI tool expects. With the skill installed, asking your agent to "add a comment", "address that review note", or "suggest a tighter wording" produces well-formed Forgemark output that the app reads back without complaint.
+Nothing is installed without a click. When a Forgemark update ships a newer skill than the one installed, the sidebar shows a one-line notice with an Update link, once per version. Help → Install AI Skill… opens the same section.
+
+With the skill installed, asking your agent to "add a comment", "address that review note", or "suggest a tighter wording" produces well-formed Forgemark output that the app reads back without complaint.
 
 The skill's centrepiece is `scripts/forgemark.mjs`, a self-contained command-line tool (Node 18+, no install) built from the app's own format layer:
 
@@ -98,23 +101,22 @@ forgemark lint report.md                      # what the app would refuse, what 
 
 Every write is parsed back before the file is replaced and written atomically, so the tool cannot produce a file the app can't read. `SKILL.md` tells the agent to use it for every read and write and keeps the format reference for understanding a file, or as a fallback when the tool can't run. The tool is equally usable by a person: `npx forgemark lint` from a checkout, or `node forgemark.mjs` from an extracted skill.
 
-### Install in Claude Code (CLI)
+### Installing by hand
+
+The saved file is a regular zip. Every tool that follows the Agent Skills standard reads a folder with a `SKILL.md` under the home directory, the same dot-folders on macOS, Windows (`%USERPROFILE%`), and Linux:
+
+| Tool                                           | Folder                                                                              |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Claude Code                                    | `~/.claude/skills/forgemark/` (project-local: `<repo>/.claude/skills/forgemark/`)   |
+| Codex CLI and app                              | `~/.codex/skills/forgemark/` (project-local: `.codex/skills/` or `.agents/skills/`) |
+| Cursor, Gemini CLI, GitHub Copilot, and others | `~/.agents/skills/forgemark/`                                                       |
+| Claude app and claude.ai                       | Settings → Capabilities → Skills, upload the `.skill` or `.zip`                     |
 
 ```bash
-unzip ~/Downloads/forgemark-skill.skill -d ~/.claude/skills/forgemark
+unzip ~/Downloads/forgemark-skill.skill -d ~/.claude/skills   # creates ~/.claude/skills/forgemark/
 ```
 
-User-global, available in every project. Restart any running Claude Code sessions; new sessions auto-discover the skill on startup. To verify, type `/` in Claude Code — `/forgemark` should appear in the autocomplete.
-
-For project-local install (commit alongside the repo so teammates pick it up automatically), extract to `<repo>/.claude/skills/forgemark/` instead. Project-local takes precedence over user-global if both exist.
-
-### Install in Codex CLI
-
-Extract the `.zip` to `~/.agents/skills/forgemark/` (user-global) or `.agents/skills/forgemark/` in a repo (project-local). Codex picks it up on the next run.
-
-### Other tools
-
-The skill is a regular zip. Extract it and feed `SKILL.md` to your agent as system context if your tool doesn't have a skill mechanism.
+Restart any running Claude Code sessions; new sessions discover the skill on startup. To verify, type `/` in Claude Code — `/forgemark` should appear in the autocomplete. A tool without a skill mechanism can be given `SKILL.md` as system context.
 
 ## Build
 

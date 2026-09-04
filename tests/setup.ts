@@ -12,6 +12,7 @@ vi.mock("@tauri-apps/plugin-fs", () => fake.fs);
 vi.mock("@tauri-apps/plugin-dialog", () => fake.dialog);
 vi.mock("@tauri-apps/plugin-opener", () => fake.opener);
 vi.mock("@tauri-apps/api/core", () => fake.core);
+vi.mock("@tauri-apps/api/path", () => fake.path);
 
 // Report frames get their content written in and the bridge installed
 // by hand, since jsdom has neither the protocol nor script execution.

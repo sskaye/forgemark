@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { SkillNotice } from "./SkillNotice";
 import { useDocument } from "../state/DocumentProvider";
 import { useAuthorName } from "../state/preferences";
 import { FMCard } from "./FMCard";
@@ -147,6 +148,7 @@ export function Sidebar({ anchorStatuses }: SidebarProps) {
           </>
         )}
       </div>
+      <SkillNotice />
     </aside>
   );
 

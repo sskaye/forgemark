@@ -121,19 +121,128 @@
   text-align: center;
 }
 
-/* Phase 12 — AI Participation download buttons. */
+/* AI agents: one row per tool, glyph-and-words status, one button. */
+.fm-skill-rows {
+  display: flex;
+  flex-direction: column;
+  border: 0.5px solid var(--fm-divider);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.fm-skill-row {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  min-height: 40px;
+  background: var(--fm-editor-bg);
+  border-bottom: 0.5px solid var(--fm-divider);
+}
+
+.fm-skill-row:last-child {
+  border-bottom: none;
+}
+
+.fm-skill-row--quiet {
+  display: block;
+  font-size: 12px;
+  color: var(--fm-chrome-muted);
+}
+
+.fm-skill-tool {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fm-prose-ink);
+}
+
+.fm-skill-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--fm-prose-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.fm-skill-status > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-skill-glyph {
+  flex: none;
+  color: var(--fm-chrome-muted);
+}
+
+.fm-skill-status--ok .fm-skill-glyph {
+  color: var(--fm-success);
+}
+
+.fm-skill-status--accent .fm-skill-glyph {
+  color: var(--fm-accent);
+}
+
+.fm-skill-status--warn .fm-skill-glyph,
+.fm-skill-status--warn > span:first-of-type {
+  color: var(--fm-orphan-text);
+}
+
+.fm-skill-status--danger .fm-skill-glyph,
+.fm-skill-status--danger > span:first-of-type {
+  color: var(--fm-danger);
+}
+
+/* One width for every row's button, whatever it says, so the column
+   lines up: the widest label is "Replace…". */
+.fm-skill-action {
+  width: 88px;
+  text-align: center;
+}
+
+.fm-skill-path {
+  color: var(--fm-chrome-muted);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+}
+
+.fm-skill-save {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.fm-skill-save-button {
+  padding-left: 0;
+}
+
+.fm-skill-replace-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fm-skill-replace-body p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--fm-prose-ink);
+}
+
+.fm-skill-replace-body code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+}
+
 .fm-settings-ai-blurb {
   font-size: 12.5px;
   color: var(--fm-prose-muted);
   margin: 0 0 10px;
   line-height: 1.45;
-}
-
-.fm-settings-ai-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 8px;
 }
 
 .fm-settings-ai-help {

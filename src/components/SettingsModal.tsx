@@ -1,6 +1,6 @@
 import { Modal } from "./Modal";
 import { Segmented } from "./Segmented";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import {
   useAuthorName,
   useFontSize,
@@ -9,42 +9,21 @@ import {
   type ViewPreference,
 } from "../state/preferences";
 import { useTheme } from "../theme/ThemeProvider";
-import { downloadSkill } from "../services/skillDownload";
+import { SkillInstallRows } from "./SkillInstallRows";
 import "./SettingsModal.css";
 
 type Props = {
   onClose: () => void;
 };
 
-// Phase 11 + 12 Settings window. AI Participation now ships the two
-// skill-download buttons (Phase 12); the rest of the layout is the
-// macOS Preferences shape from Phase 11.
+// The Settings window, in the macOS Preferences shape. AI agents holds
+// the skill install rows (SkillInstallRows).
 export function SettingsModal({ onClose }: Props) {
   const [author, setAuthor] = useAuthorName();
   const { preference: theme, setPreference: setTheme } = useTheme();
   const [fontSize, setFontSize] = useFontSize();
   const [defaultView, setDefaultView] = useDefaultView();
   const authorRef = useRef<HTMLInputElement | null>(null);
-  // Tracks which download button is in flight so we can disable
-  // both while a save dialog is open and surface a transient error.
-  const [downloadState, setDownloadState] = useState<{
-    inFlight: "claude" | "codex" | null;
-    error: string | null;
-  }>({ inFlight: null, error: null });
-
-  const onDownload = async (target: "claude" | "codex") => {
-    setDownloadState({ inFlight: target, error: null });
-    try {
-      await downloadSkill(target);
-      setDownloadState({ inFlight: null, error: null });
-    } catch (err) {
-      setDownloadState({
-        inFlight: null,
-        error: (err as Error).message ?? "Download failed",
-      });
-    }
-  };
-
   useEffect(() => {
     authorRef.current?.focus();
   }, []);
@@ -126,39 +105,8 @@ export function SettingsModal({ onClose }: Props) {
           </Field>
         </Section>
 
-        <Section title="AI Participation">
-          <p className="fm-settings-ai-blurb">
-            Forgemark ships a small skill bundle that teaches an AI agent how to read and write
-            Forgemark files. Pick the artifact your tool expects:
-          </p>
-          <div className="fm-settings-ai-buttons">
-            <button
-              type="button"
-              className="fm-btn fm-btn-primary"
-              onClick={() => onDownload("claude")}
-              disabled={downloadState.inFlight !== null}
-              data-testid="fm-settings-skill-claude"
-            >
-              {downloadState.inFlight === "claude" ? "Saving…" : "Download for Claude (.skill)"}
-            </button>
-            <button
-              type="button"
-              className="fm-btn fm-btn-primary"
-              onClick={() => onDownload("codex")}
-              disabled={downloadState.inFlight !== null}
-              data-testid="fm-settings-skill-codex"
-            >
-              {downloadState.inFlight === "codex" ? "Saving…" : "Download for Codex (.zip)"}
-            </button>
-          </div>
-          <p className="fm-settings-ai-help">
-            Both files contain identical content; the extension is what your AI tool expects.
-          </p>
-          {downloadState.error && (
-            <p className="fm-settings-ai-error" data-testid="fm-settings-skill-error" role="alert">
-              {downloadState.error}
-            </p>
-          )}
+        <Section title="AI agents">
+          <SkillInstallRows />
         </Section>
 
         <Section title="About">
