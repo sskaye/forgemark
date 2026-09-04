@@ -4,6 +4,10 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 
 ## [Unreleased]
 
+### Changed
+
+- A new application icon: the marker. Two angle brackets in ink holding the amber bar of a highlighted passage, on the app's own paper, in place of the pilcrow in square brackets on charcoal.
+
 ### Added
 
 - A command-line tool for AI agents, shipped inside the skill as `scripts/forgemark.mjs`. `list`, `show`, `comment`, `reply`, `resolve`, `float`, `reattach`, `delete`, and `lint` do everything an agent needs in a review without it ever composing the comments block or placing a marker by hand. It is built from the app's own parser and serializer, checks that every write reads back, and writes atomically; passages are named by quoting them, and the tool refuses an ambiguous phrase or one that overlaps another comment rather than guessing. Works on Markdown and HTML reports, including whole-element anchors by `id`.
