@@ -2,10 +2,6 @@
 
 All notable changes to Forgemark are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-Nothing yet.
-
 ## [1.7.0] — 2026-09-04
 
 ### Added
