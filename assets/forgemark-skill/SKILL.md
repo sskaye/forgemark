@@ -66,6 +66,7 @@ When you edit the document body, the markers are in your way and you must leave 
 - **Deleting an anchored passage:** delete the markers with it, then `forgemark float <file> <id>` (the comment survives as a note) or `reattach` it elsewhere.
 - **Never touch the trailing `<!-- forgemark-comments` block.** Every command that changes it rewrites it correctly. If the tool cannot run (no `node`, or the file is missing), stop and tell the user; do not write the block by hand.
 - **Hard-wrapped source is fine.** Anchors may span line breaks; the tool matches across them.
+- **Obsidian syntax may be present** — `> [!Type]` callouts of any type, `![[image.png|alt]]` embeds, `[[note|label]]` wikilinks — and the app keeps it as written. Leave it as you find it; a marker pair may wrap the visible label of a wikilink or the alt text of an embed as it would any other inline text.
 
 ## HTML reports
 

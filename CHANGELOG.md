@@ -4,6 +4,11 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 
 ## [Unreleased]
 
+### Added
+
+- Source view is editable. A writable document can be changed as text, Markdown or HTML alike, and for an HTML report this is the way to edit. What is typed is what the file gets: a save writes the text as it stands, the sidebar keeps reading the comments while typing, and switching back to Rendered takes the text as the document. A comments block the parser cannot read keeps the view where it is, with the parser's message, rather than dropping the block.
+- Obsidian syntax renders as Obsidian renders it, and stays as written after an edit: any callout type (`> [!Takeaway]`, `> [!Executive Summary]-`, with the `+`/`-` fold marker), image embeds `![[diagram.png]]` and `![[diagram.png|Caption]]`, and wikilinks `[[note]]` and `[[note|label]]`, which show as links in name only. The five GitHub alert kinds keep their colours; any other type gets a neutral rail and its own name as the label.
+
 ### Changed
 
 - A new application icon: the marker. Two angle brackets in ink holding the amber bar of a highlighted passage, on the app's own paper, in place of the pilcrow in square brackets on charcoal.
