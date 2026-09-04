@@ -52,6 +52,19 @@ With `gfm-showcase.md` open:
 
 After Part 2, open the saved `dashboard.html` in a browser directly. It should render and work exactly as before; the markers are invisible comments. Run `npm run cli -- lint docs/example_file/testing/dashboard/dashboard.html`: no problems.
 
+## Part 5 — Installing the agent skill
+
+Settings → AI agents. The browser tests cover none of this: it reads and writes the home directory.
+
+1. **Rows.** One row per tool on this Mac. With Claude Code and Codex installed and the Claude app present, four rows: Claude Code, Codex, Claude app, Other tools.
+2. **Install.** On a row reading "Not installed", click Install. Within a second it reads "Installed x.y.z · new sessions pick it up" (Claude Code) and the button dims to Update. `ls ~/.claude/skills/forgemark` shows `SKILL.md`, `scripts/`, and `forgemark-skill.json`. In a new Claude Code session, `/forgemark` appears.
+3. **Out of date.** Install the skill from an older build of the app (check out an earlier tag, `npm run build:skill`, copy `assets/forgemark-skill` over the folder), then relaunch the current build. The row reads "1.4.0 → x.y.z" with a filled Update button, and the sidebar shows "Agent skill out of date · Update" at the bottom. Update from either place; the notice goes.
+4. **Replace asks.** Put a file of your own in the folder. The row reads "Unrecognized folder"; Replace… names the folder and the file count; Cancel keeps it; Replace installs and removes it.
+5. **Claude app.** Click Install on the Claude app row: the Claude desktop app comes to the front asking to install the skill. The row reads "Installed x.y.z · Claude asks to install it", then "Up to date · sent today" on the next open of Settings.
+6. **Dismiss.** With an out-of-date install, click the × on the sidebar notice: it goes, and does not return on relaunch. `npm run version:set` to a new version and relaunch: it returns.
+7. **Save skill file…** offers `.skill` and `.zip` in the dialog and writes the bundle.
+8. **Help menu.** Help → Install AI Skill… opens Settings.
+
 ## What the browser tests already cover
 
 `npm run test:e2e` runs most of Part 2 and the rendering half of Part 1 in Chromium against the dev server (`tests/e2e/report.spec.ts`, `tests/e2e/markdown.spec.ts`), with Tauri replaced by an in-page stand-in and the report served from a blob URL. What still needs the app by hand: the Rust protocol serving the report and its sibling files (Part 2 step 1's stylesheet and logo), WebKit's own caret and right-click behaviour, printing, and reloads from disk (step 14).
