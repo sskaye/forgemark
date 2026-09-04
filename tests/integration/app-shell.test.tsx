@@ -11,15 +11,8 @@ import { invoke } from "@tauri-apps/api/core";
 // they don't actually run unless we fire a keydown, but the module
 // resolution still happens. Mock to a no-op so no test ever accidentally
 // invokes the real APIs.
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(() => Promise.reject(new Error("No Tauri runtime in tests"))),
-}));
-vi.mock("@tauri-apps/plugin-fs", () => ({
-  readTextFile: vi.fn(),
-  writeTextFile: vi.fn(),
-  stat: vi.fn(),
-  watch: vi.fn(() => Promise.resolve(() => {})),
 }));
 
 function renderShell(
@@ -86,7 +79,15 @@ describe("AppShell layout", () => {
   });
 
   it("Cmd+P opens print options and Continue invokes window.print", async () => {
-    const print = vi.fn();
+    // What the print document holds at the moment printing runs; it is
+    // unmounted afterwards, so the check happens inside the mock.
+    let printed: { review: string; suggestion: boolean } | null = null;
+    const print = vi.fn(() => {
+      printed = {
+        review: screen.getByTestId("fm-print-review").textContent ?? "",
+        suggestion: screen.queryByTestId("fm-print-suggestion") != null,
+      };
+    });
     Object.defineProperty(window, "print", { value: print, configurable: true });
     renderShell("light", {
       body: "A paragraph with text.\n",
@@ -123,8 +124,10 @@ describe("AppShell layout", () => {
 
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("print_current_webview"));
     await waitFor(() => expect(print).toHaveBeenCalled());
-    expect(screen.getByTestId("fm-print-review")).toHaveTextContent("Comment body");
-    expect(screen.queryByTestId("fm-print-suggestion")).not.toBeInTheDocument();
+    expect(printed!.review).toContain("Comment body");
+    expect(printed!.suggestion).toBe(false);
+    // And the hidden print editor is gone once printing has run.
+    await waitFor(() => expect(screen.queryByTestId("fm-print-document")).not.toBeInTheDocument());
   });
 
   it("Cmd+P still opens print options while find has focus", async () => {

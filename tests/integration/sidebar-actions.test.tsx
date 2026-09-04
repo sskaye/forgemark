@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent, act, waitFor, within } from "@testing-library/react";
 import { useRef } from "react";
 import { ThemeProvider } from "../../src/theme/ThemeProvider";
@@ -8,13 +8,6 @@ import type { Comment } from "../../src/format/types";
 
 // Phase 6 sidebar-action integration tests. The Tauri plugins are mocked
 // because AppShell pulls in DocumentBindings.
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn() }));
-vi.mock("@tauri-apps/plugin-fs", () => ({
-  readTextFile: vi.fn(),
-  writeTextFile: vi.fn(),
-  stat: vi.fn(),
-  watch: vi.fn(() => Promise.resolve(() => {})),
-}));
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -186,6 +179,43 @@ describe("FMCard action row", () => {
     expect(screen.getByTestId("probe-body").textContent).toBe("before bit after\n");
   });
 
+  it("Resolve all resolves every open comment the sidebar is showing", async () => {
+    renderApp({
+      body: "a <!-- fmc:1 -->one<!-- /fmc:1 --> b <!-- fmc:2 -->two<!-- /fmc:2 --> c <!-- fmc:3 -->three<!-- /fmc:3 -->\n",
+      comments: [aComment(1), aComment(2, { author: "Devon" }), aComment(3, { resolved: true })],
+    });
+    await screen.findByTestId("fm-card-1");
+    // Only the ones shown: filter to Devon's, resolve all, and Maya's
+    // comment 1 stays open.
+    const filter = screen.getByTestId("fm-sidebar-filter") as HTMLSelectElement;
+    fireEvent.change(filter, { target: { value: "byAuthor:Devon" } });
+    // A single open comment offers no batch action; show all again.
+    expect(screen.queryByTestId("fm-sidebar-resolve-all")).toBeNull();
+    fireEvent.change(filter, { target: { value: "open" } });
+    fireEvent.click(await screen.findByTestId("fm-sidebar-resolve-all"));
+    await waitFor(() => expect(screen.getByTestId("probe-resolved-ids").textContent).toBe("1,2,3"));
+  });
+
+  it("Delete can be undone for a moment, restoring the record and its markers", async () => {
+    renderApp({
+      body: "before <!-- fmc:1 -->bit<!-- /fmc:1 --> after\n",
+      comments: [aComment(1)],
+    });
+    fireEvent.click(await screen.findByTestId("fm-card-1"));
+    fireEvent.click(await screen.findByTestId("fm-card-delete-1"));
+    await waitFor(() => expect(screen.queryByTestId("fm-card-1")).not.toBeInTheDocument());
+
+    const banner = await screen.findByTestId("fm-undo-delete");
+    expect(banner.textContent).toMatch(/Deleted comment #1/);
+    fireEvent.click(screen.getByTestId("fm-undo-delete-button"));
+
+    expect(await screen.findByTestId("fm-card-1")).toBeInTheDocument();
+    expect(screen.getByTestId("probe-body").textContent).toBe(
+      "before <!-- fmc:1 -->bit<!-- /fmc:1 --> after\n",
+    );
+    expect(screen.queryByTestId("fm-undo-delete")).not.toBeInTheDocument();
+  });
+
   it("Cascade delete: deleting a parent with replies removes the replies too", async () => {
     renderApp({
       body: "<!-- fmc:1 -->bit<!-- /fmc:1 -->\n",
@@ -272,7 +302,7 @@ describe("Keyboard shortcuts on the focused card", () => {
       comments: [aComment(1)],
     });
     const card = await screen.findByTestId("fm-card-1");
-    fireEvent.click(card);
+    await act(async () => card.focus());
     press("r", { meta: true });
     expect(await screen.findByTestId("fm-inline-composer")).toBeInTheDocument();
   });
@@ -283,33 +313,33 @@ describe("Keyboard shortcuts on the focused card", () => {
       comments: [aComment(1)],
     });
     const card = await screen.findByTestId("fm-card-1");
-    fireEvent.click(card);
+    await act(async () => card.focus());
     press("Enter", { meta: true });
     await waitFor(() => {
       expect(screen.getByTestId("probe-resolved-ids").textContent).toBe("1");
     });
   });
 
-  it("⌘⇧E opens edit composer on own comment", async () => {
+  it("E opens edit composer on own comment", async () => {
     renderApp({
       body: "<!-- fmc:1 -->bit<!-- /fmc:1 -->\n",
       comments: [aComment(1, { body: "mine\n" })],
     });
     const card = await screen.findByTestId("fm-card-1");
-    fireEvent.click(card);
-    press("e", { meta: true, shift: true });
+    await act(async () => card.focus());
+    press("e");
     const ta = (await screen.findByTestId("fm-inline-composer-textarea")) as HTMLTextAreaElement;
     expect(ta.value).toBe("mine\n");
   });
 
-  it("⌘⇧E is a no-op on someone else's comment", async () => {
+  it("E is a no-op on someone else's comment", async () => {
     renderApp({
       body: "<!-- fmc:1 -->bit<!-- /fmc:1 -->\n",
       comments: [aComment(1, { author: "Devon" })],
     });
     const card = await screen.findByTestId("fm-card-1");
-    fireEvent.click(card);
-    press("e", { meta: true, shift: true });
+    await act(async () => card.focus());
+    press("e");
     // Composer doesn't open.
     expect(screen.queryByTestId("fm-inline-composer")).not.toBeInTheDocument();
   });
@@ -320,7 +350,7 @@ describe("Keyboard shortcuts on the focused card", () => {
       comments: [aComment(1)],
     });
     const card = await screen.findByTestId("fm-card-1");
-    fireEvent.click(card);
+    await act(async () => card.focus());
     // Move focus off the card so isTypingTarget returns false.
     document.body.focus();
     press("Delete");

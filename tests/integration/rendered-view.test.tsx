@@ -5,8 +5,6 @@ import { resolve } from "node:path";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { RenderedView } from "../../src/components/RenderedView";
 
-vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn(() => Promise.resolve()) }));
-
 const fixture = readFileSync(resolve(__dirname, "..", "fixtures", "gfm-sample.md"), "utf-8");
 
 function renderFixture(body: string = fixture) {
@@ -240,5 +238,70 @@ describe("RenderedView GFM rendering", () => {
       ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
     expect(openUrl).not.toHaveBeenCalled();
+  });
+});
+
+describe("RenderedView links and relative references", () => {
+  function renderWith(body: string, baseDir: string | null = "/docs/notes") {
+    const onOpen = vi.fn();
+    const utils = render(
+      <RenderedView
+        body={body}
+        onEdit={vi.fn()}
+        focusedCommentId={null}
+        hoveredCommentId={null}
+        onAnchorClick={vi.fn()}
+        onAnchorHover={vi.fn()}
+        onOpenExternalLink={onOpen}
+        baseDir={baseDir}
+      />,
+    );
+    return { ...utils, onOpen };
+  }
+
+  it("gives headings GitHub's ids and scrolls to a fragment link", async () => {
+    const { container } = renderWith(
+      "## My Heading\n\n## My Heading\n\nSee [it](#my-heading-1).\n",
+    );
+    await waitFor(() => expect(container.querySelectorAll("h2").length).toBe(2));
+    const headings = Array.from(container.querySelectorAll("h2")).map((h) => h.id);
+    expect(headings).toEqual(["my-heading", "my-heading-1"]);
+    const scrolled = vi.fn();
+    (container.querySelectorAll("h2")[1] as HTMLElement).scrollIntoView = scrolled;
+    (container.querySelector("a[href='#my-heading-1']") as HTMLElement).click();
+    expect(scrolled).toHaveBeenCalled();
+  });
+
+  it("opens another document in a tab and an address outside", async () => {
+    const { container, onOpen } = renderWith("[doc](./other.md#sec) and [site](https://x.y).\n");
+    await waitFor(() => expect(container.querySelectorAll("a").length).toBe(2));
+    const opened = vi.fn();
+    window.addEventListener("forgemark:open-path", opened as (e: Event) => void);
+    (container.querySelector("a[href='./other.md#sec']") as HTMLElement).click();
+    window.removeEventListener("forgemark:open-path", opened as (e: Event) => void);
+    expect((opened.mock.calls[0][0] as CustomEvent).detail.path).toBe("/docs/notes/other.md");
+    (container.querySelector("a[href='https://x.y']") as HTMLElement).click();
+    expect(onOpen).toHaveBeenCalledWith("https://x.y/");
+  });
+
+  it("loads a relative image from the document's folder, in prose and in raw HTML", async () => {
+    const { container } = renderWith(
+      '![a](images/x.png) and <img src="images/y.png" width="20"> here.\n\n<p align="center"><img src="../z.png"></p>\n',
+    );
+    await waitFor(() => expect(container.querySelectorAll("img").length).toBe(3));
+    const srcs = Array.from(container.querySelectorAll("img")).map((img) =>
+      img.getAttribute("src"),
+    );
+    expect(srcs).toEqual([
+      "asset://localhost/" + encodeURIComponent("/docs/notes/images/x.png"),
+      "asset://localhost/" + encodeURIComponent("/docs/notes/images/y.png"),
+      "asset://localhost/" + encodeURIComponent("/docs/z.png"),
+    ]);
+  });
+
+  it("leaves an image alone when the document has no folder yet", async () => {
+    const { container } = renderWith("![a](images/x.png)\n", null);
+    await waitFor(() => expect(container.querySelector("img")).toBeTruthy());
+    expect(container.querySelector("img")?.getAttribute("src")).toBe("images/x.png");
   });
 });

@@ -58,7 +58,7 @@ export function FirstRunWelcome({ onSkip, onOpenSample }: Props) {
         <div className="fm-first-run-actions">
           <button
             type="button"
-            className="fm-modal-button"
+            className="fm-btn"
             onClick={() => {
               commitName();
               onSkip();
@@ -69,7 +69,7 @@ export function FirstRunWelcome({ onSkip, onOpenSample }: Props) {
           </button>
           <button
             type="button"
-            className="fm-modal-button fm-modal-button-primary"
+            className="fm-btn fm-btn-primary"
             onClick={() => {
               commitName();
               onOpenSample();

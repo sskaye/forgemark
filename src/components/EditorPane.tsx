@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { dirOf } from "../services/documentLinks";
 import { useWorkspace } from "../state/DocumentProvider";
 import type { DocId } from "../state/workspace";
 import { useAuthorName } from "../state/preferences";
@@ -16,12 +17,16 @@ import { OverlapPrompt } from "./OverlapPrompt";
 import { FindReplaceBar } from "./FindReplaceBar";
 import { LostAnchorBanner } from "./LostAnchorBanner";
 import { ContextMenu } from "./ContextMenu";
+import { commandFor, modalOpen } from "../state/keymap";
 import {
   classifyAnchors,
   contextSnippet,
   insertMarkersIntoBody,
   nextCommentId,
   serializeForgemarkFile,
+  locateAnchor,
+  applyPlacement,
+  type Placement,
 } from "../format";
 import type { ViewSyncAnchor } from "../services/viewSync";
 import "./EditorPane.css";
@@ -49,6 +54,7 @@ function fromMarkdownCapture(c: CapturedSelection): HtmlCapturedSelection {
         : undefined,
     overlappingAnchorId: c.overlappingAnchorId,
     rect: c.rect,
+    token: "",
   };
 }
 
@@ -64,7 +70,7 @@ type Props = {
 //
 // Phase 5: hosts the new-comment composer. Selection is captured from
 // the rendered view via a ref; on submit, the rendered view applies the
-// anchor mark and returns the new body, which is dispatched along with
+// anchor edges and returns the new body, which is dispatched along with
 // the new Comment.
 //
 // Phase 8: source view is now CodeMirror-based with a "read-only review"
@@ -173,7 +179,10 @@ export function EditorPane({ docId }: Props) {
           selectionText: captured.text,
           contextBefore: captured.contextBefore,
           contextAfter: captured.contextAfter,
-          ...(captured.kind === "element" ? { anchorKind: "element" as const } : {}),
+          ...(captured.kind === "element" || captured.kind === "passage"
+            ? { anchorKind: captured.kind }
+            : {}),
+          ...(captured.kind === "floating" ? { floating: true } : {}),
           ...(captured.anchorSelector ? { anchorSelector: captured.anchorSelector } : {}),
           x: captured.rect.left,
           y: captured.rect.bottom + 6,
@@ -243,39 +252,45 @@ export function EditorPane({ docId }: Props) {
   useEffect(() => {
     if (!isActive) return;
     const onKey = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-      if (!mod) return;
-      const key = e.key.toLowerCase();
-      if (e.altKey) {
-        if (key === "m") {
+      const cmd = commandFor(e);
+      if (!cmd || modalOpen()) return;
+      switch (cmd) {
+        case "comment":
           e.preventDefault();
           openComposer();
-        } else if (key === "e") {
+          return;
+        case "suggest":
           e.preventDefault();
           openComposer("suggest");
-        } else if (key === "f") {
+          return;
+        case "find-replace":
           e.preventDefault();
           openFindReplace(true);
+          return;
+        case "find":
+          e.preventDefault();
+          openFindReplace(false);
+          return;
+        case "find-next":
+        case "find-prev":
+          e.preventDefault();
+          moveActiveMatch(cmd === "find-next" ? 1 : -1);
+          return;
+        case "find-selection": {
+          e.preventDefault();
+          const selected = handleRef.current?.selectedText()?.trim();
+          if (!selected) return;
+          if (state.viewMode !== "rendered") setViewMode("rendered");
+          setFindState((prev) => ({
+            ...prev,
+            open: true,
+            query: selected,
+            activeIndex: 0,
+          }));
+          return;
         }
-        return;
-      }
-      if (key === "f") {
-        e.preventDefault();
-        openFindReplace(false);
-      } else if (key === "g") {
-        e.preventDefault();
-        moveActiveMatch(e.shiftKey ? -1 : 1);
-      } else if (key === "e") {
-        e.preventDefault();
-        const selected = handleRef.current?.selectedText()?.trim();
-        if (!selected) return;
-        if (state.viewMode !== "rendered") setViewMode("rendered");
-        setFindState((prev) => ({
-          ...prev,
-          open: true,
-          query: selected,
-          activeIndex: 0,
-        }));
+        default:
+          return;
       }
     };
     window.addEventListener("keydown", onKey);
@@ -336,6 +351,9 @@ export function EditorPane({ docId }: Props) {
   //   - anywhere else (incl. rendered editor with no selection):
   //     suppress the default menu, show nothing.
   useEffect(() => {
+    // The active pane's editor matches from every mounted pane's
+    // listener; without this gate each hidden pane opened a menu too.
+    if (!isActive) return;
     const onCtx = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
       if (!target) return;
@@ -361,12 +379,12 @@ export function EditorPane({ docId }: Props) {
     };
     window.addEventListener("contextmenu", onCtx);
     return () => window.removeEventListener("contextmenu", onCtx);
-  }, [state.viewMode]);
+  }, [state.viewMode, isActive]);
 
-  // Both views expose `applyAnchor(from, to, id) -> new body`. For
-  // Markdown that runs through the editor's mark system; for HTML it is
-  // a byte splice into the source, which is the only way to add an
-  // anchor without re-serializing (and so rewriting) the file.
+  // Both views expose `applyAnchor(from, to, id) -> new body`. For HTML
+  // it is a byte splice into the source; for Markdown it runs through the
+  // editor's mark system, which re-serializes the whole document in the
+  // editor's dialect — the fallback, not the first choice (see below).
   const applyAnchor = useCallback(
     (from: number, to: number, id: number): string | null => {
       if (isHtml) return htmlRef.current?.applyAnchor(from, to, id) ?? null;
@@ -375,13 +393,37 @@ export function EditorPane({ docId }: Props) {
     [isHtml],
   );
 
+  // The lossless way to anchor a Markdown comment: find the selected
+  // passage in the untouched source and splice the two markers in. The
+  // rest of the file is byte-identical afterwards, which is the promise
+  // the format makes. The selection's surroundings disambiguate a phrase
+  // that appears more than once. Returns null when the passage can't be
+  // located exactly, and the editor path takes over.
+  const spliceAnchor = useCallback(
+    (
+      c: { selectionText: string; contextBefore: string; contextAfter: string },
+      id: number,
+    ): { body: string; placement: Placement } | null => {
+      if (isHtml) return null;
+      try {
+        const placement = locateAnchor(state.body, c.selectionText, "markdown", {
+          near: { before: c.contextBefore, after: c.contextAfter },
+        });
+        return { body: applyPlacement(state.body, placement, id), placement };
+      } catch {
+        return null;
+      }
+    },
+    [isHtml, state.body],
+  );
+
   // Anchor metadata common to a new comment and a new suggestion.
   const anchorFields = useCallback(
     (c: {
       selectionText: string;
       contextBefore: string;
       contextAfter: string;
-      anchorKind?: "element";
+      anchorKind?: "element" | "passage";
       anchorSelector?: string;
     }) => ({
       anchor_text: c.selectionText,
@@ -393,19 +435,49 @@ export function EditorPane({ docId }: Props) {
     [],
   );
 
+  // The same fields, from a placement the locator made in the source.
+  const placementFields = (p: Placement) => ({
+    anchor_text: p.anchor_text,
+    ...(p.anchor_kind ? { anchor_kind: p.anchor_kind } : {}),
+    ...(p.anchor_selector ? { anchor_selector: p.anchor_selector } : {}),
+    context_before: p.context_before,
+    context_after: p.context_after,
+  });
+
   const submitComment = useCallback(
     (commentBody: string) => {
       const c = state.composer;
       if (!c || c.mode !== "new") return;
       const id = nextCommentId(state.comments);
-      const newBody = applyAnchor(c.from, c.to, id);
+      if (c.floating) {
+        // Nothing in the source to anchor to: a script produced the
+        // passage and no element with an id holds it. The note keeps
+        // the quoted text so a reader or an agent can still tell what it
+        // is about.
+        dispatch({
+          type: "addComment",
+          body: state.body,
+          comment: {
+            id,
+            floating: true,
+            ...anchorFields(c),
+            author,
+            timestamp: new Date().toISOString(),
+            resolved: false,
+            body: commentBody,
+          },
+        });
+        return;
+      }
+      const spliced = spliceAnchor(c, id);
+      const newBody = spliced?.body ?? applyAnchor(c.from, c.to, id);
       if (newBody == null) return;
       dispatch({
         type: "addComment",
         body: newBody,
         comment: {
           id,
-          ...anchorFields(c),
+          ...(spliced ? placementFields(spliced.placement) : anchorFields(c)),
           author,
           timestamp: new Date().toISOString(),
           resolved: false,
@@ -413,37 +485,62 @@ export function EditorPane({ docId }: Props) {
         },
       });
     },
-    [state.composer, state.comments, author, dispatch, applyAnchor, anchorFields],
+    [
+      state.composer,
+      state.comments,
+      state.body,
+      author,
+      dispatch,
+      applyAnchor,
+      spliceAnchor,
+      anchorFields,
+    ],
   );
 
   // Phase 7: suggested-edit submission. The composer captures both the
   // proposed replacement and an (optional) accompanying body. We apply
-  // the same anchor mark as a regular new comment, then store the
+  // the same anchor edges as a regular new comment, then store the
   // Comment with `suggested_edit: { from, to }` and an optional body.
   const submitSuggestion = useCallback(
     (replacement: string, optionalBody: string) => {
       const c = state.composer;
       if (!c || c.mode !== "new") return;
       const id = nextCommentId(state.comments);
-      const newBody = applyAnchor(c.from, c.to, id);
+      const spliced = spliceAnchor(c, id);
+      const newBody = spliced?.body ?? applyAnchor(c.from, c.to, id);
       if (newBody == null) return;
+      // Accepting replaces the exact source between the markers, so
+      // `from` is that source when we have it — the selection's rendered
+      // text differs from it whenever the passage carries formatting.
+      const from = spliced
+        ? state.body.slice(spliced.placement.start, spliced.placement.end)
+        : c.selectionText;
       dispatch({
         type: "addComment",
         body: newBody,
         comment: {
           id,
-          ...anchorFields(c),
+          ...(spliced ? placementFields(spliced.placement) : anchorFields(c)),
           author,
           timestamp: new Date().toISOString(),
           resolved: false,
           // body is optional for suggestions per the schema; only
           // include it when the user typed something.
           ...(optionalBody.length > 0 ? { body: optionalBody } : {}),
-          suggested_edit: { from: c.selectionText, to: replacement },
+          suggested_edit: { from, to: replacement },
         },
       });
     },
-    [state.composer, state.comments, author, dispatch, applyAnchor, anchorFields],
+    [
+      state.composer,
+      state.comments,
+      state.body,
+      author,
+      dispatch,
+      applyAnchor,
+      spliceAnchor,
+      anchorFields,
+    ],
   );
 
   const cancelComposer = useCallback(() => dispatch({ type: "closeComposer" }), [dispatch]);
@@ -488,7 +585,10 @@ export function EditorPane({ docId }: Props) {
   const sourceText = useMemo(
     () =>
       state.viewMode === "source"
-        ? serializeForgemarkFile({ body: state.body, comments: state.comments })
+        ? serializeForgemarkFile(
+            { body: state.body, comments: state.comments },
+            { validate: false },
+          )
         : "",
     [state.viewMode, state.body, state.comments],
   );
@@ -580,12 +680,12 @@ export function EditorPane({ docId }: Props) {
   // suggestions actually are, pass this test; anything else is offered
   // as a plain comment instead.
   const canSuggest = useCallback(
-    (anchorKind: "element" | undefined, from: number, to: number) => {
+    (anchorKind: "element" | "passage" | "floating" | undefined, from: number, to: number) => {
       // Markdown anchors are always plain text. In a report the markers
       // may enclose markup, and accepting a suggestion replaces
       // everything between them — see `suggestion` below.
       if (!isHtml) return true;
-      if (anchorKind === "element") return false;
+      if (anchorKind) return false;
       return !state.body.slice(from, to).includes("<");
     },
     [isHtml, state.body],
@@ -596,6 +696,9 @@ export function EditorPane({ docId }: Props) {
     if (!c || c.mode !== "new" || !isHtml) return { allowed: true };
     if (c.anchorKind === "element") {
       return { allowed: false, reason: "Comment only — this is a figure" };
+    }
+    if (c.anchorKind === "passage" || c.floating) {
+      return { allowed: false, reason: "Comment only — this text is produced by the report" };
     }
     if (state.body.slice(c.from, c.to).includes("<")) {
       return { allowed: false, reason: "Comment only — this passage spans markup" };
@@ -727,7 +830,11 @@ export function EditorPane({ docId }: Props) {
           <span>HTML report · review only</span>
         </aside>
       )}
-      <div className="fm-document">
+      <div
+        className={
+          "fm-document" + (isHtml && state.viewMode !== "source" ? " fm-document--report" : "")
+        }
+      >
         <LostAnchorBanner
           count={lostAnchorIds.length}
           onRecover={() => {
@@ -737,11 +844,15 @@ export function EditorPane({ docId }: Props) {
           confidentCount={confidentReattachments.length}
           onReattachConfident={reattachConfident}
         />
-        {state.viewMode === "source" ? (
+        {state.viewMode === "source" && (
           <SourceView ref={sourceRef} text={sourceText} format={state.format} />
-        ) : isHtml ? (
+        )}
+        {isHtml ? (
+          // Kept mounted behind the source view: a reload would run the
+          // report's scripts again and lose the state the reader chose.
           <HtmlView
             key={state.loadGeneration}
+            hidden={state.viewMode === "source"}
             body={state.body}
             comments={state.comments}
             focusedCommentId={state.focusedCommentId}
@@ -755,13 +866,15 @@ export function EditorPane({ docId }: Props) {
             onAnchorHover={(id) => dispatch({ type: "setHoveredComment", id })}
             onRequestElementComment={(capture) => openComposerFor(capture)}
             onContextMenu={(at) => setContextMenu({ x: at.x, y: at.y })}
+            onLinkError={(message) => dispatch({ type: "error", message })}
+            baseDir={dirOf(state.filePath)}
             // Background documents stay mounted, and the toolbar is
             // position:fixed — an inactive pane must neither poll nor
             // paint one over the document in front.
             onSelectionChange={isActive ? showAffordance : undefined}
             handleRef={htmlRef}
           />
-        ) : (
+        ) : state.viewMode === "source" ? null : (
           <RenderedView
             // Remount on every content-replacing load so the Tiptap undo
             // stack can't outlive the document it belongs to.
@@ -774,6 +887,7 @@ export function EditorPane({ docId }: Props) {
             onAnchorClick={(id) => dispatch({ type: "setFocusedComment", id })}
             onAnchorHover={(id) => dispatch({ type: "setHoveredComment", id })}
             onExternalLinkError={(message) => dispatch({ type: "error", message })}
+            baseDir={dirOf(state.filePath)}
             handleRef={handleRef}
             onSelectionChange={
               isActive
@@ -787,12 +901,15 @@ export function EditorPane({ docId }: Props) {
         state.viewMode === "rendered" &&
         selectionAffordance != null &&
         state.composer == null &&
-        contextMenu == null && (
+        contextMenu == null &&
+        // Find selects each match as you step through them; that is
+        // navigation, not a passage the reader wants to comment on.
+        !findState.open && (
           <SelectionToolbar
             x={selectionAffordance.rect.left}
             y={selectionAffordance.rect.top}
             allowSuggest={canSuggest(
-              selectionAffordance.kind === "element" ? "element" : undefined,
+              selectionAffordance.kind === "inline" ? undefined : selectionAffordance.kind,
               selectionAffordance.from,
               selectionAffordance.to,
             )}

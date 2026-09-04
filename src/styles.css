@@ -33,3 +33,70 @@ body {
 button {
   font: inherit;
 }
+
+/* Buttons: one family for every text button in the app. Eight components
+   used to carry their own near-identical ruleset; they now compose these.
+   `fm-btn` is the quiet outlined default; `-sm` is the compact size used
+   on cards and banners; `-primary`, `-success`, `-danger` set the role;
+   `-quiet` drops the border for actions that sit inside a card. */
+.fm-btn {
+  font-family: var(--fm-ui);
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--fm-chrome-text);
+  background: transparent;
+  border: 0.5px solid var(--fm-divider-strong);
+  border-radius: 6px;
+  padding: 5px 12px;
+  cursor: default;
+}
+.fm-btn:hover:not(:disabled) {
+  background: var(--fm-hover-bg);
+}
+.fm-btn:focus-visible {
+  outline: 0.5px solid var(--fm-accent);
+  outline-offset: 2px;
+}
+.fm-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.fm-btn-sm {
+  font-size: 11.5px;
+  padding: 3px 10px;
+  border-radius: 5px;
+}
+.fm-btn-quiet {
+  color: var(--fm-chrome-muted);
+  border-color: transparent;
+}
+.fm-btn-quiet:hover:not(:disabled) {
+  color: var(--fm-chrome-text);
+  background: var(--fm-hover-bg);
+}
+.fm-btn-primary {
+  font-weight: 600;
+  color: var(--fm-accent-text);
+  background: var(--fm-accent);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+.fm-btn-primary:hover:not(:disabled) {
+  background: var(--fm-accent-hover);
+}
+.fm-btn-success {
+  font-weight: 600;
+  color: var(--fm-accent-text);
+  background: var(--fm-success);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+.fm-btn-success:hover:not(:disabled) {
+  background: var(--fm-success);
+  filter: brightness(1.05);
+}
+.fm-btn-danger {
+  color: var(--fm-danger);
+  border-color: transparent;
+}
+.fm-btn-danger:hover:not(:disabled) {
+  background: var(--fm-danger-soft);
+}

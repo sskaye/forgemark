@@ -1,17 +1,9 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { ThemeProvider } from "../../src/theme/ThemeProvider";
 import { DocumentProvider, useDocument } from "../../src/state/DocumentProvider";
 import { AppShell } from "../../src/components/AppShell";
-
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn(), ask: vi.fn() }));
-vi.mock("@tauri-apps/plugin-fs", () => ({
-  readTextFile: vi.fn(),
-  writeTextFile: vi.fn(),
-  stat: vi.fn(),
-  watch: vi.fn(() => Promise.resolve(() => {})),
-}));
-vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn(() => Promise.resolve()) }));
+import { typeIntoEditor } from "../utils/typing";
 
 // The rendered editor owns the undo stack — ProseMirror's history plugin
 // lives inside the Tiptap instance, not in DocumentState. So the only way
@@ -22,7 +14,7 @@ vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn(() => Promise.resol
 
 function Probe() {
   const { dispatch } = useDocument();
-  const load = (fileName: string, body: string, rebindOnly?: boolean) => ({
+  const load = (fileName: string, body: string) => ({
     type: "load" as const,
     filePath: `/tmp/${fileName}`,
     fileName,
@@ -30,7 +22,15 @@ function Probe() {
     body,
     comments: [],
     readOnly: false,
-    ...(rebindOnly ? { rebindOnly: true } : {}),
+  });
+  // Save As: the same buffer, rebound to a new path.
+  const saveAs = (fileName: string, body: string) => ({
+    type: "saved" as const,
+    text: body,
+    body,
+    comments: [],
+    filePath: `/tmp/${fileName}`,
+    fileName,
   });
   return (
     <div>
@@ -38,7 +38,7 @@ function Probe() {
       <button data-testid="load-b" onClick={() => dispatch(load("b.md", "BBB replacement\n"))} />
       <button
         data-testid="save-as"
-        onClick={() => dispatch(load("renamed.md", "AAA original\n", true))}
+        onClick={() => dispatch(saveAs("renamed.md", "AAA original\n"))}
       />
       <button
         data-testid="edit"
@@ -96,8 +96,27 @@ describe("undo isolation across documents", () => {
 
   it("undo still works within a single document", async () => {
     // Guard against the trivial way to pass the test above: breaking
-    // undo entirely. A programmatic body replacement (the same path
-    // accept-suggestion uses) must remain undoable.
+    // undo entirely. Typing must remain undoable.
+    const { container } = mount();
+
+    fireEvent.click(screen.getByTestId("load-a"));
+    await waitFor(() => expect(proseMirror(container).textContent).toContain("AAA original"));
+
+    typeIntoEditor(container, " typed");
+    await waitFor(() => expect(proseMirror(container).textContent).toContain("typed"));
+
+    pressUndo(container);
+
+    await waitFor(() => expect(proseMirror(container).textContent).not.toContain("typed"));
+    expect(proseMirror(container).textContent).toContain("AAA original");
+  });
+
+  it("a programmatic body replacement is not an undo step", async () => {
+    // Deleting a comment, accepting a suggestion, or reattaching all
+    // replace the body from state. ⌘Z used to revert the *text* of such
+    // a change while the comment records stayed put, leaving markers
+    // for a comment that no longer existed. Those changes have their
+    // own way back; the editor's undo is for typing.
     const { container } = mount();
 
     fireEvent.click(screen.getByTestId("load-a"));
@@ -108,8 +127,9 @@ describe("undo isolation across documents", () => {
 
     pressUndo(container);
 
-    await waitFor(() => expect(proseMirror(container).textContent).not.toContain("edited"));
-    expect(proseMirror(container).textContent).toContain("AAA original");
+    // Still there: nothing to undo.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(proseMirror(container).textContent).toContain("edited");
   });
 
   it("Save As rebinds the path without remounting the editor", async () => {

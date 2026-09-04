@@ -12,7 +12,9 @@ generated HTML reports. Review data lives inside the file itself:
 - Inline marker comments wrap anchored passages: `<!-- fmc:N -->...<!-- /fmc:N -->`.
 - A trailing `<!-- forgemark-comments ... -->` block stores comment records as
   YAML.
-- The AI-facing format spec lives in `assets/forgemark-skill/SKILL.md`.
+- The AI-facing format spec lives in `assets/forgemark-skill/SKILL.md`,
+  alongside a command-line tool agents use instead of writing the format
+  by hand. See "The agent CLI" below.
 
 The app treats the parsed document as two values: `body` and `comments[]`.
 Opening a file parses it into that shape. Saving serializes the shape back to a
@@ -161,62 +163,59 @@ marker-shaped text inside `<script>` or an attribute value as a real anchor —
 which invents a marker with no YAML record, an error that blanks every comment
 in the file.
 
-**How the document is rendered.** `HtmlView` writes the source verbatim into an
-iframe. It is _not_ parsed into an editor model, and can't be: a generated
-report is a `<style>` block, inline `<svg>`, and a pile of CSS classes, none of
-which survives a round trip through a ProseMirror schema. Two details carry
-weight:
+**How the document is rendered.** The report is shown in an iframe on an origin
+of its own, where its scripts run as they would in a browser. `HtmlView` hands
+the source to Rust (`set_report`), which serves it under the `fmreport` custom
+protocol (`http://fmreport.localhost` on Windows) together with any file beside
+it — a stylesheet, an image, a data file — so the report loads as it would from
+disk. That origin is not the app's: the report can reach nothing of Forgemark,
+and the app's Content Security Policy does not apply inside it. The frame fills
+the pane and scrolls itself, so the report's sticky headers, tabs, and viewport
+units behave as its author intended. It is _not_ parsed into an editor model,
+and can't be: a generated report is a `<style>` block, inline `<svg>`, and a
+pile of CSS classes, none of which survives a round trip through a ProseMirror
+schema.
 
-- `sandbox="allow-same-origin"` **without** `allow-scripts`. The report's own
-  scripts never run, while the host can still reach `contentDocument` to
-  decorate anchors and read selections. The two flags together would be
-  equivalent to no sandbox, so `allow-scripts` is not offered.
-- An iframe rather than a shadow root. The example report defines its whole
-  palette on `:root` with a `prefers-color-scheme` block, and `:root` does not
-  resolve inside a shadow root.
-
-The document is written with `document.write` rather than handed over as
-`srcdoc`: writing is synchronous, so there is no load event to race, and it is
-the only one of the two that jsdom implements.
+**The bridge.** Since the app cannot reach into the frame, Forgemark's own code
+runs inside it. `src/report/bridge.ts` is spliced into the report as a script
+before it is served (built by `scripts/build-bridge.mjs` into a committed file a
+test keeps fresh). It turns marker comments into highlights (`report/decorate.ts`),
+watches the reader's selection, puts a Comment button beside each chart and
+table, and forwards clicks on anchors and links. It speaks to `HtmlView` only
+through the messages in `src/report/protocol.ts`, over `postMessage`; tests
+install a loader (`tests/utils/reportFrame.ts`) that writes the report into a
+jsdom frame and wires the same bridge to the host through an in-memory channel.
 
 **How a selection becomes an anchor.** The source is never re-serialized —
 the browser's serializer re-quotes attributes and re-encodes entities, so
 saving would rewrite the whole file and the round-trip guarantee would die on
-the first comment. Instead `format/html/textmap.ts` builds a per-character map
-from the rendered text to source bytes (parse5 for a spec-correct tree with
-source spans; its decoded text doubles as an oracle for our own entity decode),
-and markers are spliced at exact offsets.
+the first comment. The frame reports what the reader selected as text with its
+surroundings and the ids of the elements enclosing it; `HtmlView` finds the
+passage in the source with the same locator the CLI uses (`locateAnchor`, with
+the surroundings disambiguating a repeated phrase) and markers are spliced at
+exact offsets. Text the report's own script produced has no place in the
+source: the comment then anchors the nearest enclosing element that has an
+`id` (`locatePassage`, `anchor_kind: passage`) and keeps the passage as its
+text, which the bridge finds and highlights inside that element, again after
+the script redraws it. With no such element the comment is a floating note that
+keeps the quoted text. A block captured from its button is located by its id,
+by its text, or by an enclosing id in the same order.
 
-The DOM side (`services/htmlDom.ts`) and the source map meet on one shared
-coordinate: an index into the concatenated rendered text. Going through a
-character index rather than node identity is what keeps it valid after
-decoration wraps anchored passages in spans and splits those very nodes. **Both
-walks must cover the same tree** — the DOM walk starts at the Document, not
-`<body>`, because whitespace between `</head>` and `<body>` is parsed as a text
-node child of `<html>`, and starting at body puts every later offset one
-character short. UI that Forgemark injects into the frame is tagged
-`data-forgemark` and skipped for the same reason.
+Adding or removing a comment does not reload the report — a reload would run
+its scripts again and lose the tab or range the reader chose. `HtmlView` keeps
+the source the frame shows; when the source changes by exactly the markers of
+the last capture, the frame is told to put the same markers around the range it
+kept (`wrap`), and when it changes by exactly a removed pair, to take them out
+(`unwrap`). Anything else — an accepted suggestion, a reattached anchor, a
+reload from disk — reloads the frame.
 
-**Nothing may depend on an event reaching the frame.** WKWebView does not
-deliver `contextmenu`, `mouseover`, or `click` to listeners the host attaches
-inside the frame — it answers a right-click with its own Look Up / Translate /
-Copy menu, and never runs ours. Chromium does deliver them, so this is not
-reproducible in a browser harness and was found only by driving the Tauri
-window. Anything the reader must be able to do is therefore built on what the
-host can _read_ across the boundary, which `allow-same-origin` grants and which
-has never failed:
-
-- The Comment / Suggest edit toolbar watches the selection, polling on an
-  interval and nudged by the frame's events where they happen to arrive.
-- The per-block Comment buttons live in the _host_ document, positioned over
-  the frame. They sit in the pane's margin, falling back onto the block itself
-  when the window is too narrow for one.
-- Clicking an anchored passage focuses its card via the caret, which the click
-  moves and which we can read. It only ever _sets_ focus — clearing from there
-  would fight the sidebar.
-
-The in-frame listeners are still attached, because where they do work they are
-immediate. They are an optimisation, never the mechanism.
+**Nothing may depend on an event reaching the frame from outside.** WKWebView
+does not deliver `contextmenu`, `mouseover`, or `click` to listeners a host
+attaches inside a frame. Every listener is now attached by the bridge, which is
+the report's own script and is delivered to like any page's. The selection
+watcher still polls on an interval as a floor, nudged by `selectionchange`
+where it fires, and clicking an anchored passage focuses its card via the
+caret, which only ever _sets_ focus.
 
 **Consequences that are deliberate, not gaps:**
 
@@ -252,23 +251,27 @@ human should look at.
 
 ## Core modules
 
-| Area            | Files                                                                                              | Notes                                                                                                                                                                                                                                                                                                      |
-| --------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Document model  | `src/state/document.ts`, `src/state/DocumentProvider.tsx`                                          | Pure reducer and context. Keeps file path, raw original text, body, comments, dirty state, composer state, lost-anchor state, conflict state, sidebar controls, and `loadGeneration` (see below).                                                                                                          |
-| Workspace       | `src/state/workspace.ts`                                                                           | The open documents: `docs`, tab `order`, `activeId`. Routes document actions to one document; owns tab open/close/activate/reorder, path dedupe, and Untitled numbering. Wraps `reduceDocument` untouched.                                                                                                 |
-| Side effects    | `src/state/DocumentBindings.tsx`                                                                   | Mounted once per OPEN document. Opens/saves files, runs autosave, watches external file changes, consumes pending save requests, and guards unsaved work. Window listeners inside are gated on `isActive`.                                                                                                 |
-| Shell layout    | `src/components/AppShell.tsx`, `src/components/TabBar.tsx`                                         | Assembles the app and hosts modals/banners. Renders one `DocumentBindings` and one `EditorPane` per open document. The tab strip hides itself when only one document is open.                                                                                                                              |
-| Selection UI    | `src/components/SelectionToolbar.tsx`                                                              | The Comment / Suggest edit bar that floats above a selection, in both document kinds. Markdown drives it from ProseMirror's `onSelectionUpdate`; a report has no such guarantee and drives it by reading the frame's selection on an interval, nudged by the frame's own events where those are delivered. |
-| Rendered editor | `src/components/EditorPane.tsx`, `src/components/RenderedView.tsx`, `src/components/AnchorMark.ts` | Rendered view converts Forgemark markers to Tiptap anchor spans and back. New comments and suggestions are created here because this layer has selection access. One pane per open document; inactive ones are hidden, not unmounted.                                                                      |
-| Source view     | `src/components/SourceView.tsx`                                                                    | Read-only CodeMirror view of the exact serialized Markdown, with decorations for markers and the trailing comments block.                                                                                                                                                                                  |
-| Sidebar         | `src/components/Sidebar.tsx`, `src/components/FMCard.tsx`, `src/components/InlineComposer.tsx`     | Thread lifecycle: reply, edit, resolve, delete, accept/reject suggestions, reattach orphaned comments, filter, and sort.                                                                                                                                                                                   |
-| Format layer    | `src/format/*`                                                                                     | Parser, deterministic YAML emitter, serializer, marker scanning/pairing, marker insertion/removal, lost-anchor candidate ranking, clean export, escaping. This is the domain core and is heavily tested.                                                                                                   |
-| HTML format     | `src/format/html/*`, `src/format/matching.ts`                                                      | Source ↔ rendered-text offset map, element location by selector or caption, HTML reattachment candidates. `matching.ts` holds the ranking policy both languages share.                                                                                                                                     |
-| HTML view       | `src/components/HtmlView.tsx`, `src/services/htmlDom.ts`, `src/services/htmlDecorate.ts`           | The sandboxed report frame, the DOM half of the shared text coordinate, and display-time anchor decoration. Replaces `RenderedView` for HTML documents; the sidebar and threads are unchanged.                                                                                                             |
-| File services   | `src/services/fileIO.ts`, `src/services/fileWatcher.ts`, `src/services/conflict.ts`                | Tauri wrappers, parent-directory watcher for atomic saves, and fingerprint comparison for external-change detection.                                                                                                                                                                                       |
-| Preferences     | `src/state/preferences.ts`                                                                         | LocalStorage-backed author, theme, font size, default view, recent files, and first-run flag.                                                                                                                                                                                                              |
-| Native shell    | `src-tauri/src/lib.rs`, `src/state/menuBridge.ts`, `src/services/windowActions.ts`                 | Rust builds native menus and file-open events, then emits Tauri events. The frontend routes them into existing command paths.                                                                                                                                                                              |
-| Skill bundles   | `assets/forgemark-skill/*`, `scripts/build-skill.mjs`, `src/services/skillDownload.ts`             | AI-agent instructions are packaged as both `.skill` and `.zip`; Settings downloads them through the Tauri save dialog.                                                                                                                                                                                     |
+| Area            | Files                                                                                              | Notes                                                                                                                                                                                                                                                                                                                            |
+| --------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Document model  | `src/state/document.ts`, `src/state/DocumentProvider.tsx`                                          | Pure reducer and context. Keeps file path, raw original text, body, comments, dirty state, composer state, lost-anchor state, conflict state, sidebar controls, and `loadGeneration` (see below).                                                                                                                                |
+| Workspace       | `src/state/workspace.ts`                                                                           | The open documents: `docs`, tab `order`, `activeId`. Routes document actions to one document; owns tab open/close/activate/reorder, path dedupe, and Untitled numbering. Wraps `reduceDocument` untouched.                                                                                                                       |
+| Side effects    | `src/state/DocumentBindings.tsx`                                                                   | Mounted once per OPEN document. Opens/saves files, runs autosave, watches external file changes, consumes pending save requests, and guards unsaved work. Window listeners inside are gated on `isActive`.                                                                                                                       |
+| Shell layout    | `src/components/AppShell.tsx`, `src/components/TabBar.tsx`                                         | Assembles the app and hosts modals/banners. Renders one `DocumentBindings` and one `EditorPane` per open document. The tab strip hides itself when only one document is open.                                                                                                                                                    |
+| Modals          | `src/components/Modal.tsx`, `Segmented.tsx`                                                        | One dialog shell on the native `dialog` element (focus in on open, back to the opener on close, Escape, backdrop click, Enter scoped to the dialog) used by every modal, and one segmented control with arrow keys for the view switch and Settings.                                                                             |
+| Keyboard        | `src/state/keymap.ts`                                                                              | Every chord in one table, `commandFor(event)` for the listeners, and a test that refuses two commands on one chord. Listeners decide where a command applies: card commands only with focus in the sidebar, nothing over a dialog or into a text field.                                                                          |
+| Selection UI    | `src/components/SelectionToolbar.tsx`                                                              | The Comment / Suggest edit bar that floats above a selection, in both document kinds. Markdown drives it from ProseMirror's `onSelectionUpdate`; a report has no such guarantee and drives it by reading the frame's selection on an interval, nudged by the frame's own events where those are delivered.                       |
+| Rendered editor | `src/components/EditorPane.tsx`, `src/components/RenderedView.tsx`, `src/components/AnchorEdge.ts` | Rendered view carries each Forgemark marker as an inline edge node and highlights the passage between a pair. New comments and suggestions are created here because this layer has selection access. One pane per open document; inactive ones are hidden, not unmounted.                                                        |
+| Source view     | `src/components/SourceView.tsx`                                                                    | Read-only CodeMirror view of the exact serialized Markdown, with decorations for markers and the trailing comments block.                                                                                                                                                                                                        |
+| Sidebar         | `src/components/Sidebar.tsx`, `src/components/FMCard.tsx`, `src/components/InlineComposer.tsx`     | Thread lifecycle: reply, edit, resolve, delete, accept/reject suggestions, reattach orphaned comments, filter, and sort.                                                                                                                                                                                                         |
+| Format layer    | `src/format/*`                                                                                     | Parser, deterministic YAML emitter, serializer, marker scanning/pairing, marker insertion/removal, lost-anchor candidate ranking, clean export, escaping. This is the domain core and is heavily tested.                                                                                                                         |
+| HTML format     | `src/format/html/*`, `src/format/matching.ts`                                                      | Source ↔ rendered-text offset map, element location by selector or caption, HTML reattachment candidates. `matching.ts` holds the ranking policy both languages share.                                                                                                                                                           |
+| HTML view       | `src/components/HtmlView.tsx`, `src/services/htmlDom.ts`, `src/services/htmlDecorate.ts`           | The sandboxed report frame, the DOM half of the shared text coordinate, and display-time anchor decoration. Replaces `RenderedView` for HTML documents; the sidebar and threads are unchanged.                                                                                                                                   |
+| File services   | `src/services/fileIO.ts`, `src/services/fileWatcher.ts`, `src/services/conflict.ts`                | Tauri wrappers, parent-directory watcher for atomic saves, and fingerprint comparison for external-change detection.                                                                                                                                                                                                             |
+| Preferences     | `src/state/preferences.ts`                                                                         | LocalStorage-backed author, theme, font size, default view, recent files, and first-run flag.                                                                                                                                                                                                                                    |
+| Open Recent     | `src/state/recentFilesMenu.ts`, `lib.rs` (`set_recent_files`)                                      | The list lives in preferences; the shell pushes it to Rust on change, Rust rebuilds the File menu, and a click comes back as `forgemark:open-path`, the same event a Finder open uses. A failed open drops its entry.                                                                                                            |
+| Native shell    | `src-tauri/src/lib.rs`, `src/state/menuBridge.ts`, `src/services/windowActions.ts`                 | Rust builds native menus and file-open events, then emits Tauri events. The frontend routes them into existing command paths.                                                                                                                                                                                                    |
+| Skill bundles   | `assets/forgemark-skill/*`, `scripts/build-skill.mjs`, `src/services/skillDownload.ts`             | AI-agent instructions are packaged as both `.skill` and `.zip`; Settings downloads them through the Tauri save dialog.                                                                                                                                                                                                           |
+| Agent CLI       | `cli/*`, `scripts/build-cli.mjs`, `assets/forgemark-skill/scripts/forgemark.mjs`                   | `list`, `show`, `comment`, `reply`, `resolve`, `float`, `reattach`, `delete`, `lint` over a file, built from the format layer and bundled into one file the skill ships. Pure operations in `lib.ts`, checks in `lint.ts`, disk and argv in `io.ts` / `run.ts`; anchor placement is `src/format/locate.ts`, shared with the app. |
 
 ## Important workflows
 
@@ -293,6 +296,39 @@ Saving:
 
 Adding a comment or suggestion:
 
+**Markdown comments are spliced, not re-serialized.** The editor's
+Markdown is not the author's Markdown: run a document through Tiptap and
+front matter becomes a heading, hard wraps unwrap, reference links are
+inlined, HTML comments vanish (`tests/unit/editor-roundtrip.test.ts`
+lists what survives and what still doesn't). So a new comment no longer
+goes through the editor at all. `EditorPane.spliceAnchor` finds the
+selected passage in `state.body` with `src/format/locate.ts` — the same
+locator the CLI uses, matching across hard wraps and inline markup, with
+the selection's surroundings disambiguating a repeated phrase — and
+splices the two markers in. The rest of the file is byte-identical. The
+editor path below is the fallback for a passage the locator can't place.
+
+Typing rewrites only the block typed in. `src/format/blocks.ts`
+splits the body into top-level blocks with their line ranges (one per
+markdown-it token; a whole-code-block anchor's marker lines are merged
+with their fence; raw HTML becomes a "verbatim" block), and
+`components/blockSync.ts` keeps the editor in step: `load` gives the
+editor one node per block (raw HTML as a read-only `VerbatimBlock`
+carrying its own source and showing it rendered, through
+`services/sanitizeHtml.ts`), `emit` finds the run of top-level nodes that
+changed by identity, serializes just that run, and splices it into
+those blocks' lines. A count mismatch after the splice falls back to
+whole-document serialization rather than risk a wrong splice; tests
+assert the mode. `editorExtensions.ts` holds the one extension list
+(editor, print, and the parity test all use it) and the settings chosen
+to narrow what an edited block loses: `linkify` and `autolink` off, a
+Code mark that doesn't exclude the anchor and bold marks,
+`CodeBlockAnchor` sizing its fence to the content. Front matter is split
+off before the body reaches the editor and put back on every edit
+(`src/format/frontmatter.ts`). `markers-display.ts` only rewrites
+markers the scanner recognises, so a marker quoted in a code fence is
+left alone.
+
 1. `EditorPane` captures the Tiptap selection through `RenderedViewHandle`.
    `classifyCodeSelection` decides how it can be anchored:
    - **inline** — a normal span (may include inline code);
@@ -304,13 +340,59 @@ Adding a comment or suggestion:
    code block that already carries one), `OverlapPrompt` offers to attach the
    note as a **reply** instead — the format cannot represent overlapping
    anchors, so they are prevented at creation time.
-3. `RenderedView.applyAnchor` applies the anchor: an inline `AnchorMark` for
-   spans, or a `codeBlock` node `anchorId` attribute for whole blocks.
-4. Markdown emitted by Tiptap is converted back to `<!-- fmc:N -->` markers
-   (`bodyFromAnchorSpans`). `coalesceAnchorMarkers` collapses any same-id run
-   Tiptap emits across inline formatting down to a single pair, so a comment
-   spanning `*emphasis*`/`[links]()` stays one marker pair.
+3. `RenderedView.applyAnchor` applies the anchor: an `AnchorEdge` node at each
+   end of the selection (`anchorEdgesTransaction`), or a `codeBlock` node
+   `anchorId` attribute for whole blocks. An end inside inline code moves out
+   to the code span's boundary, and each edge takes only the marks both of its
+   neighbours share, so it sits inside `**emphasis**` only when the emphasis
+   continues across it.
+4. Each edge serializes as its own `<!-- fmc:N -->` / `<!-- /fmc:N -->` marker
+   exactly where it sits. `coalesceAnchorMarkers` stays in the parser as a
+   safety net for files written by the older mark-based editor, which split one
+   anchor into a run of pairs across inline formatting.
 5. The reducer adds a new `Comment` record and focuses its card.
+
+**Inline HTML.** markdown-it hands inline HTML to the DOM parser, which keeps the
+text of an element it has no schema entry for and drops the element. `HtmlMark`
+(`src/components/HtmlMark.ts`) is one mark for every inline tag GitHub renders
+and the editor does not model, carrying the tag name and attributes as attrs;
+`HtmlInline` (`src/components/HtmlInline.ts`) is an inline atom holding the
+source of a comment, a void tag, or an unknown tag, chosen by the markdown-it
+`html_inline` renderer override. Both write themselves back byte for byte.
+`InlineImage` makes images inline, as on GitHub, and writes an `<img>` tag when a
+width or height is set.
+
+**Beyond the GFM spec.** `src/format/markdownExtras.ts` teaches markdown-it what
+github.com renders on top of the spec: footnotes, alerts, single-tilde
+strikethrough, `$…$` and `$$` math, and (in the editor only) autolinking of
+scheme, `www.`, and e-mail addresses. `MathInline`/`MathBlock` draw TeX with
+KaTeX and `MermaidBlock` draws a diagram through a node view that loads Mermaid
+on first use. The block splitter and the editor both apply it, so the two agree on
+where a footnote definition starts and ends. `AlertBlockquote`, `FootnoteRef`,
+`FootnoteDef`, and `MarkdownTable` (which escapes a pipe in a cell) render and
+write those forms back.
+
+**Relative references and links.** `src/services/documentLinks.ts` resolves a
+reference against the document's folder and classifies a clicked link: an
+address, a `#fragment`, another document (opened in a tab through
+`deliverOpenPath`), or any other file (opened with the system). `AssetPaths`
+gives relative images an asset URL through a decoration, so the file keeps the
+path as written; `HeadingIds` gives every heading GitHub's id the same way. The
+report frame gets a `<base>` pointing at the folder, which is why the asset
+protocol is enabled and admitted for stylesheets, fonts, and media in the
+Content Security Policy.
+
+**Anchor edges as nodes.** `AnchorEdge` (`src/components/AnchorEdge.ts`) is an
+inline atom node; the display form `bodyWithAnchorElements` produces is
+`<fm-anchor data-edge="open" data-id="N"></fm-anchor>`, which markdown-it passes
+through as inline HTML. The highlight readers click and hover is a decoration
+between a pair carrying `data-anchor-id`, so the wiring that keys off that
+attribute is shared with whole-block code anchors. Three plugins keep every edge
+paired: Backspace and Delete beside an edge remove the character beyond it
+rather than the edge; an edge whose partner a deletion swallowed is removed
+after the transaction, so the comment reattaches by its recorded text instead of
+leaving a stray marker; and pasting content that carries an edge of an anchor
+the document already has drops the copy, while a cut-and-paste move keeps it.
 
 **Whole code block anchors.** Markers can't live inside a fence, so a code-block
 comment is stored as a marker pair on its own lines _around_ the fence
@@ -368,20 +450,106 @@ External file changes:
 - Clean in-memory state shows a banner. Dirty state shows an edit-during-open
   modal. Pressing save during a conflict opens the save-conflict modal.
 
+## The agent CLI
+
+A review cycle with an agent editing the files by hand lost its comments
+four times, from four causes: a block scalar the app itself emitted with
+an indented first line; a duplicate `replies:` key appended to a record
+that already had one; a bare colon in an unquoted body; and a second
+comments block appended after the first had become unreadable. Each hid
+every comment in the file, and three of the four were invisible until a
+reviewer opened it. The common cause was agents composing YAML and
+placing markers themselves, and nothing checking the result until the
+app read it.
+
+`cli/` is the answer: a `forgemark` command built from `src/format` and
+bundled by esbuild into `assets/forgemark-skill/scripts/forgemark.mjs`,
+one file with no dependencies that any Node 18+ runs. It ships inside the
+skill, so an agent that has the skill has the tool, and `SKILL.md` tells
+it to use the tool for every read and write. The commands are the things
+an agent does in a review: `list` and `show` to read, `comment` (with
+`--anchor`, `--selector` for an HTML element, `--floating`, or
+`--suggest`), `reply`, `resolve`/`unresolve`, `float`, `reattach`,
+`delete`, and `lint`.
+
+Rules the CLI keeps, all of them tested:
+
+- **Nothing is written that would not read back.** Every write goes
+  parse → mutate → serialize → parse the result as the app will → atomic
+  write (temp file plus rename, which the app's directory watcher sees
+  as one change). A file the app could not read cleanly is refused with
+  the parser's message and a pointer to `lint`; the alternative,
+  writing back a recovered approximation, would silently change a
+  reviewer's file.
+- **Anchors are placed by phrase, not offset.** `anchor.ts` matches the
+  quoted passage against the source with whitespace collapsed (across
+  hard wraps), then case-insensitively, then tolerating inline markup
+  between words. An ambiguous phrase is refused with the occurrences
+  listed; `--occurrence N` picks one. A match touching inline code widens
+  to the code span, one inside a fence snaps to the whole block with
+  own-line markers, one that straddles a fence is refused, and one that
+  overlaps an existing pair is refused with "reply to that comment
+  instead" — the same rule the app enforces at creation. HTML matches
+  run over the rendered text map and map back to exact source offsets.
+- **`anchor_text` is the rendered text.** `src/format/anchor-text.ts`
+  states the normalisation once (Markdown markup stripped, HTML tags
+  stripped and entities decoded, whitespace collapsed) so the CLI writes
+  what the app writes and `lint` can tell drift from formatting.
+- **`lint` reports; it does not repair.** Errors are what the app would
+  refuse or misread (an unreadable block with its file line and record
+  id, a second block, colliding ids, unmatched or recordless markers,
+  overlapping pairs, a floating note that still has markers). Warnings
+  are what the reviewer would rather not meet (an orphan, a drifted
+  `anchor_text`, a malformed timestamp). Repair was considered and
+  dropped: with the tool doing the writes, the remaining ways to break a
+  file are prose edits around markers, which the app already recovers
+  from on open and which the agent settles with `reattach` or `float`.
+
+The write-side guards the review exposed live in the format layer, so
+the app gets them too: the emitter double-quotes a multi-line string
+whose first line begins with a space rather than emitting a block
+literal the parser can't read; `serializeForgemarkFile` parses its own
+block back before returning and refuses when the body still holds a
+`<!-- forgemark-comments` line the open path could not read (which is
+exactly how the second block was produced); and a YAML parse error
+carries the file line and the comment id it falls in, which the app's
+banner now shows instead of "couldn't be parsed (yaml)".
+
+The bundle is a committed build artifact like the skill zip, and stale
+the same way. `tests/unit/cli/bundle.test.ts` rebuilds it in memory and
+compares bytes, so a change to `cli/` or `src/format` without `npm run
+build:cli` fails the suite. `npm run cli -- …` runs it from source.
+
 ## Tests
 
 - `tests/unit/format/*`: parser, serializer, marker, escaping, compose,
   suggestions, round-trip, property, and reattach behavior.
 - `tests/unit/*`: document reducer, workspace reducer, preferences, file IO,
   conflict fingerprints, tokens, clean export, menu bridge, smoke.
+- `tests/unit/cli/*`: anchor placement, the command operations, lint, disk
+  I/O failure paths, the command-line surface end to end on temp copies of
+  the fixtures (Markdown, HTML element anchors, CRLF), and bundle freshness.
+- `tests/integration/save-guard.test.tsx`: the app refuses to save over an
+  unreadable comments block (⌘S and auto-save), and a file the CLI wrote
+  while the app had it open arrives through the external-change path.
+- `tests/unit/format/property.test.ts` fuzzes the emitter with the string
+  shapes that once defeated a block literal — leading and trailing spaces,
+  tabs, blank lines, no trailing newline or several, carriage returns.
 - `tests/integration/*`: AppShell, rendered/source views, composer, sidebar,
   suggestions, lost anchors, file opening, settings, skill download, file
   conflicts, tabs, per-tab editors, background documents, the unsaved-work
   guard, and cold start.
 - `tests/perf/end-to-end.test.ts`: large-document performance smoke.
 - `tests/e2e/smoke.spec.ts`: Playwright smoke against the dev surface.
-- `tests/ai/*`: optional live-agent fixtures and prompts. These are excluded
-  from normal test runs unless `RUN_AI_TESTS=1`.
+- `tests/ai/*`: prompt/expectation cases run by hand with a sub-agent;
+  never part of `npm test`.
+- `tests/setup.ts` installs one fake Tauri (`tests/utils/tauri-fake.ts`)
+  for every test: an in-memory disk whose reads return what was seeded
+  or written, an atomic rename, dialogs that answer as told, and
+  watchers a test can fire. `tests/utils/harness.tsx` mounts the app.
+  Thirty files used to carry identical mocks whose reads returned
+  undefined, and five rendered a second `DocumentBindings` next to the
+  one `AppShell` mounts, running two save timers against one document.
 
 **Typing tests.** `tests/utils/typing.ts` drives real keystrokes into the
 rendered editor. ProseMirror observes its contenteditable through a
@@ -395,6 +563,16 @@ Before changing the format layer, run `npm test`. For frontend layout changes,
 also run the relevant integration test and inspect the app in a browser or
 Tauri window — several bugs in the tabs work were reachable only by driving the
 real app, particularly anything crossing into Rust.
+
+**In a browser.** `npm run test:e2e` runs Playwright against the Vite dev server
+in Chromium. Tauri's bridge is replaced in the page by `tests/e2e/tauri-shim.ts`:
+files are read from disk through Vite's `/@fs/` route, writes go to an in-memory
+overlay the test reads back byte for byte, dialogs answer nothing, and a report
+is put into its frame from a blob URL instead of the Rust protocol. Everything
+else is the real app, so these tests cover what jsdom cannot: a report's own
+script running, layout, a highlight surviving the script's redraw, a keycap
+looking like a keycap, and a wide table scrolling. The Rust protocol itself and
+WebKit's quirks still need the app.
 
 ## Design tokens
 

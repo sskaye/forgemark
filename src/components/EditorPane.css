@@ -38,6 +38,17 @@
   background: var(--fm-prose-faint);
 }
 
+/* An HTML report is a page of its own, not a column of prose: its frame
+   takes the whole pane below the chip and scrolls itself. */
+.fm-document--report {
+  max-width: none;
+  padding: 44px 0 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  align-self: stretch;
+}
+
 .fm-document {
   width: 100%;
   max-width: 720px;

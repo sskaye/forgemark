@@ -1,4 +1,5 @@
-import CodeBlock from "@tiptap/extension-code-block";
+import { CodeBlockLowlight } from "@tiptap/extension-code-block-lowlight";
+import { createLowlight, common } from "lowlight";
 
 // CodeBlock with whole-block comment anchoring. The file format can't
 // place markers *inside* a fenced block (they'd be read as code), so a
@@ -12,7 +13,7 @@ import CodeBlock from "@tiptap/extension-code-block";
 //   <!-- /fmc:N -->
 //
 // To survive the markdown ⇄ editor round-trip, the anchor must live on the
-// node (like the inline AnchorMark lives on a mark). This extension:
+// node (an inline anchor lives on AnchorEdge nodes). This extension:
 //   - adds an `anchorId` attribute, rendered as `data-anchor-id` on <pre>
 //     so the existing click / hover / focus wiring (which keys off
 //     `[data-anchor-id]`) lights the block up like an inline anchor;
@@ -24,6 +25,20 @@ import CodeBlock from "@tiptap/extension-code-block";
 // The marker⇄info-string conversion on the display side keeps the stored
 // markdown clean (plain comment markers), while the editor still gets the
 // anchor as a real node attribute.
+//
+// The block is highlighted by lowlight for the languages highlight.js
+// calls common, as GitHub highlights it. A block with no language, or
+// one lowlight does not know, is left plain: the extension would guess
+// a language for it, and a guess colours prose and shell transcripts in
+// ways that mislead.
+
+const lowlight = createLowlight(common);
+const quietLowlight = {
+  highlight: lowlight.highlight.bind(lowlight),
+  highlightAuto: () => ({ type: "root", children: [] }),
+  listLanguages: lowlight.listLanguages.bind(lowlight),
+  registered: lowlight.registered.bind(lowlight),
+};
 
 interface MarkdownToken {
   info: string;
@@ -60,7 +75,7 @@ interface CodeBlockNode {
 
 const FMC_INFO_RE = /(?:^|\s)fmc=(\d+)(?:\s|$)/;
 
-export const CodeBlockAnchor = CodeBlock.extend({
+export const CodeBlockAnchor = CodeBlockLowlight.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
@@ -78,11 +93,20 @@ export const CodeBlockAnchor = CodeBlock.extend({
       markdown: {
         serialize(state: SerializerState, node: CodeBlockNode) {
           const id = node.attrs.anchorId;
+          // markdown-it hands the block its content with a trailing
+          // newline. Writing it and then ensuring another produced a
+          // blank line before the closing fence, which inside a list
+          // item grew by one on every save.
+          const text = node.textContent.replace(/\n$/, "");
+          // A fence must be longer than any backtick run inside it, or a
+          // block that quotes a fence is cut short at the quoted one.
+          const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length));
+          const fence = "`".repeat(Math.max(3, longest + 1));
           if (id != null) state.write(`<!-- fmc:${id} -->\n`);
-          state.write("```" + (node.attrs.language || "") + "\n");
-          state.text(node.textContent, false);
+          state.write(fence + (node.attrs.language || "") + "\n");
+          state.text(text, false);
           state.ensureNewLine();
-          state.write("```");
+          state.write(fence);
           if (id != null) {
             state.ensureNewLine();
             state.write(`<!-- /fmc:${id} -->`);
@@ -91,6 +115,9 @@ export const CodeBlockAnchor = CodeBlock.extend({
         },
         parse: {
           setup(markdownit: MarkdownIt) {
+            // tiptap-markdown runs setup on every parse; wrap the rule once.
+            const rules = markdownit.renderer.rules as { fence?: { fmAnchor?: boolean } };
+            if (rules.fence?.fmAnchor) return;
             const previous = markdownit.renderer.rules.fence;
             markdownit.renderer.rules.fence = (tokens, idx, options, env, self) => {
               const token = tokens[idx];
@@ -105,9 +132,10 @@ export const CodeBlockAnchor = CodeBlock.extend({
                 : self.renderToken(tokens, idx, options);
               return match ? html.replace(/^<pre/, `<pre data-anchor-id="${match[1]}"`) : html;
             };
+            (markdownit.renderer.rules.fence as { fmAnchor?: boolean }).fmAnchor = true;
           },
         },
       },
     };
   },
-});
+}).configure({ lowlight: quietLowlight });

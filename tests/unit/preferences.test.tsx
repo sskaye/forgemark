@@ -20,6 +20,14 @@ describe("preferences — author name", () => {
     expect(result.current[0]).toBe("You");
   });
 
+  it("never yields a blank author, even mid-session", () => {
+    const { result } = renderHook(() => useAuthorName());
+    act(() => result.current[1]("   "));
+    expect(result.current[0]).toBe("You");
+    act(() => result.current[1](" Maya "));
+    expect(result.current[0]).toBe("Maya");
+  });
+
   it("persists to localStorage and restores", () => {
     const { result, unmount } = renderHook(() => useAuthorName());
     act(() => result.current[1]("Maya"));

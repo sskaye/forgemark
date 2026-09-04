@@ -116,14 +116,11 @@ describe("reducer — toggleResolved", () => {
 
 describe("reducer — deleteComment", () => {
   it("removes the comment and updates the body", () => {
-    const next = reduceDocument(baseLoaded(), {
-      type: "deleteComment",
-      commentId: 1,
-      body: "x without markers",
-    });
+    const next = reduceDocument(baseLoaded(), { type: "deleteComment", commentId: 1 });
     expect(next.comments).toHaveLength(1);
     expect(next.comments[0].id).toBe(2);
-    expect(next.body).toBe("x without markers");
+    // The reducer strips the markers itself.
+    expect(next.body).not.toMatch(/fmc:1\b/);
     expect(next.dirty).toBe(true);
   });
   it("clears focusedCommentId when deleting the focused comment", () => {
@@ -131,11 +128,7 @@ describe("reducer — deleteComment", () => {
       type: "setFocusedComment",
       id: 1,
     });
-    const next = reduceDocument(focused, {
-      type: "deleteComment",
-      commentId: 1,
-      body: "x",
-    });
+    const next = reduceDocument(focused, { type: "deleteComment", commentId: 1 });
     expect(next.focusedCommentId).toBe(null);
   });
   it("preserves focusedCommentId when deleting a different comment", () => {
@@ -143,11 +136,7 @@ describe("reducer — deleteComment", () => {
       type: "setFocusedComment",
       id: 2,
     });
-    const next = reduceDocument(focused, {
-      type: "deleteComment",
-      commentId: 1,
-      body: "x",
-    });
+    const next = reduceDocument(focused, { type: "deleteComment", commentId: 1 });
     expect(next.focusedCommentId).toBe(2);
   });
   it("cascades replies — deleting a parent removes all of its replies", () => {
@@ -156,11 +145,7 @@ describe("reducer — deleteComment", () => {
       commentId: 1,
       reply: reply(),
     });
-    const next = reduceDocument(start, {
-      type: "deleteComment",
-      commentId: 1,
-      body: "x",
-    });
+    const next = reduceDocument(start, { type: "deleteComment", commentId: 1 });
     expect(next.comments.find((c) => c.id === 1)).toBeUndefined();
     // The replies are gone with their parent (cascade).
     const everyReply = next.comments.flatMap((c) => c.replies ?? []);

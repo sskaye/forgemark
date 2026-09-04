@@ -99,7 +99,7 @@ const PAIRS: Pair[] = [
     severity: "below-aa",
     light: { floor: 2.4 }, // currently 2.49
     dark: { floor: 3.3 }, // currently 3.38
-    note: "Timestamps / tertiary text — fade-out by design.",
+    note: "Decorative only (source-view dimming, the editor's rule); timestamps moved to proseMuted.",
   },
   {
     label: "chromeFaint on titlebarBg (decorative)",
@@ -109,7 +109,7 @@ const PAIRS: Pair[] = [
     severity: "below-aa",
     light: { floor: 2.0 }, // currently 2.07
     dark: { floor: 2.7 }, // currently 2.82
-    note: "Modified-dot, disabled-state — design-intentional fade.",
+    note: "Modified-dot, disabled-state — design-intentional fade; hints moved to chromeMuted.",
   },
   // Apple system blue (#0A84FF) with white text is platform-canonical
   // (used in every macOS / iOS button); reads at ~3.65:1. Treated as

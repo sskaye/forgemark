@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default permissions for the main window.",
+  "description": "Default permissions for the main window. The filesystem scope is deliberately everything the user can reach: Forgemark opens whatever file it is pointed at, and the review it writes goes back beside it. The CSP in tauri.conf.json is what stands between a reviewed document and that scope.",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -16,13 +16,17 @@
     "fs:allow-write-text-file",
     "fs:allow-write-file",
     "fs:allow-stat",
+    "fs:allow-lstat",
+    "fs:allow-rename",
+    "fs:allow-remove",
     "fs:allow-exists",
     "fs:allow-watch",
     "fs:allow-unwatch",
     "opener:default",
     {
       "identifier": "fs:scope",
-      "allow": [{ "path": "**" }]
+      "allow": [{ "path": "**" }],
+      "requireLiteralLeadingDot": false
     }
   ]
 }

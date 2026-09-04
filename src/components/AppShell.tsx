@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { dirOf } from "../services/documentLinks";
 import { TitleBar } from "./TitleBar";
 import { TabBar } from "./TabBar";
 import { Sidebar } from "./Sidebar";
 import { EditorPane } from "./EditorPane";
 import { ErrorBanner } from "./ErrorBanner";
+import { commandFor, modalOpen } from "../state/keymap";
+import { useRecentFilesMenu } from "../state/recentFilesMenu";
+import { UndoDeleteBanner } from "./UndoDeleteBanner";
 import { ReattachModal } from "./ReattachModal";
 import { FileConflictBanner } from "./FileConflictBanner";
 import { EditDuringOpenModal } from "./EditDuringOpenModal";
@@ -16,12 +20,7 @@ import { PrintOptionsModal, type PrintOptions } from "./PrintOptionsModal";
 import { FirstRunWelcome } from "./FirstRunWelcome";
 import { useDocument, useWorkspace } from "../state/DocumentProvider";
 import { DocumentBindings } from "../state/DocumentBindings";
-import {
-  classifyAnchors,
-  insertMarkersIntoBody,
-  removeMarkersFromBody,
-  cleanExport,
-} from "../format";
+import { classifyAnchors, insertMarkersIntoBody, cleanExport } from "../format";
 import { contextSnippet, parseForgemarkFile } from "../format";
 import { useFontSize, useFirstRun } from "../state/preferences";
 import { saveDocument } from "../services/fileIO";
@@ -38,7 +37,8 @@ import SAMPLE_TEXT from "../../assets/sample-onboarding.md?raw";
 // EditorPane and Sidebar.
 export function AppShell() {
   const { state, dispatch, setViewMode } = useDocument();
-  const { workspace } = useWorkspace();
+  const { workspace, dispatch: workspaceDispatch } = useWorkspace();
+  useRecentFilesMenu();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [cleanExportOpen, setCleanExportOpen] = useState(false);
@@ -88,32 +88,65 @@ export function AppShell() {
       } catch {
         window.print();
       }
+      // The hidden print editor is a second full editor that re-parses
+      // the document on every keystroke; leaving it mounted after the
+      // first print made typing measurably slower for the rest of the
+      // session.
+      if (!cancelled) setPrintOptions(null);
     });
     return () => {
       cancelled = true;
     };
   }, [printOptions, printRequestId]);
 
-  // Phase 11 keyboard shortcuts that aren't tied to the document
-  // model: Settings (⌘,), Clean Export (⌘⇧E), and Print (⌘P).
+  // App-level shortcuts: Settings, Clean Export, Print, and moving
+  // between tabs. Chords come from the keymap; nothing here fires over
+  // an open dialog, which used to stack a second one.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-      if (!mod) return;
-      if (e.key === ",") {
-        e.preventDefault();
-        setSettingsOpen(true);
-      } else if (!e.shiftKey && !e.altKey && e.key.toLowerCase() === "p") {
-        e.preventDefault();
-        setPrintOptionsOpen(true);
-      } else if (e.shiftKey && e.key.toLowerCase() === "e") {
-        e.preventDefault();
-        if (state.filePath) setCleanExportOpen(true);
+      const cmd = commandFor(e);
+      if (!cmd || modalOpen()) return;
+      const { order, activeId } = workspace;
+      const at = order.indexOf(activeId);
+      switch (cmd) {
+        case "settings":
+          e.preventDefault();
+          setSettingsOpen(true);
+          return;
+        case "print":
+          e.preventDefault();
+          setPrintOptionsOpen(true);
+          return;
+        case "clean-export":
+          e.preventDefault();
+          if (state.filePath) setCleanExportOpen(true);
+          return;
+        case "toggle-sidebar":
+          e.preventDefault();
+          setSidebarOpen((v) => !v);
+          return;
+        case "next-tab":
+        case "prev-tab": {
+          e.preventDefault();
+          if (order.length < 2) return;
+          const step = cmd === "next-tab" ? 1 : -1;
+          const next = order[(at + step + order.length) % order.length];
+          workspaceDispatch({ type: "activateTab", docId: next });
+          return;
+        }
+        default: {
+          const m = /^tab-(\d)$/.exec(cmd);
+          if (!m) return;
+          const target = order[Number(m[1]) - 1];
+          if (!target) return;
+          e.preventDefault();
+          workspaceDispatch({ type: "activateTab", docId: target });
+        }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [state.filePath]);
+  }, [state.filePath, workspace, workspaceDispatch]);
 
   // Native menu bridge — `forgemark:menu` DOM CustomEvents arrive
   // from src/state/menuBridge.ts after the Rust side fires a menu
@@ -199,6 +232,7 @@ export function AppShell() {
       />
       <TabBar />
       <ErrorBanner />
+      <UndoDeleteBanner />
       {/* Phase 10 — file-conflict surfaces. The banner shows when the
           file changed on disk but we have no unsaved work; the
           edit-during-open modal blocks when there *is* unsaved work; the
@@ -274,6 +308,7 @@ export function AppShell() {
           fileName={state.fileName}
           options={printOptions}
           format={state.format}
+          baseDir={dirOf(state.filePath)}
         />
       )}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
@@ -293,12 +328,8 @@ export function AppShell() {
             const baseName = state.fileName.replace(/\.(md|markdown|html?|xhtml)$/i, "");
             const defaultPath = baseName + (state.format === "html" ? "-clean.html" : "-clean.md");
             try {
-              await saveDocument(null, text, state.format);
+              await saveDocument(null, text, state.format, defaultPath);
               setCleanExportOpen(false);
-              // Hint the OS save dialog name via the fileIO layer's
-              // save() — its current signature takes no default name,
-              // so we just write through. Phase 13 may polish.
-              void defaultPath;
             } catch (err) {
               setCleanExportOpen(false);
               dispatch({
@@ -358,18 +389,10 @@ export function AppShell() {
             });
           }}
           onKeepFloating={() => {
-            // For a true orphan, no markers are present in the body, so
-            // removeMarkersFromBody is a no-op. We still call it
-            // defensively in case markers exist for some other reason
-            // (e.g. partially edited file).
-            const id = reattachTargetComment.id;
-            const newBody = removeMarkersFromBody(state.body, id);
-            dispatch({ type: "convertToFloating", commentId: id, body: newBody });
+            dispatch({ type: "convertToFloating", commentId: reattachTargetComment.id });
           }}
           onDiscard={() => {
-            const id = reattachTargetComment.id;
-            const newBody = removeMarkersFromBody(state.body, id);
-            dispatch({ type: "deleteComment", commentId: id, body: newBody });
+            dispatch({ type: "deleteComment", commentId: reattachTargetComment.id });
           }}
         />
       )}

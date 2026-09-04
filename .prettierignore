@@ -20,9 +20,16 @@ assets/forgemark-skill/
 # Local Claude Code settings — untracked, not ours to format.
 .claude/
 
+# Field notes from users are quoted verbatim, not reflowed.
+docs/user_feedback/
+
 # The HTML review fixture is a real generated report, byte-locked to the
 # round-trip test: it asserts that parse → serialize returns these exact
 # bytes, and that anchoring splices only the two markers. Reformatting it
 # would rewrite the very thing under test.
 tests/fixtures/report.html
 docs/example_file/
+
+# Review documents are opened in Forgemark; reformatting would move its markers.
+docs/reviews/
+src/report/report-bridge.built.js

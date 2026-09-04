@@ -3,7 +3,7 @@ import { render, screen, waitFor, fireEvent, act } from "@testing-library/react"
 import { ThemeProvider } from "../../src/theme/ThemeProvider";
 import { DocumentProvider, useWorkspace } from "../../src/state/DocumentProvider";
 import { AppShell } from "../../src/components/AppShell";
-import { saveDocument, openDocument } from "../../src/services/fileIO";
+import { saveDocument } from "../../src/services/fileIO";
 import { invoke } from "@tauri-apps/api/core";
 
 vi.mock("../../src/services/fileIO", () => ({
@@ -11,15 +11,6 @@ vi.mock("../../src/services/fileIO", () => ({
   readDocument: vi.fn(),
   saveDocument: vi.fn(),
 }));
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn(), ask: vi.fn() }));
-vi.mock("@tauri-apps/plugin-fs", () => ({
-  readTextFile: vi.fn(),
-  writeTextFile: vi.fn(),
-  stat: vi.fn(),
-  watch: vi.fn(() => Promise.resolve(() => {})),
-}));
-vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn(() => Promise.resolve()) }));
-vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 
 // Since tabs landed, ⌘N and ⌘O open a new tab and discard nothing, so
 // they no longer need a guard. The two actions that DO destroy work are
@@ -107,9 +98,6 @@ async function requestQuit() {
 describe("opening no longer discards anything", () => {
   beforeEach(() => {
     vi.mocked(saveDocument).mockReset().mockResolvedValue("/tmp/saved.md");
-    vi.mocked(openDocument)
-      .mockReset()
-      .mockResolvedValue(null as never);
     vi.mocked(invoke).mockClear();
   });
 
@@ -187,6 +175,7 @@ describe("closing a tab guards unsaved work", () => {
         "/tmp/saved.md",
         "precious work\n",
         "markdown",
+        "saved.md",
       ),
     );
     expect(screen.queryByTestId("fm-unsaved-modal")).toBeNull();

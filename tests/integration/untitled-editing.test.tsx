@@ -5,16 +5,6 @@ import { DocumentProvider, useDocument } from "../../src/state/DocumentProvider"
 import { AppShell } from "../../src/components/AppShell";
 import { RenderedView } from "../../src/components/RenderedView";
 
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn(), ask: vi.fn() }));
-vi.mock("@tauri-apps/plugin-fs", () => ({
-  readTextFile: vi.fn(),
-  writeTextFile: vi.fn(),
-  stat: vi.fn(),
-  watch: vi.fn(() => Promise.resolve(() => {})),
-}));
-vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn(() => Promise.resolve()) }));
-vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(() => Promise.resolve()) }));
-
 // Regression: typing into an *empty* Untitled buffer produced no edit at
 // all. `editorReadyRef` gates onUpdate and used to be flipped only by the
 // content-sync effect — which early-returns when the content already

@@ -20,6 +20,7 @@
 
 import type { Comment, DocFormat, Reply } from "../format/types";
 import { DEFAULT_FORMAT } from "../format/types";
+import { removeMarkersFromBody } from "../format/compose";
 import type { FileFingerprint } from "../services/conflict";
 
 export type DocumentState = {
@@ -45,7 +46,7 @@ export type DocumentState = {
   // discards the Tiptap/ProseMirror undo stack. Without it the undo
   // history outlives the content it belongs to and ⌘Z walks backwards
   // into the *previous* document. Save As is deliberately excluded (see
-  // `rebindOnly` on the `load` action).
+  // `filePath` on the `saved` action, which rebinds without reloading).
   loadGeneration: number;
   viewMode: "rendered" | "source";
   readOnly: boolean;
@@ -85,6 +86,14 @@ export type DocumentState = {
   // executing effect knows both what to do and what was asked; cleared
   // together via `clearIntent`.
   intentResolution: "save" | "discard" | null;
+  // The comment most recently deleted, with the body as it was before
+  // and after, so the deletion can be undone for a moment. Deleting is
+  // one keystroke and takes a whole thread with it; a confirm dialog
+  // would slow every deletion to guard the rare mistake, while an undo
+  // costs nothing until it is needed. Cleared by any other change to the
+  // body or comments, since restoring an older body over them would
+  // lose those changes.
+  lastDeleted: { comment: Comment; bodyBefore: string; bodyAfter: string } | null;
 };
 
 // Something the user asked for that would throw unsaved work away.
@@ -140,9 +149,13 @@ export type NewComposerState = {
   contextBefore: string;
   contextAfter: string;
   // Set when the anchor wraps a whole block rather than a run of text —
-  // a figure, chart, or table in an HTML report. Recorded on the comment
-  // so the sidebar and the reattach flow can tell the two apart.
-  anchorKind?: "element";
+  // a figure, chart, or table in an HTML report — or, as "passage", a
+  // block whose script-produced text the comment is about. Recorded on
+  // the comment so the sidebar and the reattach flow can tell them apart.
+  anchorKind?: "element" | "passage";
+  // Nothing in the source to anchor to: the comment is written as a
+  // floating note that keeps the quoted text.
+  floating?: boolean;
   // A stable CSS selector for an element anchor, when the report gave
   // the element an id. Used as an exact reattachment hint after the
   // report is regenerated.
@@ -217,6 +230,7 @@ export const INITIAL_STATE: DocumentState = {
   sort: "doc",
   pendingIntent: null,
   intentResolution: null,
+  lastDeleted: null,
 };
 
 export type DocumentAction =
@@ -233,16 +247,21 @@ export type DocumentAction =
       // Omitted by callers that only ever load Markdown (and by Save As,
       // which is rebinding a path rather than changing the language).
       format?: DocFormat;
-      // Save As re-dispatches `load` purely to rebind path/filename —
-      // the content is the same buffer the user has been editing, so
-      // their undo history must survive. Set this to keep
-      // `loadGeneration` (and therefore the editor instance) stable.
-      rebindOnly?: boolean;
     }
   | { type: "edit"; body: string }
-  | { type: "saved"; text: string; body: string }
+  // The write finished. `body`/`comments` are the snapshot that was
+  // serialized, so the reducer can tell whether the document moved on
+  // while the write was in flight. `filePath`/`fileName` are set by Save
+  // As: the same buffer, rebound to a new path, undo history intact.
+  | {
+      type: "saved";
+      text: string;
+      body: string;
+      comments: Comment[];
+      filePath?: string;
+      fileName?: string;
+    }
   | { type: "setViewMode"; viewMode: "rendered" | "source" }
-  | { type: "newUntitled" }
   | { type: "error"; message: string }
   | { type: "dismissError" }
   | { type: "setFocusedComment"; id: number | null }
@@ -260,7 +279,11 @@ export type DocumentAction =
       editedAt: string;
     }
   | { type: "toggleResolved"; commentId: number }
-  | { type: "deleteComment"; commentId: number; body: string }
+  // Several at once: "Resolve all" on whatever the sidebar is showing.
+  | { type: "setResolved"; commentIds: number[]; resolved: boolean }
+  | { type: "deleteComment"; commentId: number }
+  | { type: "undoDelete" }
+  | { type: "dismissUndoDelete" }
   | { type: "deleteReply"; commentId: number; replyIndex: number }
   | { type: "acceptSuggestion"; commentId: number; body: string }
   | { type: "rejectSuggestion"; commentId: number; body: string }
@@ -286,7 +309,7 @@ export type DocumentAction =
         context_after: string;
       }[];
     }
-  | { type: "convertToFloating"; commentId: number; body: string }
+  | { type: "convertToFloating"; commentId: number }
   | { type: "openReattach"; commentId: number }
   | { type: "closeReattach" }
   | {
@@ -310,7 +333,28 @@ export type DocumentAction =
   | { type: "resolveIntent"; resolution: "save" | "discard" }
   | { type: "clearIntent" };
 
+// The same comment records, element for element. Records are replaced,
+// never mutated, so identity per element is exact.
+function sameComments(a: Comment[], b: Comment[]): boolean {
+  return a.length === b.length && a.every((c, i) => c === b[i]);
+}
+
 export function reduceDocument(state: DocumentState, action: DocumentAction): DocumentState {
+  const next = reduce(state, action);
+  // Any change to the body or comments other than the deletion itself
+  // invalidates the undo: the body it would restore no longer contains
+  // that change.
+  if (
+    next.lastDeleted !== null &&
+    action.type !== "deleteComment" &&
+    (next.body !== state.body || next.comments !== state.comments)
+  ) {
+    return { ...next, lastDeleted: null };
+  }
+  return next;
+}
+
+function reduce(state: DocumentState, action: DocumentAction): DocumentState {
   switch (action.type) {
     case "load":
       return {
@@ -322,7 +366,7 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
         comments: action.comments,
         format: action.format ?? state.format,
         dirty: false,
-        loadGeneration: action.rebindOnly ? state.loadGeneration : state.loadGeneration + 1,
+        loadGeneration: state.loadGeneration + 1,
         viewMode: "rendered",
         readOnly: action.readOnly,
         error: null,
@@ -339,6 +383,7 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
         // on the user any more.
         pendingIntent: null,
         intentResolution: null,
+        lastDeleted: null,
         // Filter / sort persist across loads — they're a viewing
         // preference, not a document property.
       };
@@ -349,15 +394,27 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
         body: action.body,
         dirty: true,
       };
-    case "saved":
+    case "saved": {
+      // A keystroke or comment that landed while the write was in flight
+      // is not on disk. Keep it, and keep the document dirty so the next
+      // auto-save writes it; replacing `body` with the written snapshot
+      // used to throw such edits away.
+      const moved = state.body !== action.body || !sameComments(state.comments, action.comments);
       return {
         ...state,
         originalText: action.text,
-        body: action.body,
-        dirty: false,
+        dirty: moved,
         error: null,
         pendingSave: false,
+        ...(action.filePath !== undefined
+          ? {
+              filePath: action.filePath,
+              fileName: action.fileName ?? state.fileName,
+              readOnly: false,
+            }
+          : {}),
       };
+    }
     case "setViewMode":
       return { ...state, viewMode: action.viewMode };
     case "requestIntent":
@@ -368,17 +425,7 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
     case "clearIntent":
       if (!state.pendingIntent && !state.intentResolution) return state;
       return { ...state, pendingIntent: null, intentResolution: null };
-    case "newUntitled":
-      return {
-        ...INITIAL_STATE,
-        filter: state.filter,
-        sort: state.sort,
-        // Must keep climbing, not reset to INITIAL_STATE's 0 — otherwise
-        // ⌘N out of a never-loaded Untitled buffer (generation still 0)
-        // wouldn't change the key, and the discarded document's undo
-        // stack would survive into the new one.
-        loadGeneration: state.loadGeneration + 1,
-      };
+
     case "error":
       return { ...state, error: action.message };
     case "dismissError":
@@ -460,17 +507,55 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
           : state.focusedCommentId;
       return { ...state, comments, dirty: true, focusedCommentId };
     }
-    case "deleteComment":
+    case "setResolved": {
+      const ids = new Set(action.commentIds);
+      if (!state.comments.some((c) => ids.has(c.id) && c.resolved !== action.resolved)) {
+        return state;
+      }
+      const comments = state.comments.map((c) =>
+        ids.has(c.id) && c.resolved !== action.resolved ? { ...c, resolved: action.resolved } : c,
+      );
+      const focusedCommentId =
+        action.resolved && state.focusedCommentId != null && ids.has(state.focusedCommentId)
+          ? null
+          : state.focusedCommentId;
+      return { ...state, comments, dirty: true, focusedCommentId };
+    }
+    case "deleteComment": {
+      const deleted = state.comments.find((c) => c.id === action.commentId);
+      // The markers go with the record. Computed here rather than by the
+      // caller, so no caller can hand over a body that disagrees with
+      // the comment change.
+      const body = removeMarkersFromBody(state.body, action.commentId);
       return {
         ...state,
-        body: action.body,
+        body,
         comments: state.comments.filter((c) => c.id !== action.commentId),
         dirty: true,
         focusedCommentId:
           state.focusedCommentId === action.commentId ? null : state.focusedCommentId,
         composer: null,
         reattachTarget: state.reattachTarget === action.commentId ? null : state.reattachTarget,
+        lastDeleted: deleted ? { comment: deleted, bodyBefore: state.body, bodyAfter: body } : null,
       };
+    }
+    case "undoDelete": {
+      const last = state.lastDeleted;
+      // Only while nothing else has changed: the wrapper above clears
+      // `lastDeleted` on any other change, so this is a consistency
+      // check rather than a branch that should be reachable.
+      if (!last || state.body !== last.bodyAfter) return state;
+      return {
+        ...state,
+        body: last.bodyBefore,
+        comments: [...state.comments, last.comment].sort((a, b) => a.id - b.id),
+        dirty: true,
+        focusedCommentId: last.comment.id,
+        lastDeleted: null,
+      };
+    }
+    case "dismissUndoDelete":
+      return state.lastDeleted ? { ...state, lastDeleted: null } : state;
     case "deleteReply": {
       const comments = state.comments.map((c) => {
         if (c.id !== action.commentId) return c;
@@ -557,7 +642,7 @@ export function reduceDocument(state: DocumentState, action: DocumentAction): Do
       });
       return {
         ...state,
-        body: action.body,
+        body: removeMarkersFromBody(state.body, action.commentId),
         comments,
         dirty: true,
         composer: null,

@@ -10,6 +10,8 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./tests/setup.ts"],
     include: ["tests/**/*.test.ts", "tests/**/*.test.tsx", "src/**/*.test.ts", "src/**/*.test.tsx"],
-    exclude: process.env.RUN_AI_TESTS ? [] : ["tests/ai/**"],
+    // tests/ai holds prompt/expectation cases run by hand with a sub-agent
+    // (see CONVENTIONS.md); there are no runnable tests in it.
+    exclude: ["tests/ai/**"],
   },
 });

@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import type { KeyboardEvent } from "react";
+import { Modal } from "./Modal";
+import { useState } from "react";
 import type { Comment } from "../format/types";
 import type { ReattachCandidate } from "../format/reattach";
 import "./ReattachModal.css";
@@ -34,134 +36,119 @@ export function ReattachModal({
   onCancel,
 }: Props) {
   const [selected, setSelected] = useState<number>(candidates.length > 0 ? 0 : -1);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onCancel();
-        return;
-      }
-      if (candidates.length === 0) return;
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setSelected((i) => Math.min(candidates.length - 1, i + 1));
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setSelected((i) => Math.max(0, i - 1));
-      } else if (e.key === "Enter" && !e.shiftKey && !e.metaKey) {
-        e.preventDefault();
-        if (selected >= 0) onReattach(candidates[selected]);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [candidates, selected, onCancel, onReattach]);
+  // Arrows move the selection and Enter reattaches, within the dialog.
+  const onKey = (e: KeyboardEvent<HTMLDialogElement>) => {
+    if (candidates.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setSelected((i) => Math.min(candidates.length - 1, i + 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setSelected((i) => Math.max(0, i - 1));
+    } else if (e.key === "Enter" && !e.shiftKey && !e.metaKey) {
+      e.preventDefault();
+      if (selected >= 0) onReattach(candidates[selected]);
+    }
+  };
 
   return (
-    <div
-      className="fm-modal-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="fm-reattach-title"
-      data-testid="fm-reattach-modal"
-      onClick={onCancel}
+    <Modal
+      labelledBy="fm-reattach-title"
+      testId="fm-reattach-modal"
+      onClose={onCancel}
+      onKeyDown={onKey}
     >
-      <div className="fm-modal" role="document" onClick={(e) => e.stopPropagation()}>
-        <header className="fm-modal-header">
-          <h2 id="fm-reattach-title" className="fm-modal-title">
-            Reattach “{comment.anchor_text ?? "(no anchor text)"}”
-          </h2>
-          <p className="fm-modal-sub">
-            {comment.author} · {trim(comment.body ?? "(no body)")}
-          </p>
-        </header>
+      <header className="fm-modal-header">
+        <h2 id="fm-reattach-title" className="fm-modal-title">
+          Reattach “{comment.anchor_text ?? "(no anchor text)"}”
+        </h2>
+        <p className="fm-modal-sub">
+          {comment.author} · {trim(comment.body ?? "(no body)")}
+        </p>
+      </header>
 
-        <section className="fm-modal-body">
-          {candidates.length > 0 ? (
-            <>
-              <div className="fm-modal-section-label">Possible matches in the document</div>
-              <ul
-                className="fm-reattach-candidates"
-                role="listbox"
-                aria-label="Reattach candidates"
-                data-testid="fm-reattach-candidates"
-              >
-                {candidates.map((c, i) => (
-                  <li
-                    key={`${c.from}-${c.to}-${c.rationale}`}
-                    role="option"
-                    aria-selected={selected === i}
-                    className={"fm-reattach-candidate" + (selected === i ? " is-selected" : "")}
-                    onClick={() => setSelected(i)}
-                    onDoubleClick={() => onReattach(c)}
-                    data-testid={`fm-reattach-candidate-${i}`}
-                  >
-                    <div className="fm-reattach-candidate-text">
-                      <span className="fm-reattach-context">
-                        {ellipsizeStart(body.slice(Math.max(0, c.from - 36), c.from))}
-                      </span>
-                      <mark className="fm-reattach-match">{c.text}</mark>
-                      <span className="fm-reattach-context">
-                        {ellipsizeEnd(body.slice(c.to, Math.min(body.length, c.to + 36)))}
-                      </span>
-                    </div>
-                    <div className="fm-reattach-candidate-meta">
-                      <span className="fm-reattach-rationale">
-                        {labelForRationale(c.rationale)}
-                      </span>
-                      <span className="fm-reattach-score">{Math.round(c.score * 100)}%</span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : (
-            <div className="fm-modal-empty" data-testid="fm-reattach-no-candidates">
-              No matches found in the current document. You can keep this as a floating note or
-              discard it.
-            </div>
-          )}
-        </section>
+      <section className="fm-modal-body">
+        {candidates.length > 0 ? (
+          <>
+            <div className="fm-modal-section-label">Possible matches in the document</div>
+            <ul
+              className="fm-reattach-candidates"
+              role="listbox"
+              aria-label="Reattach candidates"
+              data-testid="fm-reattach-candidates"
+            >
+              {candidates.map((c, i) => (
+                <li
+                  key={`${c.from}-${c.to}-${c.rationale}`}
+                  role="option"
+                  aria-selected={selected === i}
+                  className={"fm-reattach-candidate" + (selected === i ? " is-selected" : "")}
+                  onClick={() => setSelected(i)}
+                  onDoubleClick={() => onReattach(c)}
+                  data-testid={`fm-reattach-candidate-${i}`}
+                >
+                  <div className="fm-reattach-candidate-text">
+                    <span className="fm-reattach-context">
+                      {ellipsizeStart(body.slice(Math.max(0, c.from - 36), c.from))}
+                    </span>
+                    <mark className="fm-reattach-match">{c.text}</mark>
+                    <span className="fm-reattach-context">
+                      {ellipsizeEnd(body.slice(c.to, Math.min(body.length, c.to + 36)))}
+                    </span>
+                  </div>
+                  <div className="fm-reattach-candidate-meta">
+                    <span className="fm-reattach-rationale">{labelForRationale(c.rationale)}</span>
+                    <span className="fm-reattach-score">{Math.round(c.score * 100)}%</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <div className="fm-modal-empty" data-testid="fm-reattach-no-candidates">
+            No matches found in the current document. You can keep this as a floating note or
+            discard it.
+          </div>
+        )}
+      </section>
 
-        <footer className="fm-modal-footer">
-          <button
-            type="button"
-            className="fm-modal-button fm-modal-button-danger"
-            onClick={onDiscard}
-            data-testid="fm-reattach-discard"
-          >
-            Discard comment
-          </button>
-          <div className="fm-modal-spacer" />
-          <button
-            type="button"
-            className="fm-modal-button"
-            onClick={onCancel}
-            data-testid="fm-reattach-cancel"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="fm-modal-button"
-            onClick={onKeepFloating}
-            data-testid="fm-reattach-keep-floating"
-          >
-            Keep as floating note
-          </button>
-          <button
-            type="button"
-            className="fm-modal-button fm-modal-button-primary"
-            disabled={selected < 0 || candidates.length === 0}
-            onClick={() => selected >= 0 && onReattach(candidates[selected])}
-            data-testid="fm-reattach-apply"
-          >
-            Reattach here
-          </button>
-        </footer>
-      </div>
-    </div>
+      <footer className="fm-modal-footer">
+        <button
+          type="button"
+          className="fm-btn fm-btn-danger"
+          onClick={onDiscard}
+          data-testid="fm-reattach-discard"
+        >
+          Discard comment
+        </button>
+        <div className="fm-modal-spacer" />
+        <button
+          type="button"
+          className="fm-btn"
+          onClick={onCancel}
+          data-testid="fm-reattach-cancel"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="fm-btn"
+          onClick={onKeepFloating}
+          data-testid="fm-reattach-keep-floating"
+        >
+          Keep as floating note
+        </button>
+        <button
+          type="button"
+          className="fm-btn fm-btn-primary"
+          disabled={selected < 0 || candidates.length === 0}
+          onClick={() => selected >= 0 && onReattach(candidates[selected])}
+          data-testid="fm-reattach-apply"
+        >
+          Reattach here
+        </button>
+      </footer>
+    </Modal>
   );
 }
 

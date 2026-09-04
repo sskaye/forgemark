@@ -11,14 +11,6 @@ import { ThemeProvider } from "../../src/theme/ThemeProvider";
 import { PrintDocument } from "../../src/components/PrintDocument";
 import type { Comment } from "../../src/format/types";
 
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn() }));
-vi.mock("@tauri-apps/plugin-fs", () => ({
-  readTextFile: vi.fn(),
-  writeTextFile: vi.fn(),
-  stat: vi.fn(),
-  watch: vi.fn(() => Promise.resolve(() => {})),
-}));
-
 const REPORT = `<!doctype html>
 <html><head><title>Meals</title>
 <style>figure{border:1px solid #ccc}</style></head>

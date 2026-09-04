@@ -8,7 +8,7 @@ const ROOT = resolve(__dirname, "..", "..");
 const SKILL_PATH = join(ROOT, "assets", "forgemark-skill.skill");
 const ZIP_PATH = join(ROOT, "assets", "forgemark-skill.zip");
 const SRC = join(ROOT, "assets", "forgemark-skill");
-const SIZE_BUDGET = 60 * 1024;
+const SIZE_BUDGET = 512 * 1024;
 
 function sha256(buf: Buffer): string {
   return createHash("sha256").update(buf).digest("hex");
@@ -28,7 +28,7 @@ function totalSize(dir: string): number {
 
 describe("skill bundle — source", () => {
   it("ships the canonical files at the bundle root", () => {
-    for (const file of ["SKILL.md", "AGENTS.md", "README.md"]) {
+    for (const file of ["SKILL.md", "AGENTS.md", "README.md", "scripts/forgemark.mjs"]) {
       expect(existsSync(join(SRC, file))).toBe(true);
     }
   });
@@ -38,7 +38,7 @@ describe("skill bundle — source", () => {
     expect(examples.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("source tree is under the 60 KB budget", () => {
+  it("source tree is under the 512 KB budget", () => {
     expect(totalSize(SRC)).toBeLessThan(SIZE_BUDGET);
   });
 });

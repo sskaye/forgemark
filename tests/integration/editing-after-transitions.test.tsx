@@ -10,15 +10,6 @@ vi.mock("../../src/services/fileIO", () => ({
   readDocument: vi.fn(),
   saveDocument: vi.fn(),
 }));
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn(), ask: vi.fn() }));
-vi.mock("@tauri-apps/plugin-fs", () => ({
-  readTextFile: vi.fn(),
-  writeTextFile: vi.fn(),
-  stat: vi.fn(),
-  watch: vi.fn(() => Promise.resolve(() => {})),
-}));
-vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn(() => Promise.resolve()) }));
-vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 
 // The rendered editor gates onUpdate behind `editorReadyRef`, which is
 // closed and reopened around every content swap, and the editor itself is
@@ -55,18 +46,31 @@ function Probe() {
         data-testid="save-as"
         onClick={() =>
           dispatch({
-            type: "load",
-            filePath: "/tmp/renamed.md",
-            fileName: "renamed.md",
+            type: "saved",
             text: "loaded body\n",
             body: "loaded body\n",
             comments: [],
-            readOnly: false,
-            rebindOnly: true,
+            filePath: "/tmp/renamed.md",
+            fileName: "renamed.md",
           })
         }
       />
-      <button data-testid="new" onClick={() => dispatch({ type: "newUntitled" })} />
+      <button
+        data-testid="new"
+        onClick={() =>
+          // A fresh Untitled buffer replacing this one: what ⌘N did before
+          // tabs, and what closing the last tab still does.
+          dispatch({
+            type: "load",
+            filePath: null,
+            fileName: "Untitled",
+            text: "",
+            body: "",
+            comments: [],
+            readOnly: false,
+          })
+        }
+      />
       <button
         data-testid="detect-external"
         onClick={() =>
@@ -128,7 +132,7 @@ describe("typing still reaches state after each transition", () => {
   });
 
   it("after New (⌘N) from a loaded document", async () => {
-    // newUntitled bumps loadGeneration and empties the body — the exact
+    // A fresh buffer bumps loadGeneration and empties the body — the exact
     // combination that reproduced the original bug.
     const { container } = mount();
     await click("load");

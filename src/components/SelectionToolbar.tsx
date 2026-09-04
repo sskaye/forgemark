@@ -32,6 +32,8 @@ export function SelectionToolbar({ x, y, onComment, onSuggest, allowSuggest = tr
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
+    // The nudge from the previous selection must not compound.
+    node.style.transform = "";
     const r = node.getBoundingClientRect();
     let dx = 0;
     let dy = 0;

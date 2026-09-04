@@ -2,6 +2,78 @@
 
 All notable changes to Forgemark are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- A command-line tool for AI agents, shipped inside the skill as `scripts/forgemark.mjs`. `list`, `show`, `comment`, `reply`, `resolve`, `float`, `reattach`, `delete`, and `lint` do everything an agent needs in a review without it ever composing the comments block or placing a marker by hand. It is built from the app's own parser and serializer, checks that every write reads back, and writes atomically; passages are named by quoting them, and the tool refuses an ambiguous phrase or one that overlaps another comment rather than guessing. Works on Markdown and HTML reports, including whole-element anchors by `id`.
+- `forgemark lint` reports everything the app would refuse in a file — with the file line and the comment record for an unreadable block — plus the things a reviewer would rather not meet: an orphaned comment, an anchor description that has drifted, a malformed timestamp.
+
+### Added
+
+- The sidebar header counts lost anchors, offers Resolve all for the open comments it is showing, and ⌘⌥B hides and shows the sidebar.
+- File > Open Recent. The last files opened are listed in the native menu, newest first, with Clear Menu at the bottom; an entry the app can no longer open is dropped from the list.
+- Every keyboard shortcut is now defined in one table, and a test refuses two commands sharing a chord. ⌘⇧E used to open Clean Export, the edit composer, and Find with the selection all at once; it now opens Clean Export only, and editing your own comment is E with the card focused. Card shortcuts act only while the keyboard focus is in the sidebar, never over an open dialog, and never while typing.
+- Tabs from the keyboard: ⌘⇧] and ⌘⇧[ move between tabs, ⌘1 to ⌘9 jump to one, and arrow keys walk the tab strip. In the sidebar, ↑/↓ (or j/k) move between comment cards.
+- Deleting a comment can be undone for a few seconds from a banner. It restores the thread, its replies, and its markers exactly.
+
+### Changed
+
+- An HTML report now runs its own scripts. A dashboard built by script, with tabs, charts, and controls, works as it does in a browser, on an origin of its own from which the app is unreachable; the files beside the report load from the same origin. The frame fills the pane and scrolls itself, so sticky headers and viewport units behave. Adding or removing a comment no longer reloads the report, so the tab or range the reader chose stays chosen.
+- A comment on text the report's script produced anchors the nearest enclosing element with an `id` and keeps the passage as its text (`anchor_kind: passage`), highlighted wherever the element shows it; with no such element it becomes a floating note that keeps the quoted text. Suggestions are not offered on such text.
+
+### Fixed
+
+- A keyboard shortcut pressed while an HTML report has the focus now reaches the app: ⌘⌥M opens the composer on the selection, ⌘S saves, as they do with the focus anywhere else.
+- Editing a document that ends with a list, table, or code block rewrote every block after the edit; only the edited block is rewritten now.
+- Task lists come back tight after an edit instead of gaining a blank line between items.
+- Images and links written relative to the document work. `![](images/x.png)`, an `<img src="images/x.png">`, and a report's own stylesheet, fonts, or images next to it load from the document's folder. A link to `#heading` scrolls to it (every heading now carries the id GitHub would give it), a link to another `.md` or `.html` file opens it in a tab, a link to any other file opens it with the system, and an address opens outside as before. Links inside an HTML report, which did nothing, do the same.
+- Wide tables scroll sideways instead of squeezing every column.
+- Math is drawn by KaTeX: `$x^2$` in text, `$$` on its own lines around a block, or a ` ```math ` fence, each written back in the form it came in. Mermaid fences are drawn as diagrams; the library loads the first time one is shown.
+- Fenced code is syntax-highlighted for the languages highlight.js calls common, in the theme's own colours. A block with no language stays plain rather than being guessed at.
+- GitHub alerts (`> [!NOTE]` and the other four kinds) and footnotes (`[^1]` with `[^1]: text`) are rendered as GitHub renders them, and an edit near either keeps it. Both used to show as literal text and come back escaped and broken after an edit. A single tilde strikes through, as the GFM spec allows. A pipe written as `\|` in a table cell stays escaped when the table is edited instead of splitting the cell.
+- Bare `https://…` and `www.` addresses and e-mail addresses are links again, under GitHub's rule: a scheme, `www.`, or an `@`, never a bare domain, so `SKILL.md` stays text. An edited paragraph writes such an address back bare rather than as `<…>` or `[…](…)`.
+- Raw HTML blocks in Markdown are rendered as GitHub renders them: a centred `<p align="center">` image, an `<img>` with a width, an HTML table, a `<details>` summary. Anything that runs or loads (scripts, frames, event handlers) is left out of the page and kept in the file. A block with nothing to show, such as an HTML comment, keeps its quiet placeholder.
+- Editing a paragraph no longer strips the inline HTML in it. `<kbd>`, `<mark>`, `<ins>`, `<abbr>`, `<small>`, `<cite>`, `<span>` and the other inline tags GitHub renders now display as those elements and come back as written; an HTML comment, a `<wbr>`, or a tag GitHub does not render is kept for the file and shown as nothing. Images are inline, so an image inside a link keeps its link, an image in a sentence stays in it, and an `<img>` with a width or height keeps it.
+- A comment anchored across bold or italic text lost part of its passage each time the paragraph was edited: the anchor was an editor mark ranked outside the emphasis, so its markers came back inside the `**` and the anchor shrank on the next pass. Each marker is now its own inline node and serializes exactly where it sits. Backspace and Delete beside a marker remove the character beyond it rather than the marker, a marker whose partner a deletion swallowed is removed with it so the file never gets a stray one, and pasting a copy of an anchored passage no longer duplicates its markers.
+- On Windows, double-clicking a `.md` or `.html` file now opens it: the installer registered the associations but nothing read the path. A second double-click while the app is running opens the file in the existing window instead of starting a second copy. On every platform, a file handed over during a cold start can no longer be dropped by arriving before the app was listening.
+- After printing once, a hidden second copy of the editor stayed mounted and re-parsed the document on every keystroke, slowing typing for the rest of the session.
+- Comment bodies showed code identifiers wrongly: `snake_case_name` lost its underscores and `a * b * c` its stars.
+- "Doc order" in the sidebar sorted by comment id, which is creation order, rather than by where each anchor sits in the document.
+- Clean Export opened the save dialog as "Untitled" instead of proposing `<name>-clean.md`.
+- The banner for a file whose comments block could not be read appeared on the previous tab, not the one that opened.
+- Clicking the document while writing a reply threw the draft away; a non-empty draft now survives a click outside (Escape still cancels).
+- A persisted "By <author>" filter left the filter menu blank in a file with nothing by that author.
+- Clearing the author name in Settings wrote an empty author into every comment until the next launch.
+- Stepping through Find matches no longer pops the Comment toolbar over each one.
+- The report view no longer re-scans every figure and icon twice per resize, and hidden document panes no longer open their own right-click menu behind the visible one. The comment toolbar no longer inherits the nudge from a previous selection.
+- Replace no longer changes a match that straddles the edge of a comment's anchor, which used to move or remove the anchor silently.
+- ⌘Z after deleting a comment, accepting a suggestion, or reattaching one used to revert the text of that change while the comment records stayed put, leaving markers for a comment that no longer existed. Those changes are no longer undo steps in the editor; undo is for typing.
+- Adding a comment to a Markdown document rewrote the whole file in the editor's dialect: front matter became a heading, bare filenames were autolinked, hard-wrapped paragraphs were unwrapped, reference links inlined, HTML comments deleted. A comment now splices its two markers into the untouched source, so a review-only session leaves every other byte as the author wrote it. When the selected passage appears more than once, its surroundings pick the right one.
+- Typing rewrites only the block you type in, keystroke after keystroke; a reference link inside the block you edit is inlined rather than turned into literal brackets. The document is split into top-level blocks, the editor shows one node per block, and an edit re-serializes just the blocks whose nodes changed and splices them back into their own lines; every other line stays as the author wrote it. Raw HTML blocks (comments, `<div>`s) are shown as read-only placeholders in the rendered view and written back exactly. Front matter, hard wraps, reference links, footnotes, escapes, and table alignment now survive a session of editing elsewhere in the file.
+- What the editor still rewrites in the block you type in has shrunk: front matter is kept aside and put back, bare filenames and addresses are no longer turned into links, bold text is no longer split around inline code, an anchor that touches inline code keeps its markers, markers quoted inside a code fence are left alone, a code block inside a list no longer gains a blank line per save, and a fence that quotes another fence is no longer cut short.
+- Saving from the app failed with "forbidden path" for every file: the temporary file the atomic write creates was hidden (dot-prefixed), which the filesystem scope refuses. The temporary file sits beside the document without a leading dot, and the scope now admits hidden paths so a document inside a hidden folder can be opened.
+- Auto-save and ⌘S could overwrite a change another program had just made to the file — an agent's reply, another editor's save — because the file watcher reports changes with a delay and nothing checked the disk before writing. Every write now compares the file on disk with what was last read or written, and surfaces the change instead of writing over it. The watcher's own delay is shorter, and the app writes through a temporary file and a rename, so a reader never sees a half-written document.
+- Quitting with a read-only document that held an unsaved comment hung the app. It now asks, and offers Save As; ⌘S on a read-only file also offers Save As instead of doing nothing.
+- A keystroke typed while a save was in flight was thrown away when the save finished. Edits made during a write now survive and are saved by the next auto-save.
+- Closing a tab or quitting when the silent save failed (disk full, permissions) closed anyway. It now asks what to do, with the error shown.
+- "Save" from the unsaved-changes prompt on an Untitled buffer saved the file but never closed the tab. Save As also no longer resets the view mode, and refuses a path that is already open in another tab.
+- Save As proposes the document's own name instead of "Untitled".
+- A comment whose anchor crossed a hard-wrapped line could be written as YAML the app could not read back, hiding every comment in the file on the next open. Such values are now quoted, and the app parses its own output before writing it.
+- Opening a file whose comments block could not be read, then adding a comment, appended a second block with colliding ids. Saving now refuses in that state and says where the unreadable block is, so it can be repaired; prose edits still save.
+- The error shown for an unreadable comments block now names the line and the comment id instead of "couldn't be parsed (yaml)".
+
+### Changed
+
+- Every text button in the app is drawn by one stylesheet family (`fm-btn` with size and role modifiers) instead of eight near-identical rulesets, so hover, focus, and disabled states are the same everywhere.
+- Timestamps on comment cards and the hints under Settings fields and composers are drawn at the readable muted tone rather than the decorative faint one. The hover, selected-segment, and danger backgrounds are theme tokens instead of literals copied into nine stylesheets.
+- The app now ships a content-security policy: scripts only from the app itself, images from the app, data URLs, and HTTPS, frames only for the report view. The filesystem scope stays unrestricted, and says why. The release script no longer prints the Apple app-specific password in its log, the version script matches only the top-level version key, and CI builds the macOS app on pushes to main instead of finding bundle breakage on release day.
+- Dead code removed: a reducer action, a file-open helper, a test-only fingerprint helper, two HTML helpers, and the styles for an in-frame button that no longer exists; the marker regex and the "which anchor is this node in" lookup exist once each. Two unused npm packages and two unused Rust crates are gone. A file at a Windows drive root is watched correctly, and a watcher event that names no path no longer triggers a read.
+- Every dialog now uses one modal shell built on the native `dialog` element: it takes focus when it opens, gives it back to whatever opened it when it closes, traps Tab inside itself, and answers Enter only from within. Comment cards are focusable regions rather than buttons, so screen readers hear their content and the reply controls are reachable by keyboard. The Rendered/Source switch and the Settings choices share one segmented control that moves with arrow keys.
+- The test suite mounts the app through one shared harness against one in-memory fake of the Tauri plugins, replacing identical mock blocks in thirty files. Five tests that mounted the document bindings twice, and so ran two auto-save timers against one document, now mount them once. Timing assertions moved behind `npm run test:perf`. The unused AI test harness, its SDK dependency, and the unused retry helper are gone.
+- The skill's instructions lead with the tool; the format reference stays for reading a file and as a fallback. The spec now states that `anchor_text` is advisory and how it is normalised, that ids stay sparse after deletions, and how a regenerated report keeps its review.
+- `npm run verify-ai-output` is now `forgemark lint` over the built tool (the previous script depended on a package that was not installed).
+
 ## [1.6.0] — 2026-08-18
 
 ### Added

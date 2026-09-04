@@ -23,7 +23,7 @@ export function FileConflictBanner({ onKeepYours, onReloadFromDisk }: Props) {
       <div className="fm-conflict-banner-spacer" />
       <button
         type="button"
-        className="fm-conflict-banner-button"
+        className="fm-btn fm-btn-sm"
         onClick={onKeepYours}
         data-testid="fm-conflict-banner-keep"
       >
@@ -31,7 +31,7 @@ export function FileConflictBanner({ onKeepYours, onReloadFromDisk }: Props) {
       </button>
       <button
         type="button"
-        className="fm-conflict-banner-button fm-conflict-banner-button-primary"
+        className="fm-btn fm-btn-sm fm-btn-primary"
         onClick={onReloadFromDisk}
         data-testid="fm-conflict-banner-reload"
       >

@@ -1,73 +1,37 @@
 // REPRODUCTION harness for the "marker corruption hides all comments" bug
 // report. These tests drive the REAL comment-creation path: a headless
 // Tiptap editor built with the exact same extension set as RenderedView,
-// plus a faithful copy of RenderedView.applyAnchor (setMark("anchor") ->
-// getMarkdown() -> bodyFromAnchorSpans). The point is to confirm the root
-// cause empirically, NOT to assert desired behaviour — several of these
-// assertions document the BUG (they should be inverted once fixed).
+// plus RenderedView.applyAnchor's inline branch (anchorEdgesTransaction ->
+// getMarkdown()). The point is to confirm the root cause empirically, NOT
+// to assert desired behaviour — several of these assertions document the
+// BUG (they should be inverted once fixed).
 
 import { describe, it, expect } from "vitest";
 import { Editor } from "@tiptap/core";
-import StarterKit from "@tiptap/starter-kit";
-import Link from "@tiptap/extension-link";
-import Image from "@tiptap/extension-image";
-import { Table } from "@tiptap/extension-table";
-import { TableRow } from "@tiptap/extension-table-row";
-import { TableHeader } from "@tiptap/extension-table-header";
-import { TableCell } from "@tiptap/extension-table-cell";
-import { TaskList } from "@tiptap/extension-task-list";
-import { TaskItem } from "@tiptap/extension-task-item";
-import { Markdown } from "tiptap-markdown";
-import { AnchorMark } from "../../../src/components/AnchorMark";
-import { bodyFromAnchorSpans, bodyWithAnchorSpans } from "../../../src/format/markers-display";
-import {
-  parseForgemarkFile,
-  ForgemarkParseError,
-  recoverForgemarkFile,
-} from "../../../src/format/parser";
+import { renderedExtensions } from "../../../src/components/editorExtensions";
+import { anchorEdgesTransaction, plainText } from "../../../src/components/AnchorEdge";
+import { bodyWithAnchorElements, coalesceAnchorMarkers } from "../../../src/format/markers-display";
+import { parseForgemarkFile, recoverForgemarkFile } from "../../../src/format/parser";
 import { serializeForgemarkFile } from "../../../src/format/serializer";
 import { getAnchorStatus } from "../../../src/format/reattach";
 import type { Comment } from "../../../src/format/types";
 
-// Mirror RenderedView's editor configuration exactly (minus the search /
-// view-sync plugins, which are irrelevant to marker serialization).
+// The editor's configuration, minus the search plugin, which is
+// irrelevant to marker serialization.
 function makeEditor(markdownBody: string): Editor {
   return new Editor({
-    extensions: [
-      StarterKit.configure({ link: false }),
-      Link.configure({ openOnClick: false }),
-      AnchorMark,
-      Image,
-      Table.configure({ resizable: false }),
-      TableRow,
-      TableHeader,
-      TableCell,
-      TaskList,
-      TaskItem.configure({ nested: true }),
-      Markdown.configure({
-        html: true,
-        tightLists: true,
-        bulletListMarker: "-",
-        linkify: true,
-        breaks: false,
-        transformPastedText: true,
-        transformCopiedText: true,
-      }),
-    ],
-    content: bodyWithAnchorSpans(markdownBody),
+    extensions: renderedExtensions(),
+    content: bodyWithAnchorElements(markdownBody),
   });
 }
 
-// Faithful copy of RenderedView.applyAnchor (RenderedView.tsx:310-327).
+// RenderedView.applyAnchor's inline branch, followed by whole-document
+// serialization the way blockSync's fallback does it.
 function applyAnchor(editor: Editor, from: number, to: number, id: number): string {
-  editor
-    .chain()
-    .setTextSelection({ from, to })
-    .setMark("anchor", { anchorId: String(id) })
-    .run();
+  editor.view.dispatch(anchorEdgesTransaction(editor.state, from, to, id));
   const storage = editor.storage as unknown as { markdown?: { getMarkdown?: () => string } };
   const md = storage.markdown?.getMarkdown?.() ?? "";
-  return bodyFromAnchorSpans(md);
+  return coalesceAnchorMarkers(md);
 }
 
 // Count distinct `<!-- fmc:N -->` open markers for a given id in a body.
@@ -79,7 +43,7 @@ function countOpenMarkers(body: string, id: number): number {
 // Build the captured-selection anchor_text the way RenderedView does
 // (textBetween over the rendered doc).
 function textBetween(editor: Editor, from: number, to: number): string {
-  return editor.state.doc.textBetween(from, to, " ", " ");
+  return plainText(editor.state.doc, from, to);
 }
 
 // Select the entire inline content of the first (single) paragraph.
@@ -138,7 +102,10 @@ describe("BUG 2 (report): marker splatter across inline markdown", () => {
 });
 
 describe("BUG 1 (report): overlapping / nested anchor creation corrupts markers", () => {
-  it("a second comment overlapping the first corrupts the marker layout", () => {
+  // The UI now diverts an overlapping selection to a reply, so neither
+  // of these layouts is reachable from it; both are kept because edges
+  // that are nodes make them well-formed, where marks corrupted them.
+  it("a second comment inside the first nests cleanly (FIXED)", () => {
     const body = "Outputs of modules 1, 2, 4, 5, 6, and 7 are combined.";
     const editor = makeEditor(body);
 
@@ -151,9 +118,11 @@ describe("BUG 1 (report): overlapping / nested anchor creation corrupts markers"
     // Re-open an editor on the body that now contains comment 11's span,
     // and add comment 20 on an inner word ("and"), as the UI would.
     const editor2 = makeEditor(working);
-    const fullText = editor2.state.doc.textBetween(1, editor2.state.doc.content.size - 1, " ", " ");
+    // Comment 11's open edge sits at position 1, so text offset i is at
+    // position 2 + i.
+    const fullText = textBetween(editor2, 1, editor2.state.doc.content.size - 1);
     const andIdx = fullText.indexOf(" and ") + 1; // skip leading space
-    const innerFrom = 1 + andIdx;
+    const innerFrom = 2 + andIdx;
     const innerTo = innerFrom + "and".length;
     const anchor20 = textBetween(editor2, innerFrom, innerTo);
     working = applyAnchor(editor2, innerFrom, innerTo, 20);
@@ -165,12 +134,14 @@ describe("BUG 1 (report): overlapping / nested anchor creation corrupts markers"
       comments: [makeRecord(11, anchor11), makeRecord(20, anchor20)],
     });
 
-    // ROOT CAUSE: nesting splits comment 11 into two pairs (or otherwise
-    // breaks the 1:1 invariant) -> parser rejects -> every comment vanishes.
-    expect(() => parseForgemarkFile(file)).toThrow(ForgemarkParseError);
+    // Was: nesting split comment 11 into two pairs -> parser rejected ->
+    // every comment vanished. Now each id keeps exactly one pair.
+    expect(countOpenMarkers(working, 11)).toBe(1);
+    expect(countOpenMarkers(working, 20)).toBe(1);
+    expect(parseForgemarkFile(file).comments.map((c) => c.id)).toEqual([11, 20]);
   });
 
-  it("two comments on the identical span orphan the first record", () => {
+  it("two comments on the identical span both keep their pair (FIXED)", () => {
     const body = "An organized indexed source repository of prose.";
     const editor = makeEditor(body);
     const { from, to } = wholeParagraphRange(editor);
@@ -188,8 +159,10 @@ describe("BUG 1 (report): overlapping / nested anchor creation corrupts markers"
       body: working,
       comments: [makeRecord(3, anchor3), makeRecord(17, anchor17)],
     });
-    // One id's markers overwrite the other's -> a record with no pair.
-    expect(() => parseForgemarkFile(file)).toThrow(ForgemarkParseError);
+    // Was: one id's mark overwrote the other's -> a record with no pair.
+    expect(countOpenMarkers(working, 3)).toBe(1);
+    expect(countOpenMarkers(working, 17)).toBe(1);
+    expect(parseForgemarkFile(file).comments.map((c) => c.id)).toEqual([3, 17]);
   });
 });
 

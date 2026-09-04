@@ -86,6 +86,52 @@
   font-size: inherit;
 }
 
+/* Syntax highlighting (lowlight), in the theme's own colours. */
+.fm-rendered-view .fm-prose pre .hljs-comment,
+.fm-rendered-view .fm-prose pre .hljs-quote {
+  color: var(--fm-prose-muted);
+  font-style: italic;
+}
+.fm-rendered-view .fm-prose pre .hljs-keyword,
+.fm-rendered-view .fm-prose pre .hljs-selector-tag,
+.fm-rendered-view .fm-prose pre .hljs-built_in,
+.fm-rendered-view .fm-prose pre .hljs-type,
+.fm-rendered-view .fm-prose pre .hljs-doctag,
+.fm-rendered-view .fm-prose pre .hljs-meta {
+  color: var(--fm-accent);
+}
+.fm-rendered-view .fm-prose pre .hljs-string,
+.fm-rendered-view .fm-prose pre .hljs-regexp,
+.fm-rendered-view .fm-prose pre .hljs-addition,
+.fm-rendered-view .fm-prose pre .hljs-template-tag {
+  color: var(--fm-success);
+}
+.fm-rendered-view .fm-prose pre .hljs-number,
+.fm-rendered-view .fm-prose pre .hljs-literal,
+.fm-rendered-view .fm-prose pre .hljs-symbol,
+.fm-rendered-view .fm-prose pre .hljs-attr,
+.fm-rendered-view .fm-prose pre .hljs-variable,
+.fm-rendered-view .fm-prose pre .hljs-template-variable {
+  color: var(--fm-orphan-text);
+}
+.fm-rendered-view .fm-prose pre .hljs-title,
+.fm-rendered-view .fm-prose pre .hljs-section,
+.fm-rendered-view .fm-prose pre .hljs-name,
+.fm-rendered-view .fm-prose pre .hljs-selector-id,
+.fm-rendered-view .fm-prose pre .hljs-selector-class {
+  color: var(--fm-prose-ink);
+  font-weight: 600;
+}
+.fm-rendered-view .fm-prose pre .hljs-deletion {
+  color: var(--fm-danger);
+}
+.fm-rendered-view .fm-prose pre .hljs-emphasis {
+  font-style: italic;
+}
+.fm-rendered-view .fm-prose pre .hljs-strong {
+  font-weight: 600;
+}
+
 .fm-rendered-view .fm-prose sub,
 .fm-rendered-view .fm-prose sup {
   font-size: 0.75em;
@@ -174,11 +220,17 @@
   box-shadow: inset 0 0 0 1px var(--fm-accent);
 }
 
-/* Tables */
+/* Tables take their content's width and scroll sideways when wider
+   than the page, as on GitHub, instead of squeezing every column. */
+.fm-rendered-view .fm-prose .tableWrapper {
+  overflow-x: auto;
+  margin: 1em 0;
+}
 .fm-rendered-view .fm-prose table {
   border-collapse: collapse;
-  width: 100%;
-  margin: 1em 0;
+  width: auto;
+  max-width: none;
+  margin: 0;
   font-size: 0.92em;
 }
 
@@ -213,4 +265,184 @@
 
 .fm-rendered-view .fm-prose ul[data-type="taskList"] > li > div {
   flex: 1;
+}
+
+/* A raw-HTML block the editor keeps verbatim (see VerbatimBlock),
+   rendered as the page would render it. */
+.fm-html-block {
+  margin: 0.6em 0;
+}
+.fm-html-block img {
+  max-width: 100%;
+  height: auto;
+}
+.fm-html-block table {
+  border-collapse: collapse;
+}
+.fm-html-block th,
+.fm-html-block td {
+  border: 0.5px solid var(--fm-rule);
+  padding: 4px 10px;
+}
+.fm-html-block summary {
+  cursor: default;
+  font-weight: 600;
+}
+.ProseMirror-selectednode.fm-html-block {
+  outline: 2px solid var(--fm-accent);
+  outline-offset: 2px;
+}
+
+/* A raw-HTML block with nothing to show: a comment, a lone closing tag. */
+.fm-verbatim {
+  margin: 0.6em 0;
+  padding: 6px 10px;
+  border: 1px dashed var(--fm-divider-strong);
+  border-radius: 6px;
+  background: var(--fm-code);
+  font-family: var(--fm-mono);
+  font-size: 0.82em;
+  color: var(--fm-prose-muted);
+  user-select: none;
+}
+.fm-verbatim-label {
+  display: block;
+  font-family: var(--fm-ui);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fm-prose-faint);
+  margin-bottom: 2px;
+}
+.fm-verbatim-source {
+  margin: 0;
+  white-space: pre-wrap;
+  font: inherit;
+}
+.ProseMirror-selectednode.fm-verbatim {
+  outline: 2px solid var(--fm-accent);
+}
+
+/* Inline HTML kept for the file but shown as nothing: a comment, a tag
+   the editor has no element for. */
+.fm-rendered-view fm-html {
+  display: none;
+}
+
+/* Inline HTML GitHub styles. */
+.fm-rendered-view .fm-prose kbd {
+  font-family: var(--fm-mono);
+  font-size: 0.85em;
+  padding: 1px 5px;
+  border: 0.5px solid var(--fm-code-border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--fm-code);
+}
+.fm-rendered-view .fm-prose mark {
+  background: var(--fm-anchor-bg-hover);
+  color: inherit;
+  padding: 0 1px;
+}
+.fm-rendered-view .fm-prose ins {
+  text-decoration: underline;
+}
+.fm-rendered-view .fm-prose abbr[title] {
+  text-decoration: underline dotted;
+  cursor: help;
+}
+.fm-rendered-view .fm-prose p > img {
+  margin: 0;
+  vertical-align: middle;
+}
+
+/* GitHub alerts: a quote whose first line named its kind. */
+.fm-rendered-view .fm-prose blockquote[data-alert] {
+  border-left-color: var(--fm-alert, var(--fm-accent));
+  font-style: normal;
+}
+.fm-rendered-view .fm-prose blockquote[data-alert]::before {
+  content: attr(data-alert-label);
+  display: block;
+  font-family: var(--fm-ui);
+  font-weight: 600;
+  font-size: 0.92em;
+  color: var(--fm-alert, var(--fm-accent));
+  margin-bottom: 0.25em;
+}
+.fm-rendered-view .fm-prose blockquote[data-alert="note"] {
+  --fm-alert: #0969da;
+}
+.fm-rendered-view .fm-prose blockquote[data-alert="tip"] {
+  --fm-alert: #1a7f37;
+}
+.fm-rendered-view .fm-prose blockquote[data-alert="important"] {
+  --fm-alert: #8250df;
+}
+.fm-rendered-view .fm-prose blockquote[data-alert="warning"] {
+  --fm-alert: #9a6700;
+}
+.fm-rendered-view .fm-prose blockquote[data-alert="caution"] {
+  --fm-alert: #cf222e;
+}
+
+/* Footnotes: the reference in the text, the definition where written. */
+.fm-rendered-view .fm-prose sup.fm-footnote-ref {
+  font-size: 0.75em;
+  color: var(--fm-accent);
+  user-select: none;
+}
+.fm-rendered-view .fm-prose .fm-footnote-def {
+  display: flex;
+  gap: 0.6em;
+  font-size: 0.92em;
+  color: var(--fm-prose-muted);
+  margin: 0.4em 0;
+}
+.fm-rendered-view .fm-prose .fm-footnote-label {
+  flex: none;
+  color: var(--fm-accent);
+  user-select: none;
+}
+.fm-rendered-view .fm-prose .fm-footnote-label::before {
+  content: "[";
+}
+.fm-rendered-view .fm-prose .fm-footnote-label::after {
+  content: "]";
+}
+.fm-rendered-view .fm-prose .fm-footnote-body {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Math (KaTeX) and diagrams (Mermaid). */
+.fm-rendered-view .fm-prose .fm-math-block {
+  margin: 1em 0;
+  overflow-x: auto;
+  text-align: center;
+}
+.fm-rendered-view .fm-prose .fm-mermaid {
+  margin: 1em 0;
+  text-align: center;
+  overflow-x: auto;
+}
+.fm-rendered-view .fm-prose .fm-mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+.fm-rendered-view .fm-prose .fm-mermaid-source {
+  text-align: left;
+  color: var(--fm-prose-muted);
+}
+.fm-rendered-view .fm-prose .fm-mermaid-error {
+  font-family: var(--fm-ui);
+  font-size: 12px;
+  color: var(--fm-danger);
+  text-align: left;
+}
+.ProseMirror-selectednode.fm-math-block,
+.ProseMirror-selectednode.fm-mermaid,
+.fm-math.ProseMirror-selectednode {
+  outline: 2px solid var(--fm-accent);
+  outline-offset: 2px;
 }

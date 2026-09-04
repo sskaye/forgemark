@@ -2,18 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, act, waitFor, fireEvent } from "@testing-library/react";
 import { ThemeProvider } from "../../src/theme/ThemeProvider";
 import { DocumentProvider, useDocument } from "../../src/state/DocumentProvider";
-import { DocumentBindings } from "../../src/state/DocumentBindings";
 import { AppShell } from "../../src/components/AppShell";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn() }));
-vi.mock("@tauri-apps/plugin-fs", () => ({
-  readTextFile: vi.fn(),
-  writeTextFile: vi.fn(),
-  stat: vi.fn(),
-  watch: vi.fn(() => Promise.resolve(() => {})),
-}));
 
 const FIXTURE_PATH = resolve(__dirname, "..", "ai", "fixtures", "01-simple.md");
 const FIXTURE = readFileSync(FIXTURE_PATH, "utf-8");
@@ -45,7 +36,6 @@ function renderApp() {
   return render(
     <ThemeProvider initialPreference="light">
       <DocumentProvider>
-        <DocumentBindings />
         <AppShell />
         <FocusProbe />
       </DocumentProvider>
@@ -137,18 +127,14 @@ describe("sidebar / card / anchor synchronisation (Phase 4)", () => {
     });
   });
 
-  it("cards have role=button and tabIndex=0 (keyboard reachable)", async () => {
+  it("cards are focusable regions, not buttons (their controls are buttons)", async () => {
+    // A button may not contain buttons, and an aria-label on the card
+    // replaced its whole content for screen readers.
     await loadFixture();
     const card = screen.getByTestId("fm-card-1");
-    expect(card.getAttribute("role")).toBe("button");
+    expect(card.getAttribute("role")).not.toBe("button");
     expect(card.getAttribute("tabindex")).toBe("0");
-  });
-
-  it("card aria-label includes author and a body preview", async () => {
-    await loadFixture();
-    const card = screen.getByTestId("fm-card-1");
-    const label = card.getAttribute("aria-label") ?? "";
-    expect(label).toContain("Claude");
-    expect(label).toContain("sample composition");
+    expect(card.getAttribute("aria-label")).toContain("Claude");
+    expect(card.textContent).toContain("sample composition");
   });
 });

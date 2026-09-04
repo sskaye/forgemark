@@ -31,10 +31,16 @@ import {
 
 export class ForgemarkParseError extends Error {
   readonly kind: string;
-  constructor(kind: string, message: string) {
+  // 1-based line in the *file* where the problem was found, when known.
+  readonly line?: number;
+  // The comment record the problem sits in, when it can be told.
+  readonly commentId?: number;
+  constructor(kind: string, message: string, where: { line?: number; commentId?: number } = {}) {
     super(message);
     this.name = "ForgemarkParseError";
     this.kind = kind;
+    if (where.line !== undefined) this.line = where.line;
+    if (where.commentId !== undefined) this.commentId = where.commentId;
   }
 }
 
@@ -45,6 +51,7 @@ type BlockLocation = {
   body: string; // text up to and including the newline before the open sentinel
   yaml: string; // YAML text between the sentinels (no leading/trailing fence)
   trailingNewline: string; // any whitespace after the closing `-->`
+  yamlStartLine: number; // 1-based file line of the first YAML line
 };
 
 function locateBlock(input: string): BlockLocation | null {
@@ -76,7 +83,49 @@ function locateBlock(input: string): BlockLocation | null {
     body: input.slice(0, idx),
     yaml,
     trailingNewline,
+    yamlStartLine: countLines(input.slice(0, idx)) + 2,
   };
+}
+
+function countLines(s: string): number {
+  let n = 0;
+  for (let i = 0; i < s.length; i++) if (s.charCodeAt(i) === 10) n++;
+  return n;
+}
+
+// A comments block that is not the trailing one. `locateBlock` finds the
+// block from the end of the file, so an earlier `<!-- forgemark-comments`
+// line — the leftover of a block that could not be read, or a second
+// block appended by hand — silently becomes part of the body and its
+// comments vanish. Callers use this to refuse to write such a file, and
+// to say where the stray block is.
+//
+// A sentinel inside a fenced code block is not a block (the format spec
+// quotes one), so fences are tracked the way the marker scanner does.
+export function findStrayBlock(body: string): { line: number } | null {
+  const lines = body.split("\n");
+  let fence: string | null = null;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const fenceMatch = line.match(/^ {0,3}(`{3,}|~{3,})/);
+    if (fence === null) {
+      if (fenceMatch) {
+        fence = fenceMatch[1];
+        continue;
+      }
+      if (line.startsWith(BLOCK_OPEN) && /^\s*$/.test(line.slice(BLOCK_OPEN.length))) {
+        return { line: i + 1 };
+      }
+    } else if (
+      fenceMatch &&
+      fenceMatch[1][0] === fence[0] &&
+      fenceMatch[1].length >= fence.length &&
+      /^\s*$/.test(line.slice(fenceMatch[0].length))
+    ) {
+      fence = null;
+    }
+  }
+  return null;
 }
 
 export type ParseOptions = {
@@ -97,7 +146,7 @@ export function parseForgemarkFile(input: string, opts: ParseOptions = {}): Pars
   if (!block) {
     return { body: input, comments: [] };
   }
-  const comments = parseCommentsYAML(block.yaml);
+  const comments = parseCommentsYAML(block.yaml, block.yamlStartLine);
   validateAgainstBody(block.body, comments, opts);
   return { body: block.body, comments };
 }
@@ -132,20 +181,29 @@ export function recoverForgemarkFile(
   }
   let comments: Comment[];
   try {
-    comments = parseCommentsYAML(block.yaml);
-  } catch {
+    comments = parseCommentsYAML(block.yaml, block.yamlStartLine);
+  } catch (err) {
     // YAML itself is unreadable — nothing to anchor. Fall back to plain
-    // markdown with the trailing block left in the body untouched.
+    // markdown with the trailing block left in the body untouched. The
+    // message carries the line and record, since "the block is broken"
+    // on a fifty-record block otherwise means bisecting by hand.
     return {
       file: { body: input, comments: [] },
       recovered: false,
-      problems: ["The comments block could not be read."],
+      problems: [err instanceof Error ? err.message : "The comments block could not be read."],
     };
   }
 
   // 1. Coalesce splattered same-id runs back into single pairs.
   let body = coalesceAnchorMarkers(block.body);
   const problems: string[] = [];
+
+  const stray = findStrayBlock(body);
+  if (stray) {
+    problems.push(
+      `An earlier comments block at line ${stray.line} was ignored; the comments in it are not shown.`,
+    );
+  }
 
   const { pairs, unmatched } = pairMarkers(findMarkers(body, format));
   const pairCount = new Map<number, number>();
@@ -181,13 +239,21 @@ export function recoverForgemarkFile(
   return { file: { body, comments }, recovered, problems };
 }
 
-function parseCommentsYAML(yaml: string): Comment[] {
+// Parse the YAML payload of a comments block on its own, with no body to
+// validate against. `startLine` is the 1-based file line of the first
+// YAML line, so errors can name a line in the file rather than in the
+// block. Exported for the serializer's parse-back check and for tooling.
+export function parseCommentsBlock(yaml: string, startLine = 1): Comment[] {
+  return parseCommentsYAML(yaml, startLine);
+}
+
+function parseCommentsYAML(yaml: string, startLine = 1): Comment[] {
   if (!yaml.trim()) return [];
   let raw: unknown;
   try {
     raw = parseYAML(yaml);
   } catch (err) {
-    throw new ForgemarkParseError("yaml", `Malformed comments YAML: ${(err as Error).message}`);
+    throw yamlError(err, yaml, startLine);
   }
   if (raw === null || raw === undefined) return [];
   if (!Array.isArray(raw)) {
@@ -199,6 +265,48 @@ function parseCommentsYAML(yaml: string): Comment[] {
     }
     return parseCommentRecord(entry as Record<string, unknown>, i);
   });
+}
+
+// Turn a `yaml` library error into one that names the file line and the
+// comment record it falls in. The library reports a position within the
+// block; the record is found by walking back to the nearest list item
+// and reading its `id`.
+function yamlError(err: unknown, yaml: string, startLine: number): ForgemarkParseError {
+  const e = err as { message?: string; linePos?: { line: number; col: number }[] };
+  const reason = (e.message ?? String(err))
+    .split("\n")[0]
+    .replace(/\s+at line \d+, column \d+:?$/, "")
+    .trim();
+  const blockLine = e.linePos?.[0]?.line;
+  if (blockLine === undefined) {
+    return new ForgemarkParseError("yaml", `Malformed comments YAML: ${reason}`);
+  }
+  const fileLine = startLine + blockLine - 1;
+  const lines = yaml.split("\n");
+  let itemStart = -1;
+  for (let i = Math.min(blockLine, lines.length) - 1; i >= 0; i--) {
+    if (/^- /.test(lines[i])) {
+      itemStart = i;
+      break;
+    }
+  }
+  let commentId: number | undefined;
+  if (itemStart >= 0) {
+    for (let i = itemStart; i < lines.length; i++) {
+      if (i > itemStart && /^- /.test(lines[i])) break;
+      const m = lines[i].match(/^(?:- |\s+)id:\s*(\d+)\s*$/);
+      if (m) {
+        commentId = Number(m[1]);
+        break;
+      }
+    }
+  }
+  const where = commentId !== undefined ? ` (comment id ${commentId})` : "";
+  return new ForgemarkParseError(
+    "yaml",
+    `Malformed comments YAML at line ${fileLine}${where}: ${reason}`,
+    { line: fileLine, commentId },
+  );
 }
 
 function parseCommentRecord(raw: Record<string, unknown>, index: number): Comment {
@@ -242,10 +350,10 @@ function parseCommentRecord(raw: Record<string, unknown>, index: number): Commen
   }
 
   const anchorKind = raw["anchor_kind"];
-  if (anchorKind !== undefined && anchorKind !== "element") {
+  if (anchorKind !== undefined && anchorKind !== "element" && anchorKind !== "passage") {
     throw new ForgemarkParseError(
       "schema",
-      `Comment id=${idValue}: 'anchor_kind' must be "element" if present`,
+      `Comment id=${idValue}: 'anchor_kind' must be "element" or "passage" if present`,
     );
   }
   const anchorSelector = raw["anchor_selector"];
@@ -317,7 +425,7 @@ function parseCommentRecord(raw: Record<string, unknown>, index: number): Commen
   };
   if (floating === true) out.floating = true;
   if (anchorText !== undefined) out.anchor_text = unescapeContent(anchorText);
-  if (anchorKind !== undefined) out.anchor_kind = "element";
+  if (anchorKind !== undefined) out.anchor_kind = anchorKind;
   if (anchorSelector !== undefined) out.anchor_selector = unescapeContent(anchorSelector);
   if (contextBefore !== undefined) out.context_before = unescapeContent(contextBefore);
   if (contextAfter !== undefined) out.context_after = unescapeContent(contextAfter);

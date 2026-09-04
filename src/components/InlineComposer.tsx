@@ -55,18 +55,21 @@ export function InlineComposer({
     ta.style.height = next + "px";
   }, [body]);
 
-  // Click-outside cancels. Listening on mousedown so the click that
-  // opens the composer doesn't immediately close it.
+  // Click-outside cancels an empty composer. Listening on mousedown so
+  // the click that opens the composer doesn't immediately close it. A
+  // draft is kept: clicking the document to re-read the passage you are
+  // replying to must not throw the reply away (Escape still cancels).
   useEffect(() => {
     const onDocMouseDown = (e: MouseEvent) => {
       const c = containerRef.current;
       if (!c) return;
       if (e.target instanceof Node && c.contains(e.target)) return;
+      if (body.trim().length > 0 && body !== initialBody) return;
       onCancel();
     };
     document.addEventListener("mousedown", onDocMouseDown);
     return () => document.removeEventListener("mousedown", onDocMouseDown);
-  }, [onCancel]);
+  }, [onCancel, body, initialBody]);
 
   const valid = body.trim().length > 0;
   const onKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
@@ -105,12 +108,12 @@ export function InlineComposer({
         <span className="fm-inline-composer-hint" aria-hidden>
           ⌘↵ to submit · Esc to cancel
         </span>
-        <button type="button" className="fm-inline-composer-cancel" onClick={onCancel}>
+        <button type="button" className="fm-btn fm-btn-sm" onClick={onCancel}>
           Cancel
         </button>
         <button
           type="button"
-          className="fm-inline-composer-submit"
+          className="fm-btn fm-btn-sm fm-btn-primary"
           disabled={!valid}
           onClick={() => valid && onSubmit(body.trim())}
           data-testid="fm-inline-composer-submit"

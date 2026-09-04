@@ -52,18 +52,9 @@ export async function watchMarkdownFile(
     if (disposed) return;
     timer = null;
     try {
-      const text = await readTextFile(path);
-      let mtimeMs: number | null = null;
-      try {
-        const s = await stat(path);
-        const m = (s as { mtime?: Date | null }).mtime;
-        mtimeMs = m instanceof Date ? m.getTime() : null;
-      } catch {
-        mtimeMs = null;
-      }
-      const fp = await fingerprint(text, mtimeMs);
-      if (compareFingerprints(getBaseline(), fp) === "unchanged") return;
-      onChange({ text, fingerprint: fp });
+      const snap = await snapshotFile(path);
+      if (compareFingerprints(getBaseline(), snap.fingerprint) === "unchanged") return;
+      onChange(snap);
     } catch (err) {
       // Read failures during a save are common (the file is briefly
       // truncated or replaced). Log to the console so debugging is
@@ -89,7 +80,11 @@ export async function watchMarkdownFile(
       if (timer) clearTimeout(timer);
       timer = setTimeout(fire, debounceMs);
     },
-    { recursive: false },
+    // The plugin debounces on its own, with a two-second default. That
+    // was the window in which the app's auto-save could overwrite an
+    // external change before it was ever reported; keep it short and
+    // let our own debounce below coalesce the burst.
+    { recursive: false, delayMs: 200 },
   );
   // Confirm the subscription succeeded — if you don't see this in
   // the console after opening a file, the watcher never started.
@@ -108,11 +103,35 @@ export async function watchMarkdownFile(
   };
 }
 
+// The file as it is on disk right now: its bytes and their fingerprint.
+// Used by the watcher when an event settles, and by every write path
+// before it writes — the watcher is debounced, so "nothing reported yet"
+// is not the same as "nothing changed".
+export async function snapshotFile(path: string): Promise<WatcherEvent> {
+  const text = await readTextFile(path);
+  if (typeof text !== "string") throw new Error(`Couldn't read ${path}`);
+  return { text, fingerprint: await fingerprint(text, await mtimeOf(path)) };
+}
+
+// The file's mtime in ms, or null when it can't be read. Carried in the
+// baseline so the comparison can skip hashing when nothing was touched.
+export async function mtimeOf(path: string): Promise<number | null> {
+  try {
+    const s = await stat(path);
+    const m = (s as { mtime?: Date | null }).mtime;
+    return m instanceof Date ? m.getTime() : null;
+  } catch {
+    return null;
+  }
+}
+
 function parentDirOf(p: string): string {
   const idx = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
   if (idx < 0) return ".";
   if (idx === 0) return "/"; // root
-  return p.slice(0, idx);
+  const dir = p.slice(0, idx);
+  // "C:\\doc.md" → "C:\\", not "C:" (which notify reads as a relative path).
+  return /^[A-Za-z]:$/.test(dir) ? dir + p[idx] : dir;
 }
 
 function baseNameOf(p: string): string {
@@ -121,12 +140,12 @@ function baseNameOf(p: string): string {
 }
 
 // notify's event payload varies by platform but always includes a
-// `paths` array. We accept anything with a paths field and filter on
-// suffix match (the file we care about lives somewhere in the dir).
+// `paths` array; filter on it, so a change to another file in the same
+// directory doesn't cost a read of ours.
 function eventTouchesFile(event: unknown, fileName: string): boolean {
-  if (!event || typeof event !== "object") return true; // be permissive
+  if (!event || typeof event !== "object") return false;
   const paths = (event as { paths?: unknown }).paths;
-  if (!Array.isArray(paths)) return true;
+  if (!Array.isArray(paths)) return false;
   return paths.some(
     (p) =>
       typeof p === "string" &&

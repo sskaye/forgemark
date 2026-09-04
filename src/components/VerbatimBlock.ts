@@ -1,0 +1,113 @@
+import { Node, mergeAttributes } from "@tiptap/core";
+import { sanitizeHtml } from "../services/sanitizeHtml";
+import { resolveResource } from "../services/documentLinks";
+
+// A block the editor cannot hold — raw HTML: a comment, a <div>, a
+// <details> — shown read-only and written back byte for byte.
+//
+// The editor used to drop these on the floor (an HTML comment) or
+// mangle them (a <div> became its text). The body is split into blocks
+// before it reaches the editor (src/format/blocks.ts); each raw-HTML
+// block arrives as `<div data-fm-src="…">` carrying its own source,
+// URL-encoded so it survives the attribute, and leaves the same way.
+//
+// What the block shows is its HTML, rendered as GitHub renders it: a
+// centred image, a table, a <details> summary, sanitized to nothing
+// that runs or loads (src/services/sanitizeHtml.ts). A block with no
+// visible output — a comment, a lone closing tag, a stripped <script> —
+// shows a quiet placeholder with its source, so the reader knows it is
+// there.
+
+interface SerializerState {
+  write(text: string): void;
+  closeBlock(node: unknown): void;
+}
+
+export const VerbatimBlock = Node.create({
+  name: "verbatimBlock",
+  group: "block",
+  atom: true,
+  selectable: true,
+  draggable: false,
+
+  addAttributes() {
+    return {
+      source: {
+        default: "",
+        parseHTML: (el: HTMLElement) => {
+          try {
+            return decodeURIComponent(el.getAttribute("data-fm-src") ?? "");
+          } catch {
+            return el.getAttribute("data-fm-src") ?? "";
+          }
+        },
+        renderHTML: (attrs: { source: string }) => ({
+          "data-fm-src": encodeURIComponent(attrs.source),
+        }),
+      },
+    };
+  },
+
+  parseHTML() {
+    return [{ tag: "div[data-fm-src]" }];
+  },
+
+  renderHTML({ node, HTMLAttributes }) {
+    const source = String(node.attrs.source);
+    const baseDir =
+      (this.editor?.storage as { assetPaths?: { baseDir: string | null } } | undefined)?.assetPaths
+        ?.baseDir ?? null;
+    const shown =
+      typeof document === "undefined"
+        ? null
+        : sanitizeHtml(source, document, { resolve: (ref) => resolveResource(baseDir, ref) });
+    if (shown && hasVisibleContent(shown)) {
+      const wrapper = document.createElement("div");
+      for (const [name, value] of Object.entries(HTMLAttributes)) {
+        if (value != null) wrapper.setAttribute(name, String(value));
+      }
+      wrapper.className = "fm-html-block";
+      wrapper.setAttribute("contenteditable", "false");
+      wrapper.setAttribute("title", "Raw HTML is kept exactly as written; edit it in Source view.");
+      wrapper.appendChild(shown);
+      return wrapper;
+    }
+    const label = source.trimStart().startsWith("<!--") ? "HTML comment" : "HTML";
+    return [
+      "div",
+      mergeAttributes(HTMLAttributes, {
+        class: "fm-verbatim",
+        contenteditable: "false",
+        title: "Raw HTML is kept exactly as written; edit it in Source view.",
+      }),
+      ["span", { class: "fm-verbatim-label" }, label],
+      ["pre", { class: "fm-verbatim-source" }, source],
+    ];
+  },
+
+  addStorage() {
+    return {
+      markdown: {
+        serialize(state: SerializerState, node: { attrs: { source: string } }) {
+          state.write(node.attrs.source);
+          state.closeBlock(node);
+        },
+        parse: {},
+      },
+    };
+  },
+});
+
+function hasVisibleContent(fragment: DocumentFragment): boolean {
+  for (const child of Array.from(fragment.childNodes)) {
+    if (child.nodeType === 1) return true; // element
+    if (child.nodeType === 3 && (child.textContent ?? "").trim() !== "") return true; // text
+  }
+  return false;
+}
+
+// The editor-side form of a verbatim block: one HTML block markdown-it
+// passes through and the node above parses.
+export function verbatimTag(source: string): string {
+  return `<div data-fm-src="${encodeURIComponent(source)}"></div>`;
+}

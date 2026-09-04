@@ -2,11 +2,27 @@
 export {
   parseForgemarkFile,
   recoverForgemarkFile,
+  parseCommentsBlock,
+  findStrayBlock,
   ForgemarkParseError,
   type ParseOptions,
   type RecoveryResult,
 } from "./parser";
-export { serializeForgemarkFile } from "./serializer";
+export {
+  serializeForgemarkFile,
+  ForgemarkSerializeError,
+  type SerializeOptions,
+} from "./serializer";
+export { normalizeAnchorText, anchorTextMatches, stripMarkdownInline } from "./anchor-text";
+export {
+  locateAnchor,
+  locateElement,
+  applyPlacement,
+  AnchorError,
+  type Placement,
+  type LocateOptions,
+} from "./locate";
+export { splitFrontmatter, type SplitBody } from "./frontmatter";
 export {
   findMarkers,
   findMarkersMarkdown,
@@ -41,7 +57,7 @@ export {
   type HtmlTextRun,
 } from "./html/textmap";
 export { escapeContent, unescapeContent } from "./escape";
-export { bodyWithAnchorSpans, bodyFromAnchorSpans, coalesceAnchorMarkers } from "./markers-display";
+export { bodyWithAnchorElements, coalesceAnchorMarkers } from "./markers-display";
 export {
   nextCommentId,
   insertMarkersIntoBody,

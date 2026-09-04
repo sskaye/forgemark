@@ -14,7 +14,7 @@
 // All Tauri-flavoured calls go through this module. Tests stub it.
 
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { readTextFile, writeTextFile, stat } from "@tauri-apps/plugin-fs";
+import { readTextFile, writeTextFile, stat, lstat, rename, remove } from "@tauri-apps/plugin-fs";
 import { detectFormat } from "../format/types";
 import type { DocFormat } from "../format/types";
 
@@ -37,17 +37,6 @@ export type OpenedFile = {
   // decision is made exactly once per open.
   format: DocFormat;
 };
-
-// Open a single document. Returns null if the user cancelled.
-// Throws if the chosen file can't be read (e.g. moved between dialog
-// pick and read).
-//
-// Kept for callers that want exactly one document; multi-select lives in
-// `openDocuments` below.
-export async function openDocument(): Promise<OpenedFile | null> {
-  const [first = null] = await openDocuments({ multiple: false });
-  return first;
-}
 
 // Open one or more documents. Each becomes its own tab.
 //
@@ -114,6 +103,9 @@ export async function saveDocument(
   path: string | null,
   text: string,
   format: DocFormat = "markdown",
+  // The name the dialog proposes when it has to ask. Defaults to
+  // Untitled with the format's extension.
+  defaultName?: string,
 ): Promise<string | null> {
   let target = path;
   if (!target) {
@@ -122,13 +114,47 @@ export async function saveDocument(
         format === "html"
           ? [{ name: "HTML", extensions: HTML_EXTENSIONS }]
           : [{ name: "Markdown", extensions: MARKDOWN_EXTENSIONS }],
-      defaultPath: format === "html" ? "Untitled.html" : "Untitled.md",
+      defaultPath: defaultName ?? (format === "html" ? "Untitled.html" : "Untitled.md"),
     });
     if (!chosen) return null; // user cancelled
     target = chosen;
   }
-  await writeTextFile(target, text);
+  await writeAtomically(target, text);
   return target;
+}
+
+// Write beside the target and rename into place, so a reader that opens
+// the file mid-write — the CLI's lint, an agent's watcher, a sync
+// client — sees the old bytes or the new ones, never a truncated file.
+// The rename is also the single event the directory watcher was built
+// around. A symlink is written in place instead: renaming over it would
+// replace the link with a plain file.
+async function writeAtomically(target: string, text: string): Promise<void> {
+  let symlink = false;
+  try {
+    symlink = (await lstat(target)).isSymlink === true;
+  } catch {
+    // The file doesn't exist yet; a plain rename creates it.
+  }
+  if (symlink) {
+    await writeTextFile(target, text);
+    return;
+  }
+  // Beside the target, and not dot-prefixed: the filesystem scope's
+  // `**` does not match hidden names, so a `.name.tmp` was refused and
+  // every save failed with "forbidden path".
+  const tmp = `${target}.${Date.now().toString(36)}.forgemark-tmp`;
+  await writeTextFile(tmp, text);
+  try {
+    await rename(tmp, target);
+  } catch (err) {
+    try {
+      await remove(tmp);
+    } catch {
+      // The rename error is the one worth reporting.
+    }
+    throw err;
+  }
 }
 
 export function basename(path: string): string {

@@ -1,0 +1,38 @@
+.fm-undo-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 8px 8px 14px;
+  border-radius: 8px;
+  background: var(--fm-sidebar-bg);
+  color: var(--fm-chrome-text);
+  border: 1px solid var(--fm-divider);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  font-family: var(--fm-ui);
+  font-size: 13px;
+  z-index: 40;
+}
+.fm-undo-banner-button {
+  font-weight: 600;
+  color: var(--fm-accent);
+}
+.fm-undo-banner-dismiss {
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--fm-chrome-muted);
+  background: transparent;
+  border: 0;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.fm-undo-banner-dismiss:hover,
+.fm-undo-banner-dismiss:focus-visible {
+  color: var(--fm-chrome-text);
+  outline: none;
+}

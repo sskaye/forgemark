@@ -76,18 +76,6 @@
 }
 
 .fm-findbar-button,
-.fm-findbar-text-button {
-  height: 26px;
-  border: 0.5px solid var(--fm-divider-strong);
-  border-radius: 5px;
-  background: var(--fm-card-bg);
-  color: var(--fm-chrome-text);
-  cursor: default;
-  font-family: var(--fm-ui);
-  font-size: 12px;
-}
-
-.fm-findbar-button,
 .fm-findbar-replace-toggle {
   display: inline-flex;
   align-items: center;
@@ -108,33 +96,20 @@
 
 .fm-findbar-button {
   width: 26px;
+  height: 26px;
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
 .fm-findbar-text-button {
+  height: 26px;
   padding: 0 9px;
 }
 
 .fm-findbar-replace-actions {
   width: 100%;
-}
-
-.fm-findbar-button:hover:not(:disabled),
-.fm-findbar-text-button:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.04);
-}
-
-[data-theme="dark"] .fm-findbar-button:hover:not(:disabled),
-[data-theme="dark"] .fm-findbar-text-button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.fm-findbar-button:disabled,
-.fm-findbar-text-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 
 @media (max-width: 720px) {

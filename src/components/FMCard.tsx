@@ -2,6 +2,7 @@ import { useState, type KeyboardEvent } from "react";
 import { Avatar } from "./Avatar";
 import { InlineComposer } from "./InlineComposer";
 import type { Comment, Reply } from "../format/types";
+import { stripMarkdownInline } from "../format";
 import "./FMCard.css";
 
 type Props = {
@@ -100,10 +101,9 @@ export function FMCard({
         className={className}
         data-testid={`fm-card-${comment.id}`}
         data-anchor-card-id={comment.id}
-        role="button"
         tabIndex={0}
-        aria-pressed={focused}
-        aria-label={`Resolved comment by ${comment.author}: ${plainPreview(comment, 60)}`}
+        aria-current={focused ? "true" : undefined}
+        aria-label={`Resolved comment by ${comment.author}`}
         onClick={onFocus}
         onKeyDown={onKey}
         onMouseEnter={() => onHover(true)}
@@ -126,11 +126,11 @@ export function FMCard({
       className={className}
       data-testid={`fm-card-${comment.id}`}
       data-anchor-card-id={comment.id}
-      role="button"
       tabIndex={0}
-      aria-pressed={focused}
-      aria-label={`Comment by ${comment.author}: ${plainPreview(comment, 60)}`}
+      aria-current={focused ? "true" : undefined}
+      aria-label={`Comment by ${comment.author}`}
       onClick={onFocus}
+      onFocus={onFocus}
       onKeyDown={onKey}
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}
@@ -210,7 +210,7 @@ export function FMCard({
             <>
               <button
                 type="button"
-                className="fm-card-action fm-card-action-accept"
+                className="fm-btn fm-btn-sm fm-btn-success"
                 onClick={(e) => {
                   e.stopPropagation();
                   onReattach?.();
@@ -222,7 +222,7 @@ export function FMCard({
               <div className="fm-card-actions-spacer" />
               <button
                 type="button"
-                className="fm-card-action fm-card-action-danger"
+                className="fm-btn fm-btn-sm fm-btn-danger"
                 onClick={(e) => {
                   e.stopPropagation();
                   onDelete();
@@ -236,7 +236,7 @@ export function FMCard({
             <>
               <button
                 type="button"
-                className="fm-card-action fm-card-action-accept"
+                className="fm-btn fm-btn-sm fm-btn-success"
                 onClick={(e) => {
                   e.stopPropagation();
                   onAcceptSuggestion();
@@ -247,7 +247,7 @@ export function FMCard({
               </button>
               <button
                 type="button"
-                className="fm-card-action"
+                className="fm-btn fm-btn-sm"
                 onClick={(e) => {
                   e.stopPropagation();
                   onRejectSuggestion();
@@ -259,7 +259,7 @@ export function FMCard({
               {isOwn && (
                 <button
                   type="button"
-                  className="fm-card-action"
+                  className="fm-btn fm-btn-sm"
                   onClick={(e) => {
                     e.stopPropagation();
                     onEdit();
@@ -272,7 +272,7 @@ export function FMCard({
               <div className="fm-card-actions-spacer" />
               <button
                 type="button"
-                className="fm-card-action fm-card-action-danger"
+                className="fm-btn fm-btn-sm fm-btn-danger"
                 onClick={(e) => {
                   e.stopPropagation();
                   onDelete();
@@ -286,7 +286,7 @@ export function FMCard({
             <>
               <button
                 type="button"
-                className="fm-card-action"
+                className="fm-btn fm-btn-sm"
                 onClick={(e) => {
                   e.stopPropagation();
                   onReply();
@@ -298,7 +298,7 @@ export function FMCard({
               {isOwn && (
                 <button
                   type="button"
-                  className="fm-card-action"
+                  className="fm-btn fm-btn-sm"
                   onClick={(e) => {
                     e.stopPropagation();
                     onEdit();
@@ -310,7 +310,7 @@ export function FMCard({
               )}
               <button
                 type="button"
-                className="fm-card-action"
+                className="fm-btn fm-btn-sm"
                 onClick={(e) => {
                   e.stopPropagation();
                   onResolve();
@@ -322,7 +322,7 @@ export function FMCard({
               <div className="fm-card-actions-spacer" />
               <button
                 type="button"
-                className="fm-card-action fm-card-action-danger"
+                className="fm-btn fm-btn-sm fm-btn-danger"
                 onClick={(e) => {
                   e.stopPropagation();
                   onDelete();
@@ -379,7 +379,7 @@ function ReplyView({
             {isOwn && (
               <button
                 type="button"
-                className="fm-card-reply-action"
+                className="fm-btn fm-btn-sm fm-btn-quiet"
                 onClick={(e) => {
                   e.stopPropagation();
                   onEdit();
@@ -390,7 +390,7 @@ function ReplyView({
             )}
             <button
               type="button"
-              className="fm-card-reply-action fm-card-reply-action-danger"
+              className="fm-btn fm-btn-sm fm-btn-quiet fm-btn-danger"
               onClick={(e) => {
                 e.stopPropagation();
                 onDelete();
@@ -432,16 +432,11 @@ function CardAuthorRow({
   );
 }
 
+// Bodies are shown as text, with inline markup stripped by the format
+// layer's rule so code identifiers survive (an earlier local version
+// turned `snake_case` into `snakecase`).
 function stripMarkdown(s: string): string {
-  return s
-    .replace(/\r\n?/g, "\n")
-    .replace(/^#+\s+/gm, "")
-    .replace(/\*\*(.+?)\*\*/g, "$1")
-    .replace(/__(.+?)__/g, "$1")
-    .replace(/\*(.+?)\*/g, "$1")
-    .replace(/_(.+?)_/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    .trim();
+  return stripMarkdownInline(s);
 }
 
 function truncate(s: string, max: number): string {

@@ -71,7 +71,7 @@ export function OverlapPrompt({ x, y, onReply, onCancel }: Props) {
       <div className="fm-overlap-prompt-footer">
         <button
           type="button"
-          className="fm-overlap-prompt-cancel"
+          className="fm-btn"
           onClick={onCancel}
           data-testid="fm-overlap-prompt-cancel"
         >
@@ -80,7 +80,7 @@ export function OverlapPrompt({ x, y, onReply, onCancel }: Props) {
         <button
           type="button"
           ref={replyRef}
-          className="fm-overlap-prompt-reply"
+          className="fm-btn fm-btn-primary"
           onClick={onReply}
           data-testid="fm-overlap-prompt-reply"
         >

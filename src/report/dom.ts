@@ -101,64 +101,6 @@ export function selectionTextRange(
   return { from, to };
 }
 
-// Inverse: a DOM Range covering a character range. Used to scroll an
-// anchor into view and to preview a reattachment candidate.
-export function rangeForTextIndices(
-  doc: Document,
-  root: Node,
-  from: number,
-  to: number,
-): Range | null {
-  const nodes = walkTextNodes(root);
-  let total = 0;
-  let startNode: Text | null = null;
-  let startOffset = 0;
-  let endNode: Text | null = null;
-  let endOffset = 0;
-
-  for (const node of nodes) {
-    const len = node.data.length;
-    if (startNode == null && from < total + len) {
-      startNode = node;
-      startOffset = from - total;
-    }
-    if (endNode == null && to <= total + len) {
-      endNode = node;
-      endOffset = to - total;
-      break;
-    }
-    total += len;
-  }
-  if (!startNode || !endNode) return null;
-  const range = doc.createRange();
-  range.setStart(startNode, startOffset);
-  range.setEnd(endNode, endOffset);
-  return range;
-}
-
-// The nearest ancestor that can carry an element anchor — a figure,
-// table, chart, or other self-contained block. Returns null when the
-// node isn't inside one.
-//
-// Ordered most-specific first: a `<figure>` wrapping a chart is the unit
-// a reviewer means when they click it, not the `<svg>` inside it.
-const ELEMENT_ANCHOR_TAGS = ["FIGURE", "TABLE", "SVG", "BLOCKQUOTE", "PRE", "IMG", "VIDEO"];
-
-export function elementAnchorTarget(node: Node | null): Element | null {
-  let el: Element | null =
-    node == null
-      ? null
-      : node.nodeType === Node.ELEMENT_NODE
-        ? (node as Element)
-        : node.parentElement;
-  let best: Element | null = null;
-  while (el) {
-    if (ELEMENT_ANCHOR_TAGS.includes(el.tagName)) best = el;
-    el = el.parentElement;
-  }
-  return best;
-}
-
 // A short human-readable description of an element anchor, used as
 // `anchor_text` so the sidebar card and the reattach flow have something
 // meaningful to show. Prefers the caption a report author already wrote.

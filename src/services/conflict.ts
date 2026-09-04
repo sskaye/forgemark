@@ -45,21 +45,8 @@ export async function fingerprint(text: string, mtimeMs: number | null): Promise
   return { mtimeMs, hash: await sha256(text) };
 }
 
-// Synchronous fingerprint — for unit tests where we control mtime, and
-// for the in-memory comparison path that doesn't need crypto. Tests
-// pass a known hash directly rather than computing one.
-export function fingerprintSync(
-  _text: string,
-  mtimeMs: number | null,
-  hash: string,
-): FileFingerprint {
-  return { mtimeMs, hash };
-}
-
 async function sha256(text: string): Promise<string> {
-  // crypto.subtle is available in browsers and in Node 19+. jsdom
-  // doesn't currently expose crypto.subtle, but we don't call this
-  // path in jsdom — tests use a fake fingerprint via fingerprintSync.
+  // crypto.subtle is available in browsers and in Node 19+.
   if (
     typeof crypto !== "undefined" &&
     crypto.subtle &&

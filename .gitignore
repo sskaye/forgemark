@@ -40,3 +40,4 @@ coverage/
 .env
 .env.local
 .env.*.local
+tests/e2e/.tmp

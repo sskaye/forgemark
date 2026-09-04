@@ -1,3 +1,4 @@
+import { MARKER_ANY_RE_G } from "../format/types";
 export type ViewSyncAnchor = {
   phrase: string;
   ratio: number;
@@ -13,7 +14,7 @@ export type NormalizedIndex = {
   positions: Array<number | null>;
 };
 
-const MARKER_RE = /<!--\s*\/?fmc:\d+\s*-->/g;
+const MARKER_RE = MARKER_ANY_RE_G;
 const TRAILING_BLOCK_RE = /<!--\s*forgemark-comments\b[\s\S]*?-->\s*$/;
 const PHRASE_LENGTH = 96;
 

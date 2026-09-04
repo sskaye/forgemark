@@ -1,4 +1,5 @@
-import { useEffect, useMemo } from "react";
+import { Modal } from "./Modal";
+import { useMemo } from "react";
 import type { DocumentState } from "../state/document";
 import "./ConflictModals.css";
 
@@ -16,77 +17,57 @@ type Props = {
 // Cancel keeps the conflict pending and dirty; the banner remains and a
 // subsequent ⌘S re-opens this modal.
 export function SaveConflictModal({ state, onCancel, onOverwrite }: Props) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onCancel();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel]);
-
   const signals = useMemo(() => computeDiffSignals(state), [state]);
 
   return (
-    <div
-      className="fm-modal-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="fm-save-conflict-title"
-      data-testid="fm-save-conflict-modal"
-      onClick={onCancel}
-    >
-      <div className="fm-modal" role="document" onClick={(e) => e.stopPropagation()}>
-        <header className="fm-modal-header">
-          <h2 id="fm-save-conflict-title" className="fm-modal-title">
-            File changed on disk while you edited
-          </h2>
-          <p className="fm-modal-sub">
-            Saving now will replace the disk version with yours. Disk differences from your version:
-          </p>
-        </header>
-        <section className="fm-modal-body">
-          <ul className="fm-conflict-signals" data-testid="fm-save-conflict-signals">
-            {signals.unknown ? (
-              <li className="fm-conflict-signal-unknown">
-                Unknown changes — disk content couldn’t be parsed.
+    <Modal labelledBy="fm-save-conflict-title" testId="fm-save-conflict-modal" onClose={onCancel}>
+      <header className="fm-modal-header">
+        <h2 id="fm-save-conflict-title" className="fm-modal-title">
+          File changed on disk while you edited
+        </h2>
+        <p className="fm-modal-sub">
+          Saving now will replace the disk version with yours. Disk differences from your version:
+        </p>
+      </header>
+      <section className="fm-modal-body">
+        <ul className="fm-conflict-signals" data-testid="fm-save-conflict-signals">
+          {signals.unknown ? (
+            <li className="fm-conflict-signal-unknown">
+              Unknown changes — disk content couldn’t be parsed.
+            </li>
+          ) : (
+            <>
+              <li>
+                <strong>Comments:</strong>{" "}
+                {describeCommentSignal(signals.commentsAdded, signals.commentsRemoved)}
               </li>
-            ) : (
-              <>
-                <li>
-                  <strong>Comments:</strong>{" "}
-                  {describeCommentSignal(signals.commentsAdded, signals.commentsRemoved)}
-                </li>
-                <li>
-                  <strong>Body bytes:</strong> {signals.bodyChanged ? "changed" : "unchanged"}
-                </li>
-              </>
-            )}
-          </ul>
-        </section>
-        <footer className="fm-modal-footer">
-          <button
-            type="button"
-            className="fm-modal-button"
-            onClick={onCancel}
-            data-testid="fm-save-conflict-cancel"
-          >
-            Cancel
-          </button>
-          <div className="fm-modal-spacer" />
-          <button
-            type="button"
-            className="fm-modal-button fm-modal-button-danger"
-            onClick={onOverwrite}
-            data-testid="fm-save-conflict-overwrite"
-          >
-            Overwrite disk version
-          </button>
-        </footer>
-      </div>
-    </div>
+              <li>
+                <strong>Body bytes:</strong> {signals.bodyChanged ? "changed" : "unchanged"}
+              </li>
+            </>
+          )}
+        </ul>
+      </section>
+      <footer className="fm-modal-footer">
+        <button
+          type="button"
+          className="fm-btn"
+          onClick={onCancel}
+          data-testid="fm-save-conflict-cancel"
+        >
+          Cancel
+        </button>
+        <div className="fm-modal-spacer" />
+        <button
+          type="button"
+          className="fm-btn fm-btn-danger"
+          onClick={onOverwrite}
+          data-testid="fm-save-conflict-overwrite"
+        >
+          Overwrite disk version
+        </button>
+      </footer>
+    </Modal>
   );
 }
 

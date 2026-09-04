@@ -103,17 +103,20 @@ export function NewCommentComposer({
     };
   }, [x, y]);
 
-  // Click-outside cancels.
+  // Click-outside cancels an empty composer; a draft is kept, so
+  // clicking the document to re-read the passage doesn't lose it
+  // (Escape still cancels).
   useEffect(() => {
     const onDocMouseDown = (e: MouseEvent) => {
       const c = containerRef.current;
       if (!c) return;
       if (e.target instanceof Node && c.contains(e.target)) return;
+      if (body.trim().length > 0 || replacement.trim().length > 0) return;
       onCancel();
     };
     document.addEventListener("mousedown", onDocMouseDown);
     return () => document.removeEventListener("mousedown", onDocMouseDown);
-  }, [onCancel]);
+  }, [onCancel, body, replacement]);
 
   const trimmedBody = body.trim();
   const trimmedReplacement = replacement.trim();
@@ -221,7 +224,7 @@ export function NewCommentComposer({
         </span>
         <button
           type="button"
-          className="fm-composer-submit"
+          className="fm-btn fm-btn-primary"
           disabled={!valid}
           onClick={submit}
           data-testid="fm-composer-submit"

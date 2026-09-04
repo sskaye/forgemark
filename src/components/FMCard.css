@@ -54,14 +54,16 @@
   color: var(--fm-prose-ink);
 }
 
+/* A timestamp is information on a review tool, so it reads at the
+   muted tone rather than the decorative faint one. */
 .fm-card-timestamp {
   font-size: 11.5px;
-  color: var(--fm-prose-faint);
+  color: var(--fm-prose-muted);
 }
 
 .fm-card-edited {
   font-size: 11px;
-  color: var(--fm-prose-faint);
+  color: var(--fm-prose-muted);
   font-style: italic;
 }
 
@@ -129,32 +131,9 @@
 }
 
 .fm-card-reply:hover .fm-card-reply-actions,
+.fm-card-reply:focus-within .fm-card-reply-actions,
 .fm-card.is-focused .fm-card-reply-actions {
   visibility: visible;
-}
-
-.fm-card-reply-action {
-  font-family: var(--fm-ui);
-  font-size: 11px;
-  color: var(--fm-chrome-muted);
-  background: transparent;
-  border: none;
-  padding: 2px 6px;
-  border-radius: 4px;
-  cursor: default;
-}
-
-.fm-card-reply-action:hover {
-  background: rgba(0, 0, 0, 0.04);
-  color: var(--fm-chrome-text);
-}
-
-[data-theme="dark"] .fm-card-reply-action:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.fm-card-reply-action-danger:hover {
-  color: var(--fm-danger);
 }
 
 /* Action row revealed on focus. */
@@ -171,56 +150,7 @@
   flex: 1;
 }
 
-.fm-card-action {
-  font-family: var(--fm-ui);
-  font-size: 11.5px;
-  color: var(--fm-chrome-text);
-  background: transparent;
-  border: 0.5px solid var(--fm-divider);
-  border-radius: 5px;
-  padding: 3px 10px;
-  cursor: default;
-}
-
-.fm-card-action:hover {
-  background: rgba(0, 0, 0, 0.04);
-}
-
-[data-theme="dark"] .fm-card-action:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.fm-card-action:focus-visible {
-  outline: 0.5px solid var(--fm-accent);
-  outline-offset: 2px;
-}
-
-.fm-card-action-danger {
-  color: var(--fm-danger);
-  border-color: rgba(0, 0, 0, 0);
-}
-
-.fm-card-action-danger:hover {
-  background: rgba(215, 0, 21, 0.06);
-}
-
-[data-theme="dark"] .fm-card-action-danger:hover {
-  background: rgba(255, 69, 58, 0.1);
-}
-
-.fm-card-action-accept {
-  font-weight: 600;
-  color: var(--fm-accent-text);
-  background: var(--fm-success);
-  border-color: rgba(0, 0, 0, 0.1);
-}
-
-.fm-card-action-accept:hover {
-  background: var(--fm-success);
-  filter: brightness(1.05);
-}
-
-/* Phase 9 — orphan / floating pills. The pill sits between the author
+[data-theme="dark"] /* Phase 9 — orphan / floating pills. The pill sits between the author
    row and the body, signalling the card's anchor state. */
 .fm-card-pill {
   display: inline-flex;

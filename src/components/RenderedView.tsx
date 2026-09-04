@@ -1,25 +1,27 @@
 import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Link from "@tiptap/extension-link";
-import Subscript from "@tiptap/extension-subscript";
-import Superscript from "@tiptap/extension-superscript";
-import Image from "@tiptap/extension-image";
-import { Table } from "@tiptap/extension-table";
-import { TableRow } from "@tiptap/extension-table-row";
-import { TableHeader } from "@tiptap/extension-table-header";
-import { TableCell } from "@tiptap/extension-table-cell";
-import { TaskList } from "@tiptap/extension-task-list";
-import { TaskItem } from "@tiptap/extension-task-item";
-import { Markdown } from "tiptap-markdown";
 import { useEffect, useMemo, useRef } from "react";
 import { Extension } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { EditorView } from "@tiptap/pm/view";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration as PMDecoration, DecorationSet } from "@tiptap/pm/view";
-import { openUrl } from "@tauri-apps/plugin-opener";
-import { bodyFromAnchorSpans, bodyWithAnchorSpans } from "../format";
-import { normalizeExternalUrl } from "../services/externalLinks";
+import { openPath, openUrl } from "@tauri-apps/plugin-opener";
+import { classifyLink } from "../services/documentLinks";
+import { deliverOpenPath } from "../state/menuBridge";
+import { scrollToFragment } from "./HeadingIds";
+import { setAssetBase } from "./AssetPaths";
+import { splitFrontmatter } from "../format";
+import { createBlockSync, type BlockSync, type Serializer } from "./blockSync";
+import { renderedExtensions } from "./editorExtensions";
+import { anchorIdOf } from "../services/anchorDom";
+import {
+  TEXTLESS,
+  anchorEdges,
+  anchorEdgesTransaction,
+  anchorRanges,
+  plainText,
+  setAnchorHighlight,
+} from "./AnchorEdge";
 import { findLiteralMatches } from "../services/findReplace";
 import {
   buildNormalizedIndex,
@@ -29,36 +31,7 @@ import {
   scrollRatio,
   type ViewSyncAnchor,
 } from "../services/viewSync";
-import { AnchorMark } from "./AnchorMark";
-import { CodeBlockAnchor } from "./CodeBlockAnchor";
 import "./RenderedView.css";
-
-// Subscript / superscript marks. StarterKit ships neither, so `<sub>` /
-// `<sup>` tags would otherwise be dropped to plain text on parse and lost
-// on the next save. Parsing is handled by `html: true` plus each mark's
-// built-in `parseHTML` tag matcher; we add an explicit markdown serialize
-// spec (mirroring how tiptap-markdown serializes Strike's `~~`) so the
-// HTML tags round-trip byte-for-byte.
-const SubscriptMark = Subscript.extend({
-  addStorage() {
-    return {
-      markdown: {
-        serialize: { open: "<sub>", close: "</sub>", expelEnclosingWhitespace: true },
-        parse: {},
-      },
-    };
-  },
-});
-const SuperscriptMark = Superscript.extend({
-  addStorage() {
-    return {
-      markdown: {
-        serialize: { open: "<sup>", close: "</sup>", expelEnclosingWhitespace: true },
-        parse: {},
-      },
-    };
-  },
-});
 
 // Captured selection metadata used by the new-comment composer. Phase 5.
 export type CapturedSelection = {
@@ -88,6 +61,11 @@ export type CapturedSelection = {
   rect: { left: number; top: number; bottom: number };
 };
 
+// tiptap-markdown's serializer, which takes a fragment.
+function markdownSerializer(editor: { storage: unknown }): Serializer {
+  return (editor.storage as { markdown: { serializer: Serializer } }).markdown.serializer;
+}
+
 export type RenderedViewHandle = {
   // Captures the current selection. Returns null when the selection is
   // empty / collapsed. The caller decides whether to open the composer.
@@ -114,9 +92,9 @@ export type RenderedSearchMatch = {
 
 type Props = {
   // Markdown body of the document. Marker comments (`<!-- fmc:N -->...
-  // <!-- /fmc:N -->`) are pre-processed into `<span data-anchor-id="N">`
-  // wrappers before being passed to Tiptap so the editor renders them as
-  // styled inline highlights.
+  // <!-- /fmc:N -->`) become AnchorEdge nodes in the editor, and the
+  // passage between a pair is highlighted by a decoration carrying
+  // `data-anchor-id`.
   body: string;
   // Fires after the user types anything that mutates the doc. Markdown is
   // the serialized form via tiptap-markdown.
@@ -129,6 +107,9 @@ type Props = {
   onAnchorHover: (id: number | null) => void;
   onExternalLinkError?: (message: string) => void;
   onOpenExternalLink?: (url: string) => Promise<void> | void;
+  // The folder the document is in: relative images load from it and
+  // relative links resolve against it.
+  baseDir?: string | null;
   // Phase 5 composer trigger handle. The parent attaches this and calls
   // `current.captureSelection()` from the ⌘⌥M shortcut handler.
   handleRef?: React.MutableRefObject<RenderedViewHandle | null>;
@@ -140,10 +121,11 @@ type Props = {
   onSelectionChange?: (capture: CapturedSelection | null) => void;
 };
 
-// Phase 4 rendered view. Inline anchor spans are pre-rendered into the
-// markdown body before Tiptap ingests it; `tiptap-markdown` with
-// `html: true` preserves them. Click + hover handlers on the editor's
-// root DOM element delegate to the matching anchor by `data-anchor-id`.
+// Phase 4 rendered view. Anchor edges are pre-rendered into the markdown
+// body as `<fm-anchor>` elements before Tiptap ingests it;
+// `tiptap-markdown` with `html: true` preserves them. Click + hover
+// handlers on the editor's root DOM element delegate to the matching
+// anchor by `data-anchor-id`, which the highlight decorations carry.
 //
 // The editor is configured editable=false when read-only is requested
 // (or when the parent decides — Phase 4 keeps editing disabled when a
@@ -159,10 +141,22 @@ export function RenderedView({
   onAnchorHover,
   onExternalLinkError,
   onOpenExternalLink = openUrl,
+  baseDir = null,
   handleRef,
   onSelectionChange,
 }: Props) {
-  const initialMarkdown = useMemo(() => bodyWithAnchorSpans(body), [body]);
+  // Front matter never reaches the editor: it would be read as a rule
+  // and a heading, and come back rewritten. It is split off here and put
+  // back on every edit, so the editor only ever sees the prose.
+  const { front, rest } = useMemo(() => splitFrontmatter(body), [body]);
+  const frontRef = useRef(front);
+  frontRef.current = front;
+  // One node per source block, and only edited blocks are ever
+  // re-serialized (see blockSync.ts). The editor never rewrites the
+  // document as a whole.
+  const blockSyncRef = useRef<BlockSync | null>(null);
+  if (!blockSyncRef.current) blockSyncRef.current = createBlockSync();
+  const initialMarkdown = useMemo(() => blockSyncRef.current!.load(rest), [rest]);
   // Seeded with the same value handed to `content:` below, so the sync
   // effect correctly treats the mount as already-applied and skips a
   // redundant setContent.
@@ -185,46 +179,14 @@ export function RenderedView({
   onSelectionChangeRef.current = onSelectionChange;
 
   const editor = useEditor({
-    extensions: [
-      // StarterKit ships its own Link in v3; we use the standalone with
-      // openOnClick disabled so clicks are the host's to handle. Its
-      // codeBlock is disabled in favour of CodeBlockAnchor, which adds
-      // whole-block comment anchoring.
-      StarterKit.configure({ link: false, codeBlock: false }),
-      CodeBlockAnchor,
-      Link.configure({ openOnClick: false }),
-      SubscriptMark,
-      SuperscriptMark,
-      AnchorMark,
-      SearchHighlightExtension,
-      Image,
-      Table.configure({ resizable: false }),
-      TableRow,
-      TableHeader,
-      TableCell,
-      TaskList,
-      TaskItem.configure({ nested: true }),
-      Markdown.configure({
-        // html: true is what allows the anchor `<span>` wrappers we inject
-        // to survive the markdown→ProseMirror round-trip. Markdown bodies
-        // we receive are from our own format layer; arbitrary user-typed
-        // HTML still flows through, which is acceptable inside the local
-        // Tauri webview.
-        html: true,
-        tightLists: true,
-        bulletListMarker: "-",
-        linkify: true,
-        breaks: false,
-        transformPastedText: true,
-        transformCopiedText: true,
-      }),
-    ],
+    extensions: renderedExtensions([SearchHighlightExtension], { baseDir }),
     content: initialMarkdown,
     editable: !readOnly,
     // The editor is constructed with the right content already, so it's
     // ready for user input immediately. Later content swaps re-close the
     // gate themselves in the sync effect below.
-    onCreate: () => {
+    onCreate: ({ editor }) => {
+      blockSyncRef.current!.settle(editor.state.doc);
       editorReadyRef.current = true;
     },
     onSelectionUpdate: ({ editor }) => {
@@ -248,23 +210,18 @@ export function RenderedView({
       // `emitUpdate: false`. Without this gate, the editor would
       // dispatch an "edit" with stale content and clobber state.body.
       if (!editorReadyRef.current) return;
-      const storage = editor.storage as unknown as {
-        markdown?: { getMarkdown?: () => string };
-      };
-      const md = storage.markdown?.getMarkdown?.() ?? "";
-      // Convert any anchor `<span data-anchor-id>` wrappers back to
-      // the canonical marker comments so the document state's body
-      // always holds the format-layer source of truth. This is the
-      // single editor → state boundary; the inverse
-      // `bodyWithAnchorSpans` is applied on the way back in.
-      const newBody = bodyFromAnchorSpans(md);
+      // Only the blocks whose nodes changed are re-serialized (edge
+      // nodes write their markers) and spliced into the source.
+      // This is the single editor → state boundary.
+      const restBody = blockSyncRef.current!.emit(editor.state.doc, markdownSerializer(editor));
       // Pre-emptively update the ref so the upcoming setContent
       // useEffect (triggered when the new state.body propagates back
       // as initialMarkdown) sees a match and skips the rewrite —
       // otherwise every keystroke would re-render the editor and
-      // reset the cursor.
-      lastInitialRef.current = bodyWithAnchorSpans(newBody);
-      onEdit(newBody);
+      // reset the cursor. The display form must be what `load` would
+      // produce for this body, so it is computed the same way.
+      lastInitialRef.current = createBlockSync().load(restBody);
+      onEdit(frontRef.current + restBody);
     },
   });
 
@@ -276,7 +233,17 @@ export function RenderedView({
     if (lastInitialRef.current === initialMarkdown) return;
     lastInitialRef.current = initialMarkdown;
     editorReadyRef.current = false;
-    editor.commands.setContent(initialMarkdown, { emitUpdate: false });
+    // Not an undo step. This path carries state-level changes — a comment
+    // added, deleted, accepted, reattached, a reload from disk — and ⌘Z
+    // reverting the *text* of one while the comment records stayed put
+    // left the file with markers for a comment that no longer existed.
+    // Undo is for typing; those changes have their own way back.
+    editor
+      .chain()
+      .setMeta("addToHistory", false)
+      .setContent(initialMarkdown, { emitUpdate: false })
+      .run();
+    blockSyncRef.current!.settle(editor.state.doc);
     // Defer the ready flip past the current task so any synchronous
     // setContent-induced onUpdate firings still see ready=false.
     queueMicrotask(() => {
@@ -291,31 +258,45 @@ export function RenderedView({
     editor.setEditable(!readOnly);
   }, [editor, readOnly]);
 
-  // Click + hover delegation on links and anchor spans. Links win over
+  // For browser tests: the editor behind the view, in development only.
+  useEffect(() => {
+    if (!editor || !import.meta.env.DEV) return;
+    (editor.view.dom as unknown as { __forgemarkEditor?: unknown }).__forgemarkEditor = editor;
+  }, [editor]);
+
+  // A Save As moves the document's folder with it.
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    setAssetBase(editor.view, baseDir);
+  }, [editor, baseDir]);
+
+  // Click + hover delegation on links and anchor highlights. Links win over
   // comment-anchor focus: clicking an anchored link should open the link,
-  // not just focus the comment card.
+  // not just focus the comment card. An address opens outside; a
+  // fragment scrolls to its heading; another document opens in a tab;
+  // any other file opens in whatever the system uses for it.
   useEffect(() => {
     if (!editor) return;
     const root = editor.view.dom;
-    const findAnchor = (target: EventTarget | null): number | null => {
-      if (!(target instanceof HTMLElement)) return null;
-      const el = target.closest("[data-anchor-id]");
-      if (!el || !(el instanceof HTMLElement)) return null;
-      const raw = el.dataset.anchorId;
-      const id = raw ? Number(raw) : NaN;
-      return Number.isFinite(id) ? id : null;
+    const findAnchor = anchorIdOf;
+    const failed = (what: string) => (err: unknown) => {
+      const detail = err instanceof Error ? err.message : String(err);
+      onExternalLinkError?.(`${what} failed: ${detail}`);
     };
     const onClick = (e: Event) => {
       const link = findExternalLink(e.target);
       if (link) {
         e.preventDefault();
         e.stopPropagation();
-        const url = normalizeExternalUrl(link.getAttribute("href"));
-        if (url) {
-          void Promise.resolve(onOpenExternalLink(url)).catch((err: unknown) => {
-            const detail = err instanceof Error ? err.message : String(err);
-            onExternalLinkError?.(`Open link failed: ${detail}`);
-          });
+        const target = classifyLink(link.getAttribute("href"), baseDir);
+        if (target.kind === "external") {
+          void Promise.resolve(onOpenExternalLink(target.url)).catch(failed("Open link"));
+        } else if (target.kind === "fragment") {
+          scrollToFragment(root, target.id);
+        } else if (target.kind === "document") {
+          deliverOpenPath(target.path);
+        } else if (target.kind === "file") {
+          void openPath(target.path).catch(failed("Open file"));
         }
         return;
       }
@@ -342,25 +323,19 @@ export function RenderedView({
       root.removeEventListener("mouseover", onMouseOver);
       root.removeEventListener("mouseout", onMouseOut);
     };
-  }, [editor, onAnchorClick, onAnchorHover, onExternalLinkError, onOpenExternalLink]);
+  }, [editor, baseDir, onAnchorClick, onAnchorHover, onExternalLinkError, onOpenExternalLink]);
 
-  // Apply focus / hover classes onto matching anchor spans. We do this
-  // imperatively because Tiptap owns the DOM under the editor root; the
-  // alternative (reseting content on every focus change) would lose the
-  // user's selection.
+  // The focused and hovered comment light up their highlights. The
+  // classes ride on the highlight decorations themselves: Tiptap owns
+  // the DOM under the editor root and redraws a span whose attributes
+  // were changed from outside.
   useEffect(() => {
-    if (!editor) return;
-    const root = editor.view.dom;
-    const all = root.querySelectorAll<HTMLElement>("[data-anchor-id]");
-    all.forEach((el) => {
-      const id = el.dataset.anchorId ? Number(el.dataset.anchorId) : null;
-      el.classList.toggle("is-focused", id === focusedCommentId);
-      el.classList.toggle("is-hovered", id === hoveredCommentId);
-    });
-  }, [editor, focusedCommentId, hoveredCommentId, body]);
+    if (!editor || editor.isDestroyed) return;
+    setAnchorHighlight(editor.view, focusedCommentId, hoveredCommentId);
+  }, [editor, focusedCommentId, hoveredCommentId]);
 
   // Phase 5: expose composer-supporting methods to the parent so the
-  // EditorPane can capture the selection and apply the anchor mark.
+  // EditorPane can capture the selection and insert the anchor's edges.
   useEffect(() => {
     if (!handleRef) return;
     handleRef.current = {
@@ -369,8 +344,8 @@ export function RenderedView({
         if (!editor) return body;
         // Whole code blocks carry the anchor as a node attribute (so it
         // round-trips as comment markers around the fence); everything else
-        // uses the inline AnchorMark. We don't need `editable: true` for
-        // chained commands — Tiptap runs them via dispatchTransaction.
+        // gets an AnchorEdge node at each end. We don't need
+        // `editable: true` for this — the view dispatches regardless.
         const cls = classifyCodeSelection(editor.state.doc, from, to);
         if (cls.kind === "block") {
           editor
@@ -379,25 +354,19 @@ export function RenderedView({
             .updateAttributes("codeBlock", { anchorId: String(id) })
             .run();
         } else {
-          editor
-            .chain()
-            .setTextSelection({ from, to })
-            .setMark("anchor", { anchorId: String(id) })
-            .run();
+          editor.view.dispatch(anchorEdgesTransaction(editor.state, from, to, id));
         }
-        const storage = editor.storage as unknown as {
-          markdown?: { getMarkdown?: () => string };
-        };
-        const md = storage.markdown?.getMarkdown?.() ?? "";
-        // Inline anchors serialize as `<span data-anchor-id>`; convert back
-        // to markers. Block anchors already serialize as markers.
-        return bodyFromAnchorSpans(md);
+        // Only the anchored block is re-serialized; the markers come out
+        // of the edges (or the fence info string) on the way.
+        const restBody = blockSyncRef.current!.emit(editor.state.doc, markdownSerializer(editor));
+        lastInitialRef.current = createBlockSync().load(restBody);
+        return frontRef.current + restBody;
       },
       selectedText: () => {
         if (!editor) return null;
         const { from, to, empty } = editor.state.selection;
         if (empty) return null;
-        const text = editor.state.doc.textBetween(from, to, " ", " ");
+        const text = plainText(editor.state.doc, from, to);
         return text.trim().length > 0 ? text : null;
       },
       search: (query: string, matchCase: boolean, activeIndex: number) => {
@@ -412,20 +381,26 @@ export function RenderedView({
         updateSearchDecorations(editor, matches, activeIndex);
         activateSearchMatch(editor, matches, activeIndex);
       },
+      // A match that straddles an anchor's edge is left alone: replacing
+      // it would silently grow, shrink, or remove the anchor. Matches
+      // wholly inside or wholly outside an anchor are fine.
       replaceSearchMatch: (match: RenderedSearchMatch, replacement: string) => {
         if (!editor || !editor.isEditable) return false;
+        if (crossesAnchorEdge(editor.state.doc, match.from, match.to)) return false;
         const tr = editor.state.tr.insertText(replacement, match.from, match.to);
         editor.view.dispatch(tr);
         return true;
       },
       replaceAllSearchMatches: (matches: RenderedSearchMatch[], replacement: string) => {
         if (!editor || !editor.isEditable || matches.length === 0) return 0;
+        const safe = matches.filter((m) => !crossesAnchorEdge(editor.state.doc, m.from, m.to));
+        if (safe.length === 0) return 0;
         let tr = editor.state.tr;
-        for (const match of [...matches].sort((a, b) => b.from - a.from)) {
+        for (const match of [...safe].sort((a, b) => b.from - a.from)) {
           tr = tr.insertText(replacement, match.from, match.to);
         }
         editor.view.dispatch(tr);
-        return matches.length;
+        return safe.length;
       },
       clearSearch: () => {
         if (!editor) return;
@@ -496,11 +471,11 @@ export function captureFrom(editor: ReturnType<typeof useEditor> | null): Captur
   // entire code block (the comment is on the block, not a sub-span).
   const from = cls.kind === "block" ? cls.from : selFrom;
   const to = cls.kind === "block" ? cls.to : selTo;
-  const text = cls.kind === "block" ? cls.text : state.doc.textBetween(from, to, " ", " ");
+  const text = cls.kind === "block" ? cls.text : plainText(state.doc, from, to);
   if (cls.kind !== "reject" && text.trim().length === 0) return null;
 
-  // Overlap: inline anchors are detected via the anchor mark; a block
-  // that already carries an anchorId is itself the overlap target.
+  // Overlap: inline anchors are found by their edges; a block that
+  // already carries an anchorId is itself the overlap target.
   const overlappingAnchorId =
     cls.kind === "block" && cls.existingAnchorId != null
       ? cls.existingAnchorId
@@ -508,13 +483,8 @@ export function captureFrom(editor: ReturnType<typeof useEditor> | null): Captur
 
   const beforeLen = Math.min(120, from);
   const afterLen = Math.min(120, state.doc.content.size - to);
-  const contextBefore = state.doc.textBetween(Math.max(0, from - beforeLen), from, " ", " ");
-  const contextAfter = state.doc.textBetween(
-    to,
-    Math.min(state.doc.content.size, to + afterLen),
-    " ",
-    " ",
-  );
+  const contextBefore = plainText(state.doc, Math.max(0, from - beforeLen), from);
+  const contextAfter = plainText(state.doc, to, Math.min(state.doc.content.size, to + afterLen));
   const rect = selectionRect(view, from, to);
   return {
     from,
@@ -653,6 +623,12 @@ function buildTextIndex(doc: ProseMirrorNode): { text: string; positions: Array<
   const positions: Array<number | null> = [];
   let previousEnd: number | null = null;
   doc.descendants((node, pos) => {
+    // An anchor edge or a kept piece of inline HTML sits between two
+    // runs of the same text; it is not a break in it.
+    if (TEXTLESS.has(node.type.name)) {
+      if (previousEnd === pos) previousEnd = pos + node.nodeSize;
+      return false;
+    }
     if (!node.isText || !node.text) return true;
     if (previousEnd != null && pos > previousEnd) {
       text += "\n";
@@ -759,35 +735,28 @@ export function classifyCodeSelection(
 // Exported for unit testing — the file format cannot represent overlapping
 // or nested anchors, so this is the gate that diverts an overlapping
 // new-comment into a reply (see OverlapPrompt).
+// Whether [from, to) holds an anchor's edge — part of the range inside
+// the anchor and part outside, or parts of two anchors. Replacing such a
+// range would delete the edge.
+export function crossesAnchorEdge(doc: ProseMirrorNode, from: number, to: number): boolean {
+  return anchorEdges(doc).some((e) => e.pos >= from && e.pos < to);
+}
+
 export function bestOverlappingAnchorId(
   doc: ProseMirrorNode,
   from: number,
   to: number,
 ): number | null {
-  const overlap = new Map<number, { len: number; pos: number }>();
-  doc.nodesBetween(from, to, (node, pos) => {
-    if (!node.isText) return true;
-    const mark = node.marks.find((m) => m.type.name === "anchor");
-    if (!mark) return true;
-    const id = Number(mark.attrs.anchorId);
-    if (!Number.isFinite(id)) return true;
-    const start = Math.max(from, pos);
-    const end = Math.min(to, pos + node.nodeSize);
-    const len = Math.max(0, end - start);
-    if (len === 0) return true;
-    const cur = overlap.get(id);
-    if (cur) cur.len += len;
-    else overlap.set(id, { len, pos: start });
-    return true;
-  });
   let best: number | null = null;
   let bestLen = 0;
-  let bestPos = Infinity;
-  for (const [id, { len, pos }] of overlap) {
-    if (len > bestLen || (len === bestLen && pos < bestPos)) {
-      best = id;
+  let bestFrom = Infinity;
+  for (const r of anchorRanges(doc)) {
+    const len = Math.min(to, r.to) - Math.max(from, r.from);
+    if (len <= 0) continue;
+    if (len > bestLen || (len === bestLen && r.from < bestFrom)) {
+      best = r.id;
       bestLen = len;
-      bestPos = pos;
+      bestFrom = r.from;
     }
   }
   return best;

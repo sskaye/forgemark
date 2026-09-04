@@ -20,6 +20,7 @@ import {
   type ViewSyncAnchor,
 } from "../services/viewSync";
 import "./SourceView.css";
+import { MARKER_ANY_RE_G } from "../format/types";
 
 // Phase 8 source view: CodeMirror 6 in read-only mode.
 //
@@ -52,10 +53,7 @@ type Props = {
   format?: DocFormat;
 };
 
-// Match `<!-- fmc:N -->` or `<!-- /fmc:N -->` for any non-negative integer N.
-// Tolerant to whitespace inside the comment so a hand-written file with an
-// extra space still dims correctly.
-const MARKER_RE = /<!--\s*\/?fmc:\d+\s*-->/g;
+const MARKER_RE = MARKER_ANY_RE_G;
 
 // Match the trailing `<!-- forgemark-comments ... -->` block. It opens
 // with `<!-- forgemark-comments` on its own line and closes with `-->`

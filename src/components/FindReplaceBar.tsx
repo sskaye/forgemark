@@ -110,7 +110,7 @@ export function FindReplaceBar({
         <div className="fm-findbar-actions fm-findbar-nav-actions">
           <button
             type="button"
-            className="fm-findbar-button"
+            className="fm-btn fm-btn-sm fm-findbar-button"
             title="Previous match"
             aria-label="Previous match"
             onClick={onPrevious}
@@ -121,7 +121,7 @@ export function FindReplaceBar({
           </button>
           <button
             type="button"
-            className="fm-findbar-button"
+            className="fm-btn fm-btn-sm fm-findbar-button"
             title="Next match"
             aria-label="Next match"
             onClick={onNext}
@@ -132,7 +132,7 @@ export function FindReplaceBar({
           </button>
           <button
             type="button"
-            className="fm-findbar-button"
+            className="fm-btn fm-btn-sm fm-findbar-button"
             title="Done"
             aria-label="Close find and replace"
             onClick={onClose}
@@ -145,7 +145,7 @@ export function FindReplaceBar({
           <div className="fm-findbar-actions fm-findbar-replace-actions">
             <button
               type="button"
-              className="fm-findbar-text-button"
+              className="fm-btn fm-btn-sm fm-findbar-text-button"
               onClick={onReplace}
               disabled={!canReplace}
               data-testid="fm-findbar-replace"
@@ -154,7 +154,7 @@ export function FindReplaceBar({
             </button>
             <button
               type="button"
-              className="fm-findbar-text-button"
+              className="fm-btn fm-btn-sm fm-findbar-text-button"
               onClick={onReplaceAll}
               disabled={!canReplace}
               data-testid="fm-findbar-replace-all"

@@ -34,7 +34,13 @@ export type RecentFile = {
 // ── Author name ───────────────────────────────────────────────────────
 
 export function useAuthorName(): [string, (next: string) => void] {
-  return useStringPref(KEY_AUTHOR, DEFAULT_AUTHOR);
+  const [stored, set] = useStringPref(KEY_AUTHOR, DEFAULT_AUTHOR);
+  // The Settings field can be cleared mid-session; comments made before
+  // a restart then carried an empty author while the "By me" filter
+  // looked for the fallback. The fallback applies whenever the stored
+  // value is blank, not only on first read.
+  const effective = stored.trim().length > 0 ? stored.trim() : DEFAULT_AUTHOR;
+  return [effective, set];
 }
 
 // ── Theme ─────────────────────────────────────────────────────────────
@@ -95,14 +101,15 @@ function readRecentFiles(): RecentFile[] {
 
 function writeRecentFiles(list: RecentFile[]) {
   if (typeof window === "undefined") return;
+  const json = JSON.stringify(list.slice(0, RECENT_FILES_LIMIT));
   try {
-    window.localStorage.setItem(
-      KEY_RECENT_FILES,
-      JSON.stringify(list.slice(0, RECENT_FILES_LIMIT)),
-    );
+    window.localStorage.setItem(KEY_RECENT_FILES, json);
   } catch {
     // ignore
   }
+  // Same-tab subscribers (the Open Recent menu) hear about it too; the
+  // storage event below only fires in *other* windows.
+  publish(KEY_RECENT_FILES, json);
 }
 
 export function useRecentFiles(): {
@@ -120,7 +127,11 @@ export function useRecentFiles(): {
       if (e.key === KEY_RECENT_FILES) setRecent(readRecentFiles());
     };
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    const unsub = subscribe(KEY_RECENT_FILES, () => setRecent(readRecentFiles()));
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      unsub();
+    };
   }, []);
 
   // Read from localStorage at call-time rather than closing over the

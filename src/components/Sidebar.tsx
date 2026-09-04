@@ -2,15 +2,11 @@ import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useDocument } from "../state/DocumentProvider";
 import { useAuthorName } from "../state/preferences";
 import { FMCard } from "./FMCard";
-import {
-  removeMarkersFromBody,
-  replaceAnchoredText,
-  stripAnchoredMarkers,
-  type AnchorStatus,
-} from "../format";
+import { replaceAnchoredText, stripAnchoredMarkers, type AnchorStatus } from "../format";
 import type { Comment, Reply } from "../format/types";
 import type { FilterMode, SortMode } from "../state/document";
 import "./Sidebar.css";
+import { commandFor, isTypingTarget, modalOpen } from "../state/keymap";
 
 type SidebarProps = {
   anchorStatuses: Map<number, AnchorStatus>;
@@ -20,16 +16,17 @@ type SidebarProps = {
 //   - Dynamic filter dropdown — populated from comment authors + "By me".
 //   - Sort: Doc order / Newest / Oldest. Replies stay chronological.
 //   - Card lifecycle dispatches (reply / edit / resolve / delete).
-//   - Global keyboard shortcuts that act on the focused card:
-//       ⌘R reply, ⌘⏎ resolve, ⌘⇧E edit own, Delete delete.
+//   - Keyboard shortcuts that act on the focused card while focus is in
+//     the sidebar: ⌘R reply, ⌘⏎ resolve, E edit own, Delete delete,
+//     ↑/↓ (or j/k) move between cards. Chords live in state/keymap.ts.
 export function Sidebar({ anchorStatuses }: SidebarProps) {
   const { state, dispatch } = useDocument();
   const [authorName] = useAuthorName();
   const { comments, focusedCommentId, hoveredCommentId, composer, filter, sort } = state;
 
   const visibleComments = useMemo(
-    () => sortComments(filterComments(comments, filter, authorName), sort),
-    [comments, filter, sort, authorName],
+    () => sortComments(filterComments(comments, filter, authorName), sort, anchorStatuses),
+    [comments, filter, sort, authorName, anchorStatuses],
   );
 
   // Phase 9: split into three groups, preserving sort within each.
@@ -41,50 +38,60 @@ export function Sidebar({ anchorStatuses }: SidebarProps) {
 
   const open = comments.filter((c) => !c.resolved).length;
 
-  // Global keyboard shortcuts. Active when a card is focused; the
-  // composer's own keydown handler stops propagation so these don't
-  // fire while the user is typing in a textarea.
+  // Keyboard shortcuts on the focused card. They apply only while the
+  // keyboard focus is inside the sidebar: the reducer's focused comment
+  // is also set by clicking an anchor in the editor, and acting on that
+  // from the editor — ⌘⏎ resolving a thread mid-sentence, Backspace
+  // deleting the comment behind an open dialog — was a trap. Nothing
+  // here fires over a dialog or into a text field.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const cmd = commandFor(e);
+      if (!cmd || modalOpen() || isTypingTarget(e.target)) return;
+      const active = document.activeElement;
+      if (!(active instanceof HTMLElement) || !active.closest(".fm-sidebar")) return;
+
+      if (cmd === "next-comment" || cmd === "prev-comment") {
+        e.preventDefault();
+        const cards = Array.from(
+          document.querySelectorAll<HTMLElement>(".fm-sidebar [data-anchor-card-id]"),
+        );
+        if (cards.length === 0) return;
+        const at = cards.findIndex((el) => el === active || el.contains(active));
+        const step = cmd === "next-comment" ? 1 : -1;
+        const next = at < 0 ? (step > 0 ? 0 : cards.length - 1) : at + step;
+        cards[Math.max(0, Math.min(cards.length - 1, next))]?.focus();
+        return;
+      }
+
       if (focusedCommentId == null) return;
       const c = comments.find((x) => x.id === focusedCommentId);
       if (!c) return;
-      const mod = e.metaKey || e.ctrlKey;
-      // ⌘R — reply (no-op on suggestion cards per Phase 7 design)
-      if (mod && !e.shiftKey && e.key.toLowerCase() === "r") {
-        e.preventDefault();
-        if (c.suggested_edit) return;
-        dispatch({
-          type: "openComposer",
-          composer: { mode: "reply", commentId: c.id },
-        });
-        return;
-      }
-      // ⌘⏎ — resolve / unresolve (when card focused)
-      if (mod && e.key === "Enter") {
-        e.preventDefault();
-        dispatch({ type: "toggleResolved", commentId: c.id });
-        return;
-      }
-      // ⌘⇧E — edit own comment
-      if (mod && e.shiftKey && e.key.toLowerCase() === "e") {
-        if (c.author !== authorName) return;
-        e.preventDefault();
-        dispatch({
-          type: "openComposer",
-          composer: {
-            mode: "editComment",
-            commentId: c.id,
-            initialBody: c.body ?? "",
-          },
-        });
-        return;
-      }
-      // Delete / Backspace — delete the focused comment.
-      if ((e.key === "Delete" || e.key === "Backspace") && !mod && !isTypingTarget(e.target)) {
-        e.preventDefault();
-        const newBody = removeMarkersFromBody(state.body, c.id);
-        dispatch({ type: "deleteComment", commentId: c.id, body: newBody });
+      switch (cmd) {
+        case "reply":
+          e.preventDefault();
+          // No replies on suggestion cards.
+          if (c.suggested_edit) return;
+          dispatch({ type: "openComposer", composer: { mode: "reply", commentId: c.id } });
+          return;
+        case "toggle-resolved":
+          e.preventDefault();
+          dispatch({ type: "toggleResolved", commentId: c.id });
+          return;
+        case "edit-comment":
+          if (c.author !== authorName) return;
+          e.preventDefault();
+          dispatch({
+            type: "openComposer",
+            composer: { mode: "editComment", commentId: c.id, initialBody: c.body ?? "" },
+          });
+          return;
+        case "delete-comment":
+          e.preventDefault();
+          dispatch({ type: "deleteComment", commentId: c.id });
+          return;
+        default:
+          return;
       }
     };
     window.addEventListener("keydown", onKey);
@@ -94,6 +101,9 @@ export function Sidebar({ anchorStatuses }: SidebarProps) {
   return (
     <aside className="fm-sidebar" data-testid="fm-sidebar" aria-label="Comments">
       <SidebarHeader
+        orphaned={orphans.length}
+        openVisibleIds={visibleComments.filter((c) => !c.resolved).map((c) => c.id)}
+        onResolveAll={(ids) => dispatch({ type: "setResolved", commentIds: ids, resolved: true })}
         open={open}
         total={comments.length}
         comments={comments}
@@ -182,8 +192,7 @@ export function Sidebar({ anchorStatuses }: SidebarProps) {
           }
           onResolve={() => dispatch({ type: "toggleResolved", commentId: c.id })}
           onDelete={() => {
-            const newBody = removeMarkersFromBody(state.body, c.id);
-            dispatch({ type: "deleteComment", commentId: c.id, body: newBody });
+            dispatch({ type: "deleteComment", commentId: c.id });
           }}
           onAcceptSuggestion={() => {
             if (!c.suggested_edit) return;
@@ -309,7 +318,7 @@ function handleComposerSubmit(
     });
   }
   // The "new" mode is handled by the EditorPane (which has the editor
-  // ref needed to apply the anchor mark).
+  // ref needed to place the anchor edges).
 }
 
 function FocusableCard({ cardKey, ...props }: { cardKey: number } & Parameters<typeof FMCard>[0]) {
@@ -329,6 +338,9 @@ function FocusableCard({ cardKey, ...props }: { cardKey: number } & Parameters<t
 }
 
 function SidebarHeader({
+  orphaned,
+  openVisibleIds,
+  onResolveAll,
   open,
   total,
   comments,
@@ -346,6 +358,9 @@ function SidebarHeader({
   authorName: string;
   onFilter: (f: FilterMode) => void;
   onSort: (s: SortMode) => void;
+  orphaned: number;
+  openVisibleIds: number[];
+  onResolveAll: (ids: number[]) => void;
 }) {
   // Distinct author names appearing in this file's comments. Authors are
   // ordered by first appearance (stable across reorders).
@@ -369,7 +384,19 @@ function SidebarHeader({
         <span className="fm-sidebar-title">Comments</span>
         <span className="fm-sidebar-counts">
           {open} open · {total} total
+          {orphaned > 0 ? ` · ${orphaned} lost anchor${orphaned === 1 ? "" : "s"}` : ""}
         </span>
+        {openVisibleIds.length > 1 && (
+          <button
+            type="button"
+            className="fm-btn fm-btn-sm fm-btn-quiet fm-sidebar-resolve-all"
+            data-testid="fm-sidebar-resolve-all"
+            title="Resolve every open comment shown"
+            onClick={() => onResolveAll(openVisibleIds)}
+          >
+            Resolve all
+          </button>
+        )}
       </div>
       <div className="fm-sidebar-controls">
         <select
@@ -382,8 +409,16 @@ function SidebarHeader({
           <option value="all">All comments</option>
           <option value="open">Open only</option>
           <option value="resolved">Resolved</option>
-          {authors.includes(authorName) && <option value="byMe">By me</option>}
+          {(authors.includes(authorName) || filter.kind === "byMe") && (
+            <option value="byMe">By me</option>
+          )}
           {authors
+            .concat(
+              // The filter persists across files; keep its option even
+              // when this file has nothing by that author, so the select
+              // never shows blank.
+              filter.kind === "byAuthor" && !authors.includes(filter.author) ? [filter.author] : [],
+            )
             .filter((a) => a !== authorName)
             .map((a) => (
               <option key={a} value={`byAuthor:${a}`}>
@@ -440,11 +475,25 @@ function filterComments(comments: Comment[], filter: FilterMode, authorName: str
   }
 }
 
-function sortComments(comments: Comment[], sort: SortMode): Comment[] {
-  if (sort === "doc") return [...comments].sort((a, b) => a.id - b.id);
-  if (sort === "newest")
-    return [...comments].sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
-  return [...comments].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+function sortComments(
+  comments: Comment[],
+  sort: SortMode,
+  statuses: Map<number, AnchorStatus>,
+): Comment[] {
+  if (sort === "doc") {
+    // Where the anchor sits in the document, not when the comment was
+    // made: ids are creation order, and a comment added later near the
+    // top belongs at the top. Orphans and notes have no position and
+    // keep id order among themselves.
+    const at = (c: Comment) => {
+      const st = statuses.get(c.id);
+      return st?.kind === "attached" ? st.from : Number.POSITIVE_INFINITY;
+    };
+    return [...comments].sort((a, b) => at(a) - at(b) || a.id - b.id);
+  }
+  const when = (c: Comment) => Date.parse(c.timestamp) || 0;
+  if (sort === "newest") return [...comments].sort((a, b) => when(b) - when(a) || b.id - a.id);
+  return [...comments].sort((a, b) => when(a) - when(b) || a.id - b.id);
 }
 
 function filterToValue(f: FilterMode): string {
@@ -464,10 +513,4 @@ function valueToFilter(v: string): FilterMode {
     return { kind: "byAuthor", author: v.slice("byAuthor:".length) };
   }
   return { kind: "all" };
-}
-
-function isTypingTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  const tag = target.tagName.toLowerCase();
-  return tag === "textarea" || tag === "input" || target.isContentEditable === true;
 }

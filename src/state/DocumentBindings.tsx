@@ -3,7 +3,7 @@ import { useWorkspace } from "./DocumentProvider";
 import type { PendingIntent } from "./document";
 import { anyDirty, type DocId } from "./workspace";
 import { invoke } from "@tauri-apps/api/core";
-import { openDocuments, saveDocument, readDocument } from "../services/fileIO";
+import { openDocuments, saveDocument, readDocument, type OpenedFile } from "../services/fileIO";
 import {
   parseForgemarkFile,
   recoverForgemarkFile,
@@ -12,8 +12,15 @@ import {
   type RecoveryResult,
 } from "../format";
 import { fingerprint, type FileFingerprint } from "../services/conflict";
-import { watchMarkdownFile, type FileWatcher } from "../services/fileWatcher";
+import {
+  watchMarkdownFile,
+  snapshotFile,
+  mtimeOf,
+  type FileWatcher,
+} from "../services/fileWatcher";
 import { useRecentFiles, useDefaultView } from "./preferences";
+import { commandFor, modalOpen } from "./keymap";
+import { claimQueuedOpenPaths } from "./menuBridge";
 
 type Logger = (msg: string, err: unknown) => void;
 
@@ -34,21 +41,21 @@ function recoveryMessage(err: unknown, recovery: RecoveryResult): string {
     return `Some comment anchors were damaged. Recovered ${recovery.file.comments.length} comment(s); any showing a lost anchor can be reattached.`;
   }
   return err instanceof ForgemarkParseError
-    ? `Comments block couldn't be parsed (${err.kind}); loaded as plain markdown.`
+    ? `Comments block couldn't be read — ${err.message}. Loaded as plain markdown; the file can't be saved with new comments until the block is repaired.`
     : errorMessage("Couldn't parse comment block", err);
 }
 
-// Phase 2 ergonomic bindings — live until Phase 11 wires the native menu
-// bar. Renders nothing.
+// The side effects of one open document. Mounted once per open tab by
+// AppShell (not only the visible one — a background document must keep
+// saving and keep noticing its file change), rendering nothing.
 //
-//   ⌘O / Ctrl+O — open file dialog
-//   ⌘S / Ctrl+S — save (dirty: write body; clean: write original bytes)
-//   ⌘N / Ctrl+N — new untitled buffer (goes through guardDiscard, so
-//                  unsaved work is saved or explicitly discarded first)
-//
-// Auto-save: when a file path is set and the document is dirty, schedules
-// a save 500ms after the last edit. Untitled buffers never auto-save —
-// the user must ⌘S to choose a destination.
+//   - File commands from the keymap and the native menu: open, save,
+//     Save As, new tab. Window-level listeners are gated on `isActive`
+//     so N open documents don't each answer every keystroke.
+//   - Auto-save 500 ms after the last edit, unless the buffer is
+//     Untitled, read-only, or has an unresolved external change.
+//   - The file watcher, and the disk check before every write.
+//   - The unsaved-work guard for closing a tab and quitting.
 export function DocumentBindings({
   docId,
   logger = defaultLogger,
@@ -67,7 +74,7 @@ export function DocumentBindings({
   const isActive = id === workspace.activeId;
 
   const dispatch = useMemo(() => dispatchTo(id), [dispatchTo, id]);
-  const { recordOpened, remove: removeRecent } = useRecentFiles();
+  const { recordOpened } = useRecentFiles();
   const [defaultView] = useDefaultView();
   // Hold the default view in a ref so the load handler reads the
   // freshest value without re-binding the keydown effect.
@@ -75,8 +82,6 @@ export function DocumentBindings({
   defaultViewRef.current = defaultView;
   const recordOpenedRef = useRef(recordOpened);
   recordOpenedRef.current = recordOpened;
-  const removeRecentRef = useRef(removeRecent);
-  removeRecentRef.current = removeRecent;
 
   // Stable refs to read latest state in event handlers without re-binding.
   const stateRef = useRef(state);
@@ -101,15 +106,23 @@ export function DocumentBindings({
   const baselineRef = useRef<FileFingerprint>({ mtimeMs: null, hash: "" });
 
   // Refresh the baseline whenever filePath / originalText change. Both
-  // load (file open) and saved transitions update originalText.
+  // load (file open) and saved transitions update originalText. The
+  // mtime is read from disk so the comparison's fast path has something
+  // to compare.
+  const refreshBaseline = useCallback(async (path: string, text: string) => {
+    const fp = await fingerprint(text, await mtimeOf(path));
+    baselineRef.current = fp;
+    return fp;
+  }, []);
   useEffect(() => {
     let cancelled = false;
     if (!state.filePath) {
       baselineRef.current = { mtimeMs: null, hash: "" };
       return;
     }
+    const path = state.filePath;
     (async () => {
-      const fp = await fingerprint(state.originalText, null);
+      const fp = await fingerprint(state.originalText, await mtimeOf(path));
       if (!cancelled) baselineRef.current = fp;
     })();
     return () => {
@@ -117,62 +130,110 @@ export function DocumentBindings({
     };
   }, [state.filePath, state.originalText]);
 
-  // Phase 11: open a specific path (e.g. via Open Recent). Same logic
-  // as ⌘O's chosen-path branch — kept as a callable so non-keyboard
-  // surfaces can drive it.
+  // Surface bytes found on disk that differ from what we last read or
+  // wrote. Shared by the watcher and by the pre-write check below.
+  const reportExternalChange = useCallback(
+    (text: string, fp: FileFingerprint) => {
+      try {
+        const parsed = parseForgemarkFile(text, {
+          tolerant: true,
+          format: stateRef.current.format,
+        });
+        dispatch({
+          type: "externalChangeDetected",
+          text,
+          body: parsed.body,
+          comments: parsed.comments,
+          fingerprint: fp,
+        });
+      } catch (err) {
+        dispatch({
+          type: "externalChangeDetected",
+          text,
+          body: text,
+          comments: [],
+          fingerprint: fp,
+          parseError: (err as Error).message,
+        });
+      }
+    },
+    [dispatch],
+  );
+
+  // Before any write: is the file on disk still the one we read or last
+  // wrote? The watcher is debounced, so a change can land — an agent's
+  // reply, another editor's save — after the baseline was taken and
+  // before the watcher reports it. Writing then would overwrite it with
+  // no banner. When the disk has moved on, surface it exactly as the
+  // watcher would and let the conflict surfaces decide; the caller
+  // writes nothing. A file that can't be read (deleted, unmounted) is
+  // not a conflict: writing recreates it.
+  const diskChangedSinceBaseline = useCallback(
+    async (path: string): Promise<boolean> => {
+      let snap;
+      try {
+        snap = await snapshotFile(path);
+      } catch {
+        return false;
+      }
+      // Compare content, not mtime: the bytes are already in hand, and
+      // the mtime fast path exists to avoid a read we have just done.
+      if (snap.fingerprint.hash === baselineRef.current.hash) return false;
+      reportExternalChange(snap.text, snap.fingerprint);
+      return true;
+    },
+    [reportExternalChange],
+  );
+
+  // Put an opened file in a tab. The one place a file becomes a document:
+  // parse it (tolerantly, so a comment missing its markers is kept as an
+  // orphan), fall back to recovery when even that fails, and open the tab
+  // with any recovery message on it — the banner belongs to the tab it
+  // describes. `openTab` focuses an existing tab for the same path and
+  // reuses an untouched Untitled buffer.
+  const openIntoTab = useCallback((opened: OpenedFile) => {
+    let parsed;
+    let openError: string | null = null;
+    try {
+      parsed = parseForgemarkFile(opened.text, { tolerant: true, format: opened.format });
+    } catch (err) {
+      const recovery = recoverForgemarkFile(opened.text, opened.format);
+      parsed = recovery.file;
+      openError = recoveryMessage(err, recovery);
+    }
+    workspaceDispatchRef.current({
+      type: "openTab",
+      initial: {
+        filePath: opened.path,
+        fileName: opened.fileName,
+        originalText: opened.text,
+        body: parsed.body,
+        comments: parsed.comments,
+        format: opened.format,
+        readOnly: opened.readOnly,
+        error: openError,
+        // Seed the preferred view here rather than dispatching a second
+        // action at the freshly created tab.
+        viewMode: defaultViewRef.current,
+      },
+    });
+    recordOpenedRef.current(opened.path, opened.fileName);
+  }, []);
+
+  // Open a known path: Open Recent, a Finder open, a file dropped on the
+  // dock. A failure is reported here and announced as `open-failed` so
+  // the recent-files menu can drop the entry.
   const openPath = useCallback(
     async (path: string) => {
       try {
-        const opened = await readDocument(path);
-        let parsed;
-        try {
-          parsed = parseForgemarkFile(opened.text, {
-            tolerant: true,
-            format: opened.format,
-          });
-        } catch (err) {
-          // Fail soft: recover as many comments as possible instead of
-          // blanking every comment on a single damaged anchor.
-          const recovery = recoverForgemarkFile(opened.text, opened.format);
-          parsed = recovery.file;
-          dispatch({ type: "error", message: recoveryMessage(err, recovery) });
-        }
-        // Open in a tab. `openTab` focuses an existing tab if this file
-        // is already open, and reuses the current one if it's an
-        // untouched Untitled buffer.
-        workspaceDispatchRef.current({
-          type: "openTab",
-          initial: {
-            filePath: opened.path,
-            fileName: opened.fileName,
-            originalText: opened.text,
-            body: parsed.body,
-            comments: parsed.comments,
-            format: opened.format,
-            readOnly: opened.readOnly,
-            // Seed the preferred view here rather than dispatching a
-            // second action at the freshly created tab.
-            viewMode: defaultViewRef.current,
-          },
-        });
-        recordOpenedRef.current(opened.path, opened.fileName);
+        openIntoTab(await readDocument(path));
       } catch (err) {
-        // Stale recent-file entry — surface a polite error and the
-        // caller can decide to remove it from the recent list.
         logger("open path failed", err);
-        dispatch({
-          type: "error",
-          message: `File no longer exists at ${path}. Remove from recent files?`,
-        });
-        // Tag the error message with the path so the recent-files UI
-        // can decide whether to remove it. Custom events let the UI
-        // act on the failure asynchronously.
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("forgemark:open-failed", { detail: { path } }));
-        }
+        dispatch({ type: "error", message: errorMessage("Open failed", err) });
+        window.dispatchEvent(new CustomEvent("forgemark:open-failed", { detail: { path } }));
       }
     },
-    [dispatch, logger],
+    [dispatch, logger, openIntoTab],
   );
   const openPathRef = useRef(openPath);
   openPathRef.current = openPath;
@@ -180,47 +241,12 @@ export function DocumentBindings({
   // ⌘O. Each chosen file opens in its own tab.
   const runOpenDialog = useCallback(async () => {
     try {
-      const files = await openDocuments();
-      for (const opened of files) {
-        let parsed;
-        try {
-          // Phase 9: tolerant mode keeps comments that are missing their
-          // marker pair so the lost-anchor banner can surface them,
-          // instead of dropping all comments on a single missing marker.
-          parsed = parseForgemarkFile(opened.text, {
-            tolerant: true,
-            format: opened.format,
-          });
-        } catch (err) {
-          // Fail soft: recover as many comments as possible (coalescing
-          // splattered anchors, detaching unrecoverable ones for
-          // reattachment) instead of dropping every comment.
-          const recovery = recoverForgemarkFile(opened.text, opened.format);
-          parsed = recovery.file;
-          dispatch({ type: "error", message: recoveryMessage(err, recovery) });
-        }
-        workspaceDispatchRef.current({
-          type: "openTab",
-          initial: {
-            filePath: opened.path,
-            fileName: opened.fileName,
-            originalText: opened.text,
-            body: parsed.body,
-            comments: parsed.comments,
-            format: opened.format,
-            readOnly: opened.readOnly,
-            // Seed the preferred view here rather than dispatching a
-            // second action at the freshly created tab.
-            viewMode: defaultViewRef.current,
-          },
-        });
-        recordOpenedRef.current(opened.path, opened.fileName);
-      }
+      for (const opened of await openDocuments()) openIntoTab(opened);
     } catch (err) {
       logger("open failed", err);
       dispatch({ type: "error", message: errorMessage("Open failed", err) });
     }
-  }, [dispatch, logger]);
+  }, [dispatch, logger, openIntoTab]);
 
   // Listen for `forgemark:open-path` custom events from non-keyboard
   // surfaces (Open Recent menu, future native menu bar).
@@ -232,49 +258,77 @@ export function DocumentBindings({
       if (detail?.path) void openPathRef.current(detail.path);
     };
     window.addEventListener("forgemark:open-path", handler);
+    // Anything the bridge delivered before this listener existed.
+    for (const path of claimQueuedOpenPaths()) void openPathRef.current(path);
     return () => window.removeEventListener("forgemark:open-path", handler);
   }, [isActive]);
 
   // Save handler — shared by ⌘S and the pending-save effect (which
   // fires when the save-conflict modal's Overwrite is clicked).
+  // Resolves true only once the bytes are on disk. Callers that go on
+  // to discard the buffer (close, quit) must not proceed on false: the
+  // user backed out of the location dialog, the disk had moved on, or
+  // the write failed — all of which leave the work unsaved.
   const performSave = useCallback(
-    async (opts: { forcePrompt?: boolean } = {}) => {
+    async (opts: { forcePrompt?: boolean; overwrite?: boolean } = {}): Promise<boolean> => {
       const s = stateRef.current;
-      if (s.readOnly) return;
-      const text = s.dirty
-        ? serializeForgemarkFile({ body: s.body, comments: s.comments })
-        : s.originalText;
-      // Save As (⌘⇧S) forces the location prompt regardless of whether
-      // the buffer already has a path; plain Save (⌘S) reuses the
-      // path when set.
-      const seedPath = opts.forcePrompt ? null : s.filePath;
+      let text: string;
       try {
-        const path = await saveDocument(seedPath, text, s.format);
-        if (!path) return; // user cancelled save dialog
-        dispatch({ type: "saved", text, body: s.body });
-        if (path !== s.filePath) {
+        text = s.dirty
+          ? serializeForgemarkFile({ body: s.body, comments: s.comments })
+          : s.originalText;
+      } catch (err) {
+        // The serializer refuses output it can't read back (or a body
+        // that already holds an unreadable block). Nothing was written.
+        dispatch({ type: "error", message: errorMessage("Couldn't save", err) });
+        return false;
+      }
+      // Save As (⌘⇧S) forces the location prompt regardless of whether
+      // the buffer already has a path; plain Save (⌘S) reuses the path
+      // when set. A read-only file can't be written where it is, but the
+      // review made on it can be saved somewhere else — so it prompts.
+      const seedPath = opts.forcePrompt || s.readOnly ? null : s.filePath;
+      // A plain save over the open path must not overwrite a change we
+      // haven't seen yet. `overwrite` is the save-conflict modal's
+      // explicit answer, and Save As picks a destination the user chose.
+      if (seedPath && !opts.overwrite && (await diskChangedSinceBaseline(seedPath))) return false;
+      try {
+        const path = await saveDocument(seedPath, text, s.format, chosenTarget(s.fileName));
+        if (!path) return false; // user cancelled save dialog
+        if (path !== s.filePath && isOpenElsewhere(path)) {
+          // Two tabs on one path would run two watchers and two auto-save
+          // loops against the same file. Refuse rather than let them
+          // overwrite each other; the file was not written.
           dispatch({
-            type: "load",
-            filePath: path,
-            fileName: filenameFromPath(path),
-            text,
-            body: s.body,
-            comments: s.comments,
-            readOnly: false,
-            // Path/filename rebind only — same buffer, so don't discard
-            // the user's undo history.
-            rebindOnly: true,
+            type: "error",
+            message: `${filenameFromPath(path)} is already open in another tab. Close that tab first, or choose another name.`,
           });
+          return false;
         }
+        dispatch({
+          type: "saved",
+          text,
+          body: s.body,
+          comments: s.comments,
+          ...(path !== s.filePath ? { filePath: path, fileName: filenameFromPath(path) } : {}),
+        });
         // Refresh baseline so the watcher doesn't fire on our own write.
-        baselineRef.current = await fingerprint(text, null);
+        await refreshBaseline(path, text);
+        return true;
       } catch (err) {
         logger("save failed", err);
         dispatch({ type: "error", message: errorMessage("Save failed", err) });
+        return false;
       }
     },
-    [dispatch, logger],
+    [dispatch, logger, diskChangedSinceBaseline, refreshBaseline],
   );
+
+  // Whether another open tab already has this path.
+  const isOpenElsewhere = (path: string) => {
+    const ws = workspaceRef.current;
+    return ws.order.some((id) => id !== idRef.current && ws.docs[id].filePath === path);
+  };
 
   // Quitting has to account for every open document, and each document's
   // file IO lives in its own bindings instance — this one can only save
@@ -334,31 +388,23 @@ export function DocumentBindings({
   const runQuitRef = useRef(runQuit);
   runQuitRef.current = runQuit;
 
-  // ⌘N and ⌘O throw away the current buffer. Before this guard they did
-  // it silently, which was survivable only because auto-save had usually
-  // just written the file — but auto-save is skipped for Untitled
-  // documents and while a conflict is pending, and in exactly those two
-  // cases the work was gone with no prompt.
-  //
-  // Forgemark is an auto-save-first app, so prompting to save something
-  // auto-save would have written 500ms later would be incoherent. The
-  // rule is therefore: if we *can* save it for the user, do that and
-  // carry on. Only ask when we can't.
   const guardDiscard = useCallback(
     async (intent: PendingIntent) => {
       const s = stateRef.current;
-      if (!s.dirty || s.readOnly) {
+      if (!s.dirty) {
         await executeIntent(intent);
         return;
       }
-      // Untitled needs a destination from the user, and saving during an
-      // unresolved conflict would clobber the disk copy. Both have to ask.
-      const canSaveSilently = s.filePath != null && s.externalChange == null;
-      if (canSaveSilently) {
-        await performSave();
+      // Untitled needs a destination from the user, a read-only file
+      // can't be written where it is, and saving during an unresolved
+      // conflict would clobber the disk copy. All three have to ask.
+      const canSaveSilently = s.filePath != null && !s.readOnly && s.externalChange == null;
+      if (canSaveSilently && (await performSave())) {
         await executeIntent(intent);
         return;
       }
+      // Either we couldn't save for them, or we tried and it failed
+      // (disk full, permissions, the file changed underneath). Ask.
       dispatch({ type: "requestIntent", intent });
     },
     [dispatch, executeIntent, performSave],
@@ -376,10 +422,10 @@ export function DocumentBindings({
     let cancelled = false;
     (async () => {
       if (resolution === "save") {
-        await performSave();
-        // performSave leaves `dirty` set if the user backed out of the
-        // location dialog or the write failed. Don't discard their work.
-        if (stateRef.current.dirty) {
+        // False when the user backed out of the location dialog or the
+        // write failed. Don't discard their work.
+        const written = await performSave();
+        if (!written) {
           if (!cancelled) dispatch({ type: "clearIntent" });
           return;
         }
@@ -423,17 +469,17 @@ export function DocumentBindings({
   useEffect(() => {
     if (!isActive) return;
     const onKey = async (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-      if (!mod) return;
-      const key = e.key.toLowerCase();
+      const cmd = commandFor(e);
+      if (!cmd || modalOpen()) return;
       const s = stateRef.current;
-      if (key === "o") {
+      if (cmd === "open") {
         e.preventDefault();
         // Opens in a tab of its own — nothing is discarded, so no guard.
         await runOpenDialog();
-      } else if (key === "s") {
+      } else if (cmd === "save" || cmd === "save-as") {
         e.preventDefault();
-        if (s.readOnly) return;
+        // A read-only file isn't a dead end: performSave turns the save
+        // into a Save As so the review made on it can be kept elsewhere.
         // Phase 10: if there's a pending external change, route into
         // the save-conflict modal instead of overwriting silently.
         // (Save As also routes here — the conflict resolution comes
@@ -444,8 +490,8 @@ export function DocumentBindings({
         }
         // ⌘S = save in place (or prompt for Untitled);
         // ⌘⇧S = Save As, always prompts.
-        await performSave({ forcePrompt: e.shiftKey });
-      } else if (key === "n") {
+        await performSave({ forcePrompt: cmd === "save-as" });
+      } else if (cmd === "new-tab") {
         e.preventDefault();
         workspaceDispatchRef.current({ type: "openTab" });
       }
@@ -462,12 +508,14 @@ export function DocumentBindings({
     if (!state.filePath) return;
     if (state.readOnly) return;
     if (state.externalChange != null) return;
+    const path = state.filePath;
     const handle = setTimeout(async () => {
-      const text = serializeForgemarkFile({ body: state.body, comments: state.comments });
       try {
-        await saveDocument(state.filePath, text);
-        dispatch({ type: "saved", text, body: state.body });
-        baselineRef.current = await fingerprint(text, null);
+        if (await diskChangedSinceBaseline(path)) return;
+        const text = serializeForgemarkFile({ body: state.body, comments: state.comments });
+        await saveDocument(path, text);
+        dispatch({ type: "saved", text, body: state.body, comments: state.comments });
+        await refreshBaseline(path, text);
       } catch (err) {
         logger("auto-save failed", err);
         dispatch({ type: "error", message: errorMessage("Auto-save failed", err) });
@@ -483,6 +531,8 @@ export function DocumentBindings({
     state.externalChange,
     dispatch,
     logger,
+    diskChangedSinceBaseline,
+    refreshBaseline,
   ]);
 
   // Phase 10: pendingSave bridge. When the save-conflict modal's
@@ -492,7 +542,9 @@ export function DocumentBindings({
     if (!state.pendingSave) return;
     let cancelled = false;
     (async () => {
-      await performSave();
+      // The user chose Overwrite in the save-conflict modal: the disk
+      // differs from the baseline by definition, so skip the check.
+      await performSave({ overwrite: true });
       if (!cancelled) dispatch({ type: "clearPendingSave" });
     })();
     return () => {
@@ -530,33 +582,7 @@ export function DocumentBindings({
         const w = await watchMarkdownFile(
           path,
           () => baselineRef.current,
-          ({ text, fingerprint: fp }) => {
-            // Try to parse the new bytes. If parse fails, surface the
-            // change with parseError set so the save-conflict modal
-            // can show "Unknown changes".
-            try {
-              const parsed = parseForgemarkFile(text, {
-                tolerant: true,
-                format: stateRef.current.format,
-              });
-              dispatch({
-                type: "externalChangeDetected",
-                text,
-                body: parsed.body,
-                comments: parsed.comments,
-                fingerprint: fp,
-              });
-            } catch (err) {
-              dispatch({
-                type: "externalChangeDetected",
-                text,
-                body: text,
-                comments: [],
-                fingerprint: fp,
-                parseError: (err as Error).message,
-              });
-            }
-          },
+          ({ text, fingerprint: fp }) => reportExternalChange(text, fp),
         );
         if (cancelled) {
           await w.dispose();
@@ -573,9 +599,15 @@ export function DocumentBindings({
       cancelled = true;
       void watcher?.dispose();
     };
-  }, [state.filePath, dispatch, logger]);
+  }, [state.filePath, reportExternalChange, logger]);
 
   return null;
+}
+
+// The name the save dialog opens with: the document's own name, so Save
+// As on "draft.md" proposes "draft.md" rather than "Untitled.md".
+function chosenTarget(fileName: string): string | undefined {
+  return /^Untitled( \d+)?$/.test(fileName) ? undefined : fileName;
 }
 
 function filenameFromPath(path: string): string {
