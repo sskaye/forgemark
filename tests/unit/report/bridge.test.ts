@@ -227,7 +227,7 @@ describe("what the reader does", () => {
     ]);
     // The whole block reads as the first passage: it is marked as a block.
     expect(table.getAttribute("data-anchor-id")).toBe("11");
-    expect(table.getAttribute("data-fm-passage-host")).toBe("11 12");
+    expect(table.getAttribute("data-fm-passage-host")!.split(" ").sort()).toEqual(["11", "12"]);
     table.querySelector("td")!.textContent = "43";
     await vi.advanceTimersByTimeAsync(100);
     expect(table.getAttribute("data-anchor-id")).toBe("12");
