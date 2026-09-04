@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Health dashboard</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <img src="logo.png" alt="logo">
+  <strong>Health dashboard</strong>
+  <nav role="tablist">
+    <button type="button" role="tab" data-tab="glucose" aria-selected="true">Glucose</button>
+    <button type="button" role="tab" data-tab="sleep" aria-selected="false">Sleep</button>
+    <button type="button" role="tab" data-tab="body" aria-selected="false">Body</button>
+  </nav>
+  <label style="margin-left:auto">Range
+    <select id="range">
+      <option value="week">Week</option>
+      <option value="month" selected>Month</option>
+      <option value="year">Year</option>
+    </select>
+  </label>
+</header>
+<main>
+  <p id="intro">This report is built by its own script from <code>data.json</code>. Everything below the header appears only after the script has run; the tiles and the chart change with the tab and the range. Links: <a href="https://example.com">an address</a>, <a href="#notes">the notes section</a>, <a href="../gfm-showcase.md">the Markdown showcase</a>.</p>
+
+  <section class="tiles" id="tiles"></section>
+
+  <section class="card" id="chart-card">
+    <h2 id="chart-title">Loading…</h2>
+    <p class="cap" id="chart-note"></p>
+    <figure id="chart"></figure>
+  </section>
+
+  <section class="card" id="static-figure">
+    <h2>A static figure</h2>
+    <figure id="fig-static">
+      <svg viewBox="0 0 200 40" width="200" height="40"><rect x="0" y="10" width="120" height="20" fill="#0a84ff"></rect><rect x="130" y="10" width="60" height="20" fill="#1f8a5b"></rect></svg>
+      <figcaption>Figure 1. Two bars that are in the source.</figcaption>
+    </figure>
+  </section>
+
+  <section class="card" id="notes">
+    <h2>Notes</h2>
+    <p>This paragraph is in the source, so a comment on it is an ordinary inline anchor. <b>Variable projection</b> eliminates the linear block analytically.</p>
+    <p id="generated-note"></p>
+  </section>
+</main>
+<footer>Generated report · <span id="stamp"></span></footer>
+
+<script>
+(async function () {
+  const data = await fetch("data.json").then((r) => r.json());
+  let tab = "glucose";
+  const tiles = document.getElementById("tiles");
+  const chart = document.getElementById("chart");
+  const title = document.getElementById("chart-title");
+  const note = document.getElementById("chart-note");
+  const range = document.getElementById("range");
+  const names = { glucose: "Blood glucose", sleep: "Sleep", body: "Body" };
+
+  function draw() {
+    const d = data[tab];
+    const n = range.value === "week" ? 7 : range.value === "year" ? 12 : 10;
+    const series = d.series.slice(0, n);
+    tiles.innerHTML = d.tiles
+      .map(([label, value]) => `<div class="tile"><div class="label">${label}</div><div class="value">${value}</div></div>`)
+      .join("");
+    title.textContent = names[tab] + " over time";
+    note.textContent = `${series.length} points · ${range.value} view · drawn by script`;
+    const max = Math.max(...series), min = Math.min(...series);
+    const pts = series.map((v, i) => `${20 + (i * 360) / Math.max(1, series.length - 1)},${110 - ((v - min) / (max - min || 1)) * 80}`).join(" ");
+    chart.innerHTML =
+      `<svg viewBox="0 0 400 130" width="100%" height="160">` +
+      `<polyline fill="none" stroke="#0a84ff" stroke-width="2" points="${pts}"></polyline>` +
+      series.map((v, i) => `<text x="${20 + (i * 360) / Math.max(1, series.length - 1)}" y="125" text-anchor="middle">${i + 1}</text>`).join("") +
+      `</svg><figcaption>Figure 2. ${names[tab]} for the ${range.value}, ${series.length} points.</figcaption>`;
+    document.getElementById("generated-note").textContent =
+      `The ${names[tab].toLowerCase()} series peaks at ${max} and bottoms out at ${min}.`;
+  }
+
+  document.querySelectorAll("nav [role=tab]").forEach((b) => {
+    b.addEventListener("click", () => {
+      tab = b.dataset.tab;
+      document.querySelectorAll("nav [role=tab]").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+      draw();
+    });
+  });
+  range.addEventListener("change", draw);
+  document.getElementById("stamp").textContent = new Date().toISOString().slice(0, 10);
+  draw();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+:root { --ink: #1b1b1a; --muted: #6b6b68; --accent: #0a84ff; --paper: #fcfcfb; --card: #fff; --rule: #e6e6e3; }
+@media (prefers-color-scheme: dark) {
+  :root { --ink: #ececea; --muted: #a0a09c; --paper: #1c1c1b; --card: #262625; --rule: #3a3a38; }
+}
+body { margin: 0; font: 15px/1.5 -apple-system, "Segoe UI", sans-serif; color: var(--ink); background: var(--paper); }
+header { position: sticky; top: 0; background: var(--paper); border-bottom: 1px solid var(--rule); padding: 12px 24px; display: flex; align-items: center; gap: 16px; z-index: 1; }
+header img { width: 28px; height: 28px; border-radius: 6px; }
+nav[role="tablist"] { display: flex; gap: 6px; }
+nav button { font: inherit; padding: 6px 12px; border: 1px solid var(--rule); border-radius: 6px; background: var(--card); color: var(--ink); cursor: pointer; }
+nav button[aria-selected="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+main { max-width: 860px; margin: 0 auto; padding: 24px; }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 0 0 20px; }
+.tile { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 12px 14px; }
+.tile .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.tile .value { font-size: 26px; font-weight: 600; }
+.card { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 16px 18px; margin-bottom: 20px; }
+.card h2 { margin: 0 0 4px; font-size: 16px; }
+.cap { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+[hidden] { display: none !important; }
+figure { margin: 0; }
+figcaption { font-size: 13px; color: var(--muted); margin-top: 6px; }
+svg text { font-size: 11px; fill: var(--muted); }
+footer { color: var(--muted); font-size: 13px; padding: 24px; text-align: center; }
