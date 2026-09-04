@@ -42,11 +42,7 @@
 }
 
 .fm-conflict-banner-button:hover {
-  background: rgba(0, 0, 0, 0.04);
-}
-
-[data-theme="dark"] .fm-conflict-banner-button:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--fm-hover-bg);
 }
 
 .fm-conflict-banner-button-primary {

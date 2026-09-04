@@ -107,6 +107,9 @@ window.FM_TOKENS = (() => {
     accentText: "#FFFFFF",
     accentSoft: "rgba(10,132,255,0.10)",
     accentSoftStrong: "rgba(10,132,255,0.18)",
+    hoverBg: "rgba(0,0,0,0.04)",
+    controlActiveBg: "#FFFFFF",
+    dangerSoft: "rgba(215,0,21,0.06)",
     // Feedback
     danger: "#D70015",
     success: "#1F8A5B",
@@ -162,6 +165,9 @@ window.FM_TOKENS = (() => {
     accentText: "#FFFFFF",
     accentSoft: "rgba(10,132,255,0.18)",
     accentSoftStrong: "rgba(10,132,255,0.30)",
+    hoverBg: "rgba(255,255,255,0.06)",
+    controlActiveBg: "#3F3F3F",
+    dangerSoft: "rgba(255,69,58,0.14)",
 
     danger: "#FF453A",
     success: "#30D158",

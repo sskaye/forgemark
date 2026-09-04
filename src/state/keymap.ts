@@ -23,6 +23,7 @@ export type CommandId =
   | "settings"
   | "print"
   | "clean-export"
+  | "toggle-sidebar"
   // File
   | "open"
   | "save"
@@ -69,6 +70,8 @@ export const KEYMAP: Record<CommandId, Chord[]> = {
   settings: [{ key: ",", mod: true }],
   print: [{ key: "p", mod: true }],
   "clean-export": [{ key: "e", mod: true, shift: true }],
+  // ⌘B is bold in the editor; the sidebar takes the alt chord.
+  "toggle-sidebar": [{ key: "b", mod: true, alt: true }],
 
   open: [{ key: "o", mod: true }],
   save: [{ key: "s", mod: true }],

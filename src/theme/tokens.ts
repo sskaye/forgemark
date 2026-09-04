@@ -96,6 +96,14 @@ export type Theme = {
   accentSoft: string;
   accentSoftStrong: string;
 
+  // Interactive surfaces. One hover wash for every button and control,
+  // the raised background of a selected segment, and the soft ground
+  // under a destructive button — each used to be a literal copied into
+  // nine stylesheets with a dark-theme override beside it.
+  hoverBg: string;
+  controlActiveBg: string;
+  dangerSoft: string;
+
   // Feedback
   danger: string;
   success: string;
@@ -154,6 +162,10 @@ export const LIGHT: Theme = {
   accentSoft: "rgba(10,132,255,0.10)",
   accentSoftStrong: "rgba(10,132,255,0.18)",
 
+  hoverBg: "rgba(0,0,0,0.04)",
+  controlActiveBg: "#FFFFFF",
+  dangerSoft: "rgba(215,0,21,0.06)",
+
   danger: "#D70015",
   success: "#1F8A5B",
 
@@ -209,6 +221,10 @@ export const DARK: Theme = {
   accentText: "#FFFFFF",
   accentSoft: "rgba(10,132,255,0.18)",
   accentSoftStrong: "rgba(10,132,255,0.30)",
+
+  hoverBg: "rgba(255,255,255,0.06)",
+  controlActiveBg: "#3F3F3F",
+  dangerSoft: "rgba(255,69,58,0.14)",
 
   danger: "#FF453A",
   success: "#30D158",

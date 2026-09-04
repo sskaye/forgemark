@@ -133,6 +133,14 @@ describe("Doc order", () => {
   });
 });
 
+describe("the sidebar header", () => {
+  it("counts lost anchors", async () => {
+    renderApp("x <!-- fmc:1 -->p1<!-- /fmc:1 --> y\n", [comment(1), comment(2)]);
+    await screen.findByTestId("fm-card-1");
+    expect(screen.getByText("2 open · 2 total · 1 lost anchor")).toBeInTheDocument();
+  });
+});
+
 describe("Clean Export", () => {
   it("proposes <name>-clean.md", async () => {
     renderApp("hello\n", [comment(1, { floating: true, anchor_text: undefined })]);

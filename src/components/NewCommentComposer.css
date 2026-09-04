@@ -80,7 +80,7 @@
 .fm-composer-hint {
   flex: 1;
   font-size: 11.5px;
-  color: var(--fm-chrome-faint);
+  color: var(--fm-chrome-muted);
 }
 
 .fm-composer-submit {
@@ -127,12 +127,8 @@
 }
 
 .fm-composer-toggle:hover:not(.is-active) {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--fm-hover-bg);
   color: var(--fm-chrome-text);
-}
-
-[data-theme="dark"] .fm-composer-toggle:hover:not(.is-active) {
-  background: rgba(255, 255, 255, 0.06);
 }
 
 .fm-composer-suggest-fields {

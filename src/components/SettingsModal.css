@@ -76,7 +76,7 @@
 
 .fm-settings-field-hint {
   font-size: 11.5px;
-  color: var(--fm-chrome-faint);
+  color: var(--fm-chrome-muted);
 }
 
 .fm-settings-input {
@@ -118,11 +118,7 @@
 }
 
 .fm-settings-stepper-btn:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.04);
-}
-
-[data-theme="dark"] .fm-settings-stepper-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--fm-hover-bg);
 }
 
 .fm-settings-stepper-btn:disabled {
@@ -136,13 +132,6 @@
   font-weight: 600;
   min-width: 24px;
   text-align: center;
-}
-
-.fm-settings-placeholder {
-  font-size: 12.5px;
-  color: var(--fm-chrome-faint);
-  font-style: italic;
-  margin: 0;
 }
 
 /* Phase 12 — AI Participation download buttons. */
@@ -162,7 +151,7 @@
 
 .fm-settings-ai-help {
   font-size: 11.5px;
-  color: var(--fm-chrome-faint);
+  color: var(--fm-chrome-muted);
   margin: 0;
   line-height: 1.45;
 }

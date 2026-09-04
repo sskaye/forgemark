@@ -179,6 +179,23 @@ describe("FMCard action row", () => {
     expect(screen.getByTestId("probe-body").textContent).toBe("before bit after\n");
   });
 
+  it("Resolve all resolves every open comment the sidebar is showing", async () => {
+    renderApp({
+      body: "a <!-- fmc:1 -->one<!-- /fmc:1 --> b <!-- fmc:2 -->two<!-- /fmc:2 --> c <!-- fmc:3 -->three<!-- /fmc:3 -->\n",
+      comments: [aComment(1), aComment(2, { author: "Devon" }), aComment(3, { resolved: true })],
+    });
+    await screen.findByTestId("fm-card-1");
+    // Only the ones shown: filter to Devon's, resolve all, and Maya's
+    // comment 1 stays open.
+    const filter = screen.getByTestId("fm-sidebar-filter") as HTMLSelectElement;
+    fireEvent.change(filter, { target: { value: "byAuthor:Devon" } });
+    // A single open comment offers no batch action; show all again.
+    expect(screen.queryByTestId("fm-sidebar-resolve-all")).toBeNull();
+    fireEvent.change(filter, { target: { value: "open" } });
+    fireEvent.click(await screen.findByTestId("fm-sidebar-resolve-all"));
+    await waitFor(() => expect(screen.getByTestId("probe-resolved-ids").textContent).toBe("1,2,3"));
+  });
+
   it("Delete can be undone for a moment, restoring the record and its markers", async () => {
     renderApp({
       body: "before <!-- fmc:1 -->bit<!-- /fmc:1 --> after\n",

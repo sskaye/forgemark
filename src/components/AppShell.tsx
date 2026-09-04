@@ -120,6 +120,10 @@ export function AppShell() {
           e.preventDefault();
           if (state.filePath) setCleanExportOpen(true);
           return;
+        case "toggle-sidebar":
+          e.preventDefault();
+          setSidebarOpen((v) => !v);
+          return;
         case "next-tab":
         case "prev-tab": {
           e.preventDefault();

@@ -11,6 +11,7 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 
 ### Added
 
+- The sidebar header counts lost anchors, offers Resolve all for the open comments it is showing, and ⌘⌥B hides and shows the sidebar.
 - File > Open Recent. The last files opened are listed in the native menu, newest first, with Clear Menu at the bottom; an entry the app can no longer open is dropped from the list.
 - Every keyboard shortcut is now defined in one table, and a test refuses two commands sharing a chord. ⌘⇧E used to open Clean Export, the edit composer, and Find with the selection all at once; it now opens Clean Export only, and editing your own comment is E with the card focused. Card shortcuts act only while the keyboard focus is in the sidebar, never over an open dialog, and never while typing.
 - Tabs from the keyboard: ⌘⇧] and ⌘⇧[ move between tabs, ⌘1 to ⌘9 jump to one, and arrow keys walk the tab strip. In the sidebar, ↑/↓ (or j/k) move between comment cards.
@@ -45,6 +46,7 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 
 ### Changed
 
+- Timestamps on comment cards and the hints under Settings fields and composers are drawn at the readable muted tone rather than the decorative faint one. The hover, selected-segment, and danger backgrounds are theme tokens instead of literals copied into nine stylesheets.
 - The app now ships a content-security policy: scripts only from the app itself, images from the app, data URLs, and HTTPS, frames only for the report view. The filesystem scope stays unrestricted, and says why. The release script no longer prints the Apple app-specific password in its log, the version script matches only the top-level version key, and CI builds the macOS app on pushes to main instead of finding bundle breakage on release day.
 - Dead code removed: a reducer action, a file-open helper, a test-only fingerprint helper, two HTML helpers, and the styles for an in-frame button that no longer exists; the marker regex and the "which anchor is this node in" lookup exist once each. Two unused npm packages and two unused Rust crates are gone. A file at a Windows drive root is watched correctly, and a watcher event that names no path no longer triggers a read.
 - Every dialog now uses one modal shell built on the native `dialog` element: it takes focus when it opens, gives it back to whatever opened it when it closes, traps Tab inside itself, and answers Enter only from within. Comment cards are focusable regions rather than buttons, so screen readers hear their content and the reply controls are reachable by keyboard. The Rendered/Source switch and the Settings choices share one segmented control that moves with arrow keys.

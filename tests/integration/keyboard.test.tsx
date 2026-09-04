@@ -175,6 +175,18 @@ describe("card shortcuts follow the keyboard focus", () => {
   });
 });
 
+describe("the sidebar from the keyboard", () => {
+  it("⌘⌥B hides and shows it", async () => {
+    renderApp();
+    fireEvent.click(screen.getByTestId("probe-load"));
+    await screen.findByTestId("fm-sidebar");
+    key("b", { metaKey: true, altKey: true });
+    await waitFor(() => expect(screen.queryByTestId("fm-sidebar")).toBeNull());
+    key("b", { metaKey: true, altKey: true });
+    expect(await screen.findByTestId("fm-sidebar")).toBeInTheDocument();
+  });
+});
+
 describe("tabs from the keyboard", () => {
   it("⌘⇧] and ⌘⇧[ cycle, ⌘1 jumps, arrows walk the strip", async () => {
     renderApp();

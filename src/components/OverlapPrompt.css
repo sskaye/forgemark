@@ -47,12 +47,8 @@
 }
 
 .fm-overlap-prompt-cancel:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--fm-hover-bg);
   color: var(--fm-chrome-text);
-}
-
-[data-theme="dark"] .fm-overlap-prompt-cancel:hover {
-  background: rgba(255, 255, 255, 0.06);
 }
 
 .fm-overlap-prompt-reply {

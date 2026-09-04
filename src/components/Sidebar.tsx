@@ -101,6 +101,9 @@ export function Sidebar({ anchorStatuses }: SidebarProps) {
   return (
     <aside className="fm-sidebar" data-testid="fm-sidebar" aria-label="Comments">
       <SidebarHeader
+        orphaned={orphans.length}
+        openVisibleIds={visibleComments.filter((c) => !c.resolved).map((c) => c.id)}
+        onResolveAll={(ids) => dispatch({ type: "setResolved", commentIds: ids, resolved: true })}
         open={open}
         total={comments.length}
         comments={comments}
@@ -335,6 +338,9 @@ function FocusableCard({ cardKey, ...props }: { cardKey: number } & Parameters<t
 }
 
 function SidebarHeader({
+  orphaned,
+  openVisibleIds,
+  onResolveAll,
   open,
   total,
   comments,
@@ -352,6 +358,9 @@ function SidebarHeader({
   authorName: string;
   onFilter: (f: FilterMode) => void;
   onSort: (s: SortMode) => void;
+  orphaned: number;
+  openVisibleIds: number[];
+  onResolveAll: (ids: number[]) => void;
 }) {
   // Distinct author names appearing in this file's comments. Authors are
   // ordered by first appearance (stable across reorders).
@@ -375,7 +384,19 @@ function SidebarHeader({
         <span className="fm-sidebar-title">Comments</span>
         <span className="fm-sidebar-counts">
           {open} open · {total} total
+          {orphaned > 0 ? ` · ${orphaned} lost anchor${orphaned === 1 ? "" : "s"}` : ""}
         </span>
+        {openVisibleIds.length > 1 && (
+          <button
+            type="button"
+            className="fm-sidebar-resolve-all"
+            data-testid="fm-sidebar-resolve-all"
+            title="Resolve every open comment shown"
+            onClick={() => onResolveAll(openVisibleIds)}
+          >
+            Resolve all
+          </button>
+        )}
       </div>
       <div className="fm-sidebar-controls">
         <select

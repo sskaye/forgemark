@@ -275,6 +275,8 @@ export type DocumentAction =
       editedAt: string;
     }
   | { type: "toggleResolved"; commentId: number }
+  // Several at once: "Resolve all" on whatever the sidebar is showing.
+  | { type: "setResolved"; commentIds: number[]; resolved: boolean }
   | { type: "deleteComment"; commentId: number }
   | { type: "undoDelete" }
   | { type: "dismissUndoDelete" }
@@ -497,6 +499,20 @@ function reduce(state: DocumentState, action: DocumentAction): DocumentState {
       // (resolved → unresolved) keeps focus.
       const focusedCommentId =
         willBeResolved && state.focusedCommentId === action.commentId
+          ? null
+          : state.focusedCommentId;
+      return { ...state, comments, dirty: true, focusedCommentId };
+    }
+    case "setResolved": {
+      const ids = new Set(action.commentIds);
+      if (!state.comments.some((c) => ids.has(c.id) && c.resolved !== action.resolved)) {
+        return state;
+      }
+      const comments = state.comments.map((c) =>
+        ids.has(c.id) && c.resolved !== action.resolved ? { ...c, resolved: action.resolved } : c,
+      );
+      const focusedCommentId =
+        action.resolved && state.focusedCommentId != null && ids.has(state.focusedCommentId)
           ? null
           : state.focusedCommentId;
       return { ...state, comments, dirty: true, focusedCommentId };

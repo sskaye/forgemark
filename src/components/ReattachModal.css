@@ -134,11 +134,7 @@
 }
 
 .fm-modal-button:hover {
-  background: rgba(0, 0, 0, 0.04);
-}
-
-[data-theme="dark"] .fm-modal-button:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--fm-hover-bg);
 }
 
 .fm-modal-button:disabled {
@@ -163,7 +159,7 @@
 }
 
 .fm-modal-button-danger:hover {
-  background: rgba(215, 0, 21, 0.06);
+  background: var(--fm-danger-soft);
 }
 
 [data-theme="dark"] .fm-modal-button-danger:hover {

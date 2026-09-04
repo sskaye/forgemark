@@ -37,6 +37,7 @@ describe("keymap", () => {
     expect(press("]", { meta: true, shift: true })).toBe("next-tab");
     expect(press("3", { meta: true })).toBe("tab-3");
     expect(press("ArrowDown")).toBe("next-comment");
+    expect(press("b", { meta: true, alt: true })).toBe("toggle-sidebar");
   });
 
   it("treats Ctrl as the modifier where there is no ⌘", () => {

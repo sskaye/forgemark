@@ -54,14 +54,16 @@
   color: var(--fm-prose-ink);
 }
 
+/* A timestamp is information on a review tool, so it reads at the
+   muted tone rather than the decorative faint one. */
 .fm-card-timestamp {
   font-size: 11.5px;
-  color: var(--fm-prose-faint);
+  color: var(--fm-prose-muted);
 }
 
 .fm-card-edited {
   font-size: 11px;
-  color: var(--fm-prose-faint);
+  color: var(--fm-prose-muted);
   font-style: italic;
 }
 
@@ -146,12 +148,8 @@
 }
 
 .fm-card-reply-action:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--fm-hover-bg);
   color: var(--fm-chrome-text);
-}
-
-[data-theme="dark"] .fm-card-reply-action:hover {
-  background: rgba(255, 255, 255, 0.06);
 }
 
 .fm-card-reply-action-danger:hover {
@@ -184,11 +182,7 @@
 }
 
 .fm-card-action:hover {
-  background: rgba(0, 0, 0, 0.04);
-}
-
-[data-theme="dark"] .fm-card-action:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--fm-hover-bg);
 }
 
 .fm-card-action:focus-visible {
@@ -202,7 +196,7 @@
 }
 
 .fm-card-action-danger:hover {
-  background: rgba(215, 0, 21, 0.06);
+  background: var(--fm-danger-soft);
 }
 
 [data-theme="dark"] .fm-card-action-danger:hover {

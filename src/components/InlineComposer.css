@@ -44,7 +44,7 @@
 .fm-inline-composer-hint {
   flex: 1;
   font-size: 11px;
-  color: var(--fm-chrome-faint);
+  color: var(--fm-chrome-muted);
 }
 
 .fm-inline-composer-cancel {
