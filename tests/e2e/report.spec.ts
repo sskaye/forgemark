@@ -91,7 +91,15 @@ async function submitComment(page: Page, text: string) {
 
 async function commentOnSelection(page: Page, frame: FrameLocator, phrase: string, text: string) {
   await selectInFrame(frame, phrase);
-  await page.getByTestId("fm-selection-comment").click();
+  const button = page.getByTestId("fm-selection-comment");
+  try {
+    await button.click();
+  } catch (err) {
+    const box = await page.getByTestId("fm-selection-toolbar").boundingBox();
+    throw new Error(
+      `toolbar click failed; toolbar at ${JSON.stringify(box)} in viewport ${JSON.stringify(page.viewportSize())}: ${String(err).slice(0, 200)}`,
+    );
+  }
   await submitComment(page, text);
 }
 
@@ -217,4 +225,30 @@ test("a shortcut pressed inside the report reaches the app", async ({ page }) =>
   await frame.locator("#notes p").first().focus();
   await page.keyboard.press("Meta+Alt+m");
   await expect(page.getByTestId("fm-composer")).toBeVisible();
+});
+
+test("the report keeps its state behind the source view and across a theme change", async ({
+  page,
+}) => {
+  const frame = await openReport(page);
+  await frame.getByRole("tab", { name: "Sleep" }).click();
+  await frame.locator("#range").selectOption("week");
+  await page.getByRole("tab", { name: "Source" }).click();
+  await expect(page.getByTestId("fm-source-view")).toBeVisible();
+  await page.getByRole("tab", { name: "Rendered" }).click();
+  await expect(frame.getByRole("tab", { name: "Sleep" })).toHaveAttribute("aria-selected", "true");
+  await expect(frame.locator("#chart-note")).toContainText("7 points");
+  await notReloaded(frame);
+});
+
+test("a comment card scrolls the report to its highlight", async ({ page }) => {
+  const frame = await openReport(page);
+  await commentOnSelection(page, frame, "Variable projection", "Down here.");
+  // A second comment, near the top, takes the focus; clicking the first
+  // card then moves it back and scrolls to its highlight.
+  await commentOnSelection(page, frame, "built by its own script", "Up here.");
+  await frame.locator("body").evaluate(() => window.scrollTo(0, 0));
+  await expect.poll(() => frame.locator("body").evaluate(() => window.scrollY)).toBe(0);
+  await page.getByTestId("fm-card-1").click();
+  await expect.poll(() => frame.locator("body").evaluate(() => window.scrollY)).toBeGreaterThan(0);
 });

@@ -155,17 +155,8 @@ test("in-document links scroll and document links open a tab", async ({ page }) 
 
 test("a comment on a passage splices markers and nothing else", async ({ page }) => {
   const prose = await openShowcase(page);
-  const target = prose.locator("mark");
-  // A reader's selection starts with a click, which focuses the editor;
-  // the editor reads the selection only while it has focus.
-  await target.click();
-  await target.evaluate((el) => {
-    const range = document.createRange();
-    range.selectNodeContents(el);
-    const selection = window.getSelection()!;
-    selection.removeAllRanges();
-    selection.addRange(range);
-  });
+  // A double-click selects the word, as a reader would.
+  await prose.locator("mark").dblclick();
   await expect(page.getByTestId("fm-selection-toolbar")).toBeVisible();
   await page.getByTestId("fm-selection-comment").click();
   const box = page.getByTestId("fm-composer-textarea");
@@ -180,4 +171,46 @@ test("a comment on a passage splices markers and nothing else", async ({ page })
   expect(body.replace("<!-- fmc:1 -->", "").replace("<!-- /fmc:1 -->", "").trimEnd()).toBe(
     SOURCE.trimEnd(),
   );
+});
+
+test("typing beside an anchor's edges keeps the markers where they were", async ({ page }) => {
+  const prose = await openShowcase(page);
+  await prose.locator("mark").dblclick();
+  await expect(page.getByTestId("fm-selection-toolbar")).toBeVisible();
+  await page.getByTestId("fm-selection-comment").click();
+  const box = page.getByTestId("fm-composer-textarea");
+  await box.fill("Word choice.");
+  await box.press("Meta+Enter");
+  await expect(prose.locator("[data-anchor-id='1']")).toHaveText("highlighted");
+
+  // Caret just after the close edge, placed through the editor, then
+  // Backspace: the last anchored letter goes, the edge stays.
+  await page.evaluate(() => {
+    const dom = document.querySelector(".fm-editor-pane[data-active='true'] .ProseMirror");
+    const editor = (
+      dom as unknown as {
+        __forgemarkEditor: {
+          state: {
+            doc: {
+              descendants(
+                f: (n: { type: { name: string }; attrs: { edge: string } }, pos: number) => void,
+              ): void;
+            };
+          };
+          commands: { focus(): void; setTextSelection(pos: number): void };
+        };
+      }
+    ).__forgemarkEditor;
+    let after = -1;
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === "anchorEdge" && node.attrs.edge === "close") after = pos + 1;
+    });
+    editor.commands.focus();
+    editor.commands.setTextSelection(after);
+  });
+  await page.keyboard.press("Backspace");
+  await expect(prose.locator("[data-anchor-id='1']")).toHaveText("highlighte");
+  await page.keyboard.type("d!");
+  const file = await savedFile(page);
+  expect(file).toContain("<mark><!-- fmc:1 -->highlighte<!-- /fmc:1 -->d!</mark>");
 });

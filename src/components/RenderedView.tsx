@@ -258,6 +258,12 @@ export function RenderedView({
     editor.setEditable(!readOnly);
   }, [editor, readOnly]);
 
+  // For browser tests: the editor behind the view, in development only.
+  useEffect(() => {
+    if (!editor || !import.meta.env.DEV) return;
+    (editor.view.dom as unknown as { __forgemarkEditor?: unknown }).__forgemarkEditor = editor;
+  }, [editor]);
+
   // A Save As moves the document's folder with it.
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
