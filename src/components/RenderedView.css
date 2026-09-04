@@ -329,6 +329,14 @@
   display: none;
 }
 
+/* An Obsidian wikilink the app cannot follow: shown as its label. */
+.fm-rendered-view .fm-prose .fm-wikilink {
+  color: var(--fm-accent);
+  text-decoration: underline;
+  text-decoration-color: var(--fm-accent-soft-strong);
+  cursor: default;
+}
+
 /* Inline HTML GitHub styles. */
 .fm-rendered-view .fm-prose kbd {
   font-family: var(--fm-mono);
@@ -384,6 +392,10 @@
 }
 .fm-rendered-view .fm-prose blockquote[data-alert="caution"] {
   --fm-alert: #cf222e;
+}
+/* Any other callout type (Obsidian): a neutral rail, its own label. */
+.fm-rendered-view .fm-prose blockquote[data-alert="generic"] {
+  --fm-alert: var(--fm-prose-muted);
 }
 
 /* Footnotes: the reference in the text, the definition where written. */

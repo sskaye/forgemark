@@ -169,9 +169,14 @@ export function strayEdges(doc: PMNode): number[] {
 export const TEXTLESS = new Set([ANCHOR_EDGE, HTML_INLINE]);
 
 // The text of a range as the reader sees it: text-less atoms contribute
-// nothing, other leaves (an image, a hard break) a space.
+// nothing, a wikilink its label, other leaves (an image, a hard break) a
+// space.
 export function plainText(doc: PMNode, from: number, to: number): string {
-  return doc.textBetween(from, to, " ", (leaf) => (TEXTLESS.has(leaf.type.name) ? "" : " "));
+  return doc.textBetween(from, to, " ", (leaf) => {
+    if (TEXTLESS.has(leaf.type.name)) return "";
+    if (leaf.type.name === "wikiLink") return String(leaf.attrs.label);
+    return " ";
+  });
 }
 
 // A transaction that anchors `from`–`to` as comment `id`: a close edge

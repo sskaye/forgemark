@@ -64,6 +64,9 @@ test("renders what GitHub renders", async ({ page }) => {
   const src = await prose.locator("img").first().getAttribute("src");
   expect(src).toMatch(/\/@fs\/.*\/testing\/images\/swatch\.png$/);
   await expect(prose.locator("a img")).toHaveCount(1);
+  const embed = prose.locator("img[data-wikilink='true']");
+  await expect(embed).toHaveAttribute("alt", "Swatch");
+  expect(await embed.getAttribute("src")).toMatch(/\/@fs\/.*\/testing\/images\/swatch\.png$/);
   // Raw HTML blocks render; the block comment keeps a placeholder.
   await expect(prose.locator(".fm-html-block p[align='center'] img")).toBeVisible();
   await expect(prose.locator(".fm-html-block table td")).toHaveCount(2);
@@ -73,6 +76,10 @@ test("renders what GitHub renders", async ({ page }) => {
   // Alerts, footnotes, strikethrough, links.
   await expect(prose.locator("blockquote[data-alert='note']")).toBeVisible();
   await expect(prose.locator("blockquote[data-alert='warning']")).toBeVisible();
+  await expect(prose.locator("blockquote[data-alert='generic']")).toHaveAttribute(
+    "data-alert-label",
+    "Takeaway",
+  );
   await expect(prose.locator("blockquote:not([data-alert])")).toHaveCount(1);
   await expect(prose.locator("sup.fm-footnote-ref")).toHaveText(["[1]", "[note]"]);
   await expect(prose.locator(".fm-footnote-def")).toHaveCount(2);
@@ -197,7 +204,8 @@ test("typing beside an anchor's edges keeps the markers where they were", async 
               ): void;
             };
           };
-          commands: { focus(): void; setTextSelection(pos: number): void };
+          commands: { setTextSelection(pos: number): void };
+          view: { focus(): void };
         };
       }
     ).__forgemarkEditor;
@@ -205,8 +213,8 @@ test("typing beside an anchor's edges keeps the markers where they were", async 
     editor.state.doc.descendants((node, pos) => {
       if (node.type.name === "anchorEdge" && node.attrs.edge === "close") after = pos + 1;
     });
-    editor.commands.focus();
     editor.commands.setTextSelection(after);
+    editor.view.focus();
   });
   await page.keyboard.press("Backspace");
   await expect(prose.locator("[data-anchor-id='1']")).toHaveText("highlighte");

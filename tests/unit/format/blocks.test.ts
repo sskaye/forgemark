@@ -59,6 +59,11 @@ describe("splitBlocks", () => {
     expect(blocks.map((b) => b.kind)).toEqual(["verbatim", "verbatim", "markdown"]);
   });
 
+  it("keeps a folded Obsidian callout as one block", () => {
+    const { blocks } = splitBlocks("> [!Summary]-\n> One.\n\nTwo.\n");
+    expect(blocks.map((b) => b.text)).toEqual(["> [!Summary]-\n> One.", "Two."]);
+  });
+
   it("gives a $$ math block its own block", () => {
     const { blocks } = splitBlocks("Text.\n$$\nx = 1\n$$\n\n$$ y $$\n");
     expect(blocks.map((b) => b.text)).toEqual(["Text.", "$$\nx = 1\n$$", "$$ y $$"]);
