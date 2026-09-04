@@ -20,12 +20,9 @@ Yes, for the tools that read skills from the filesystem, and that is most of the
 
 Our README tells Codex users to extract into `~/.agents/skills`. Codex does read that, but its own folder is `~/.codex/skills`, and the app should install there so the Codex desktop app sees it too.
 
-**Where the app cannot install.** Two of the tools you named have no filesystem skill folder:
+**Where the app hands off instead.** Claude (chat) in the desktop app and claude.ai keep skills per account, uploaded through Settings → Capabilities → Skills; there is no folder to write to. But the Claude desktop app registers `.skill` as a document type (its `Info.plist` lists the extension), which is why double-clicking one opens Claude with an offer to install. Forgemark can do exactly what the double-click does: write the bundled `.skill` to its own data folder and ask the system to open that file with Claude. The opener plugin the app already uses takes an application name, so the file goes to Claude even if some other app has claimed the extension. Claude then shows its own install prompt, and the user confirms there. The Code tab of the same desktop app is covered separately, through `~/.claude/skills`.
 
-- **Claude (chat) in the desktop app and claude.ai.** Skills are uploaded per account through Settings → Capabilities → Skills, as a zip or a folder, then switched on. There is no local path to write to, and no API from a desktop app. The Code tab of the same desktop app *is* covered, through `~/.claude/skills`.
-- **ChatGPT desktop.** No skill mechanism at all; the OpenAI side of this is Codex, which is covered.
-
-For those two the download button stays, with the instructions in one sentence beside it.
+**Where nothing is possible.** ChatGPT desktop has no skill mechanism; the OpenAI side of this is Codex, which is covered. The download button stays for it and for anyone installing somewhere else.
 
 **What the app already has.** The filesystem scope is `**`, so `~/.claude/skills` and `~/.codex/skills` are already writable; the missing permissions are `mkdir`, `read-dir`, `copy`, and the home-directory lookup, each one line in the capability file. The skill's source tree ships in the app as the `.skill` bundle (via Vite); the same tree can be bundled as raw files, so no unzipping at runtime. Every write goes through the existing plugin, so the fake Tauri in the test harness covers it and the behaviour is testable under jsdom.
 
@@ -63,15 +60,16 @@ comments with the app's own tool. Install it where your agents look.
 
   Claude Code        Installed 1.4.0 · this app ships 1.7.0     [ Update ]
   Codex              Not installed                              [ Install ]
+  Claude app         Sent 1.4.0 on 12 Aug · this app ships 1.7.0  [ Send to Claude ]
   Other tools        Not installed  (~/.agents/skills)          [ Install ]
 
-  Claude desktop and claude.ai take the skill as an upload:
-  Settings → Capabilities → Skills.            [ Save skill file… ]
+  Somewhere else, or claude.ai in a browser:      [ Save skill file… ]
 ```
 
 - A row appears only when the tool is on this machine (`~/.claude` or `~/.codex` exists). "Other tools" always shows, since `~/.agents` is created by whichever tool uses it first and the user may want it ahead of time; it is the one row that is off by default.
 - Install and Update are the same action: write the skill to a fresh folder beside the target, swap it into place, remove the old one. Done in under a second; the row then reads "Installed 1.7.0 · up to date" and, for Claude Code, "New sessions pick it up; restart any that are open."
 - Replace asks first, in the app's existing confirm dialog, and names the folder.
+- Send to Claude opens the bundled `.skill` in the Claude desktop app, which asks to install it, the same as a double-click on the file. The app cannot see the account's skills, so the row cannot say "up to date"; it says which version was last sent and when (remembered locally), and "this app ships" a newer one after an update. The row appears when the Claude app is installed (`/Applications/Claude.app` on macOS, the equivalent on Windows).
 - Save skill file… is today's download, kept for the upload-only tools and for anyone installing somewhere else.
 
 **Telling the user without nagging.** The check runs when Settings opens and once at launch. At launch, only two things can happen:
@@ -89,12 +87,13 @@ No modal, no first-run wizard. A user who never opens Settings sees at most one 
 
 - `scripts/build-skill.mjs` writes `forgemark-skill.json` into `assets/forgemark-skill/` before zipping (the tree hash excludes the manifest itself). The existing `skill-bundle.test.ts` gains a check that the manifest's version equals the app's.
 - `src/services/skillInstall.ts`: the skill's files come in through `import.meta.glob("../../assets/forgemark-skill/**", { query: "?raw", eager: true })`, so the installed copy is the source tree byte for byte, and the download path keeps using the zip. `targets()` lists the rows (name, folder, detection folder, restart note); `status(target)` hashes the installed tree; `install(target)` writes to `<folder>.installing`, renames the old folder aside, renames the new one in, removes the old, and reads the result back before reporting success, the same discipline the CLI uses for a file.
+- Hand-off to Claude: write `forgemark-skill.skill` to the app data folder (`appDataDir()`), then `openPath(file, "Claude")` from the opener plugin, which runs `open -a Claude` on macOS and the registered handler on Windows. Record the version sent in localStorage. If Claude is not found, the button falls back to the save dialog.
 - `SettingsModal.tsx`: the rows, driven by a small reducer (idle, checking, installing, done, error), with the existing button and error styles. The download button becomes the secondary "Save skill file…".
 - Capability file: `fs:allow-mkdir`, `fs:allow-read-dir`, `core:path:default` (for `homeDir()`); the scope is already `**`.
 - `AppShell`: the once-per-version footer line, keyed in localStorage by app version.
 - README and the skill's own README: the install section becomes "open Settings → AI agents", with the manual paths kept for other tools, and the Codex path corrected to `~/.codex/skills`.
 
-**Tests.** Unit: the tree hash agrees between the build script and the app (same file order, same separator); each of the four states from a fake folder; install swaps and removes, and leaves the old folder in place when a write fails. Integration: rows appear only for detected tools; Install → "up to date"; Replace asks first; the footer line shows once and opens Settings. Browser: none needed, nothing here depends on layout. Manual: this machine, where both installed copies are stale, is the test bed; after the update, `/forgemark` in a new Claude Code session should describe the CLI.
+**Tests.** Unit: the tree hash agrees between the build script and the app (same file order, same separator); each of the four states from a fake folder; install swaps and removes, and leaves the old folder in place when a write fails. Integration: rows appear only for detected tools; Install → "up to date"; Replace asks first; Send to Claude writes the file and opens it with Claude, and records the version; the footer line shows once and opens Settings. Browser: none needed, nothing here depends on layout. Manual: this machine, where both installed copies are stale, is the test bed; after the update, `/forgemark` in a new Claude Code session should describe the CLI.
 
 **Effort.** About a day: the manifest and hash are an hour, the service and its tests half a day, the Settings rows and footer the rest.
 
