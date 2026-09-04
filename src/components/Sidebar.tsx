@@ -318,7 +318,7 @@ function handleComposerSubmit(
     });
   }
   // The "new" mode is handled by the EditorPane (which has the editor
-  // ref needed to apply the anchor mark).
+  // ref needed to place the anchor edges).
 }
 
 function FocusableCard({ cardKey, ...props }: { cardKey: number } & Parameters<typeof FMCard>[0]) {

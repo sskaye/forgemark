@@ -3,7 +3,7 @@
 // formatting, down to a single pair.
 
 import { describe, it, expect } from "vitest";
-import { coalesceAnchorMarkers, bodyFromAnchorSpans } from "../../../src/format/markers-display";
+import { coalesceAnchorMarkers } from "../../../src/format/markers-display";
 import { parseForgemarkFile } from "../../../src/format/parser";
 import { serializeForgemarkFile } from "../../../src/format/serializer";
 import type { Comment } from "../../../src/format/types";
@@ -61,12 +61,5 @@ describe("coalesceAnchorMarkers", () => {
     };
     const file = serializeForgemarkFile({ body, comments: [record] });
     expect(() => parseForgemarkFile(file)).not.toThrow();
-  });
-
-  it("bodyFromAnchorSpans applies the coalesce end-to-end", () => {
-    const spans = '<span data-anchor-id="3">a</span>*<span data-anchor-id="3">b</span>*';
-    const out = bodyFromAnchorSpans(spans);
-    expect(opens(out, 3)).toBe(1);
-    expect(closes(out, 3)).toBe(1);
   });
 });

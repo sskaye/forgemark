@@ -68,7 +68,7 @@ type Props = {
 //
 // Phase 5: hosts the new-comment composer. Selection is captured from
 // the rendered view via a ref; on submit, the rendered view applies the
-// anchor mark and returns the new body, which is dispatched along with
+// anchor edges and returns the new body, which is dispatched along with
 // the new Comment.
 //
 // Phase 8: source view is now CodeMirror-based with a "read-only review"
@@ -465,7 +465,7 @@ export function EditorPane({ docId }: Props) {
 
   // Phase 7: suggested-edit submission. The composer captures both the
   // proposed replacement and an (optional) accompanying body. We apply
-  // the same anchor mark as a regular new comment, then store the
+  // the same anchor edges as a regular new comment, then store the
   // Comment with `suggested_edit: { from, to }` and an optional body.
   const submitSuggestion = useCallback(
     (replacement: string, optionalBody: string) => {

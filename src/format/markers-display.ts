@@ -1,7 +1,8 @@
 // Display-side helpers: convert the inline marker comments
-// (`<!-- fmc:N --> ... <!-- /fmc:N -->`) in a markdown body into HTML
-// `<span data-anchor-id="N">…</span>` wrappers that the editor / renderer
-// can style.
+// (`<!-- fmc:N --> ... <!-- /fmc:N -->`) in a markdown body into the
+// `<fm-anchor data-edge="open" data-id="N"></fm-anchor>` elements the
+// editor's AnchorEdge node parses. The editor writes the markers back
+// itself when it serializes.
 //
 // The markers in source must remain HTML comments — that is what the
 // format spec promises and what the round-trip serializer expects. This
@@ -15,7 +16,7 @@
 import { MARKER_OPEN_RE_G, MARKER_CLOSE_RE_G } from "./types";
 import { findMarkersMarkdown, type Marker } from "./markers";
 
-// Replaces every paired marker with a span element that carries the
+// Replaces every paired marker with an edge element that carries the
 // anchor id. Other inline HTML in the body is left alone.
 //
 // Whole-code-block anchors are handled first: a marker pair wrapping a
@@ -23,12 +24,14 @@ import { findMarkersMarkdown, type Marker } from "./markers";
 // so the id rides in the fence info string (`lang fmc=N`), which the
 // CodeBlockAnchor extension reads on parse. Doing this before the inline
 // span replacement also stops those block markers from being turned into
-// (invalid) inline spans around a block.
-export function bodyWithAnchorSpans(body: string): string {
+// (invalid) inline elements around a block.
+export function bodyWithAnchorElements(body: string): string {
   const withBlocks = blockAnchorsToInfoString(body);
   const markers = findMarkersMarkdown(withBlocks);
   return spliceMarkers(withBlocks, markers, (m) =>
-    m.type === "open" ? `<span data-anchor-id="${m.id}">` : "</span>",
+    m.type === "open"
+      ? `<fm-anchor data-edge="open" data-id="${m.id}"></fm-anchor>`
+      : `<fm-anchor data-edge="close" data-id="${m.id}"></fm-anchor>`,
   );
 }
 
@@ -58,34 +61,14 @@ export function blockAnchorsToInfoString(body: string): string {
   return applyEdits(body, edits);
 }
 
-// Reverse direction: convert anchor `<span data-anchor-id="N">…</span>`
-// wrappers in markdown text back to the canonical marker comments.
-//
-// We track a stack so each closing `</span>` becomes the close marker for
-// the most recently opened anchor. Other `<span>`s in the user's prose
-// (without `data-anchor-id`) are left alone.
-const ANCHOR_OPEN_OR_CLOSE = /<span data-anchor-id="(\d+)"[^>]*>|<\/span>/g;
-
-export function bodyFromAnchorSpans(text: string): string {
-  const stack: string[] = [];
-  const withMarkers = text.replace(ANCHOR_OPEN_OR_CLOSE, (match, id?: string) => {
-    if (id) {
-      stack.push(id);
-      return `<!-- fmc:${id} -->`;
-    }
-    const popped = stack.pop();
-    if (!popped) return match; // unrelated </span>; leave it
-    return `<!-- /fmc:${popped} -->`;
-  });
-  return coalesceAnchorMarkers(withMarkers);
-}
-
-// Collapse a run of same-id marker pairs that Tiptap emits when a single
-// anchored selection spans inline-formatting tokens (`*em*`, `[link]()`,
-// inline code). Each differently-marked text run round-trips as its own
-// `<span data-anchor-id="N">`, so one comment can yield many pairs sharing
-// id N — which the parser rejects as a "Duplicate marker pair", blanking
-// every comment in the file.
+// Collapse a run of same-id marker pairs. The editor used to emit one
+// when a single anchored selection spanned inline-formatting tokens
+// (`*em*`, `[link]()`, inline code): each differently-marked text run
+// round-tripped as its own span, so one comment could yield many pairs
+// sharing id N — which the parser rejects as a "Duplicate marker pair",
+// blanking every comment in the file. Edges are nodes now and cannot
+// split; this stays as the parser's safety net for files written that
+// way.
 //
 // We merge `<!-- /fmc:N -->GAP<!-- fmc:N -->` into just `GAP` whenever the
 // two are consecutive real markers — so the gap holds no other comment's

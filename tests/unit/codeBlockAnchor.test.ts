@@ -6,17 +6,9 @@
 
 import { describe, it, expect } from "vitest";
 import { Editor } from "@tiptap/core";
-import StarterKit from "@tiptap/starter-kit";
-import Link from "@tiptap/extension-link";
-import { Markdown } from "tiptap-markdown";
-import { AnchorMark } from "../../src/components/AnchorMark";
-import { CodeBlockAnchor } from "../../src/components/CodeBlockAnchor";
+import { renderedExtensions } from "../../src/components/editorExtensions";
 import { classifyCodeSelection } from "../../src/components/RenderedView";
-import {
-  bodyWithAnchorSpans,
-  bodyFromAnchorSpans,
-  blockAnchorsToInfoString,
-} from "../../src/format/markers-display";
+import { bodyWithAnchorElements, blockAnchorsToInfoString } from "../../src/format/markers-display";
 import { parseForgemarkFile } from "../../src/format/parser";
 import { serializeForgemarkFile } from "../../src/format/serializer";
 import type { Comment } from "../../src/format/types";
@@ -24,14 +16,8 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 
 function makeEditor(body: string): Editor {
   return new Editor({
-    extensions: [
-      StarterKit.configure({ link: false, codeBlock: false }),
-      CodeBlockAnchor,
-      Link.configure({ openOnClick: false }),
-      AnchorMark,
-      Markdown.configure({ html: true, tightLists: true, bulletListMarker: "-" }),
-    ],
-    content: bodyWithAnchorSpans(body),
+    extensions: renderedExtensions(),
+    content: bodyWithAnchorElements(body),
   });
 }
 
@@ -46,7 +32,7 @@ function codeBlockRange(editor: Editor): { start: number; end: number } {
 
 function getMd(editor: Editor): string {
   const storage = editor.storage as unknown as { markdown?: { getMarkdown?: () => string } };
-  return bodyFromAnchorSpans(storage.markdown?.getMarkdown?.() ?? "");
+  return storage.markdown?.getMarkdown?.() ?? "";
 }
 
 const PY = "```python\nprint('hi')\n```";

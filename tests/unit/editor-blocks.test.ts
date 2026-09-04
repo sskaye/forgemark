@@ -125,6 +125,15 @@ describe("block-level splicing", () => {
     );
   });
 
+  it("keeps an anchor's edges outside emphasis when its own block is edited", () => {
+    load("Text <!-- fmc:1 -->**bold** and *em*<!-- /fmc:1 --> end.\n\nNext.\n");
+    const end = editor.state.doc.child(0).nodeSize - 1;
+    editor.view.dispatch(editor.state.tr.insertText(" More.", end, end));
+    expect(emit()).toBe(
+      "Text <!-- fmc:1 -->**bold** and *em*<!-- /fmc:1 --> end. More.\n\nNext.\n",
+    );
+  });
+
   it("keeps a whole-block anchor and an inline anchor through an edit elsewhere", () => {
     load(BODY);
     retype(0, "New title");

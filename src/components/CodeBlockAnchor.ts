@@ -12,7 +12,7 @@ import CodeBlock from "@tiptap/extension-code-block";
 //   <!-- /fmc:N -->
 //
 // To survive the markdown ⇄ editor round-trip, the anchor must live on the
-// node (like the inline AnchorMark lives on a mark). This extension:
+// node (an inline anchor lives on AnchorEdge nodes). This extension:
 //   - adds an `anchorId` attribute, rendered as `data-anchor-id` on <pre>
 //     so the existing click / hover / focus wiring (which keys off
 //     `[data-anchor-id]`) lights the block up like an inline anchor;

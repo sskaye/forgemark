@@ -263,7 +263,7 @@ human should look at.
 | Modals          | `src/components/Modal.tsx`, `Segmented.tsx`                                                        | One dialog shell on the native `dialog` element (focus in on open, back to the opener on close, Escape, backdrop click, Enter scoped to the dialog) used by every modal, and one segmented control with arrow keys for the view switch and Settings.                                                                             |
 | Keyboard        | `src/state/keymap.ts`                                                                              | Every chord in one table, `commandFor(event)` for the listeners, and a test that refuses two commands on one chord. Listeners decide where a command applies: card commands only with focus in the sidebar, nothing over a dialog or into a text field.                                                                          |
 | Selection UI    | `src/components/SelectionToolbar.tsx`                                                              | The Comment / Suggest edit bar that floats above a selection, in both document kinds. Markdown drives it from ProseMirror's `onSelectionUpdate`; a report has no such guarantee and drives it by reading the frame's selection on an interval, nudged by the frame's own events where those are delivered.                       |
-| Rendered editor | `src/components/EditorPane.tsx`, `src/components/RenderedView.tsx`, `src/components/AnchorMark.ts` | Rendered view converts Forgemark markers to Tiptap anchor spans and back. New comments and suggestions are created here because this layer has selection access. One pane per open document; inactive ones are hidden, not unmounted.                                                                                            |
+| Rendered editor | `src/components/EditorPane.tsx`, `src/components/RenderedView.tsx`, `src/components/AnchorEdge.ts` | Rendered view carries each Forgemark marker as an inline edge node and highlights the passage between a pair. New comments and suggestions are created here because this layer has selection access. One pane per open document; inactive ones are hidden, not unmounted.                                                        |
 | Source view     | `src/components/SourceView.tsx`                                                                    | Read-only CodeMirror view of the exact serialized Markdown, with decorations for markers and the trailing comments block.                                                                                                                                                                                                        |
 | Sidebar         | `src/components/Sidebar.tsx`, `src/components/FMCard.tsx`, `src/components/InlineComposer.tsx`     | Thread lifecycle: reply, edit, resolve, delete, accept/reject suggestions, reattach orphaned comments, filter, and sort.                                                                                                                                                                                                         |
 | Format layer    | `src/format/*`                                                                                     | Parser, deterministic YAML emitter, serializer, marker scanning/pairing, marker insertion/removal, lost-anchor candidate ranking, clean export, escaping. This is the domain core and is heavily tested.                                                                                                                         |
@@ -342,13 +342,29 @@ left alone.
    code block that already carries one), `OverlapPrompt` offers to attach the
    note as a **reply** instead — the format cannot represent overlapping
    anchors, so they are prevented at creation time.
-3. `RenderedView.applyAnchor` applies the anchor: an inline `AnchorMark` for
-   spans, or a `codeBlock` node `anchorId` attribute for whole blocks.
-4. Markdown emitted by Tiptap is converted back to `<!-- fmc:N -->` markers
-   (`bodyFromAnchorSpans`). `coalesceAnchorMarkers` collapses any same-id run
-   Tiptap emits across inline formatting down to a single pair, so a comment
-   spanning `*emphasis*`/`[links]()` stays one marker pair.
+3. `RenderedView.applyAnchor` applies the anchor: an `AnchorEdge` node at each
+   end of the selection (`anchorEdgesTransaction`), or a `codeBlock` node
+   `anchorId` attribute for whole blocks. An end inside inline code moves out
+   to the code span's boundary, and each edge takes only the marks both of its
+   neighbours share, so it sits inside `**emphasis**` only when the emphasis
+   continues across it.
+4. Each edge serializes as its own `<!-- fmc:N -->` / `<!-- /fmc:N -->` marker
+   exactly where it sits. `coalesceAnchorMarkers` stays in the parser as a
+   safety net for files written by the older mark-based editor, which split one
+   anchor into a run of pairs across inline formatting.
 5. The reducer adds a new `Comment` record and focuses its card.
+
+**Anchor edges as nodes.** `AnchorEdge` (`src/components/AnchorEdge.ts`) is an
+inline atom node; the display form `bodyWithAnchorElements` produces is
+`<fm-anchor data-edge="open" data-id="N"></fm-anchor>`, which markdown-it passes
+through as inline HTML. The highlight readers click and hover is a decoration
+between a pair carrying `data-anchor-id`, so the wiring that keys off that
+attribute is shared with whole-block code anchors. Three plugins keep every edge
+paired: Backspace and Delete beside an edge remove the character beyond it
+rather than the edge; an edge whose partner a deletion swallowed is removed
+after the transaction, so the comment reattaches by its recorded text instead of
+leaving a stray marker; and pasting content that carries an edge of an anchor
+the document already has drops the copy, while a cut-and-paste move keeps it.
 
 **Whole code block anchors.** Markers can't live inside a fence, so a code-block
 comment is stored as a marker pair on its own lines _around_ the fence

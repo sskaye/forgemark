@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { Editor } from "@tiptap/core";
 import { renderedExtensions } from "../../src/components/editorExtensions";
-import { bodyWithAnchorSpans, bodyFromAnchorSpans, splitFrontmatter } from "../../src/format";
+import { bodyWithAnchorElements, coalesceAnchorMarkers, splitFrontmatter } from "../../src/format";
 
 // What the rendered editor does to a Markdown block on the way through.
 //
@@ -18,11 +18,11 @@ const FIXTURES = resolve(__dirname, "..", "ai", "fixtures");
 
 function roundTrip(body: string, editor: Editor): string {
   const { front, rest } = splitFrontmatter(body);
-  editor.commands.setContent(bodyWithAnchorSpans(rest), { emitUpdate: false });
+  editor.commands.setContent(bodyWithAnchorElements(rest), { emitUpdate: false });
   const md = (
     editor.storage as unknown as { markdown: { getMarkdown(): string } }
   ).markdown.getMarkdown();
-  return front + bodyFromAnchorSpans(md);
+  return front + coalesceAnchorMarkers(md);
 }
 
 // The editor drops trailing newlines; compare without them.
@@ -37,6 +37,10 @@ describe("editor round trip: must be byte-identical", () => {
     "bold around inline code": "- **Keep every `<!-- fmc:N -->` pair.** Yes.\n",
     "anchor around inline code":
       "Call <!-- fmc:1 -->`foo()`<!-- /fmc:1 --> here and <!-- fmc:2 -->call `bar()`<!-- /fmc:2 --> there.\n",
+    "anchor across emphasis": "Text <!-- fmc:1 -->**bold** and *em*<!-- /fmc:1 --> end.\n",
+    "anchor inside emphasis": "Text **bo<!-- fmc:1 -->ld and<!-- /fmc:1 --> more** end.\n",
+    "anchor around a link": "See <!-- fmc:1 -->[the docs](https://x.y) now<!-- /fmc:1 -->.\n",
+    "anchor spanning two paragraphs": "One <!-- fmc:1 -->two.\n\nThree<!-- /fmc:1 --> four.\n",
     "markers quoted inside a fence":
       "Example:\n\n```\nSome <!-- fmc:1 -->anchored<!-- /fmc:1 --> text\n```\n",
     "nested fences": "````md\n```js\nx()\n```\n````\n",
@@ -63,10 +67,6 @@ describe("editor round trip: must be byte-identical", () => {
 describe("editor round trip: still normalized when that block is edited", () => {
   const cases: Record<string, string> = {
     "hard-wrapped paragraph": "A paragraph\nwrapped across\nlines.\n",
-    // The anchor is a mark ranked outside bold, so its markers land
-    // inside the `**` on the way out and the anchor shrinks on the next
-    // pass. Needs the anchor to become an inline node.
-    "anchor across emphasis": "Text <!-- fmc:1 -->**bold** and *em*<!-- /fmc:1 --> end.\n",
     "reference link": "See [the docs][d].\n\n[d]: https://x.y\n",
     "HTML block": '<div align="center">\n<img src="x.png">\n</div>\n\nText.\n',
     "HTML comment": "Text.\n\n<!-- a note to editors -->\n\nMore.\n",

@@ -1,8 +1,8 @@
 // Keeps the editor and the Markdown source in step one block at a time.
 //
 // `load(body)` splits the body into blocks (src/format/blocks.ts) and
-// returns what the editor should show: one node per block, anchors as
-// spans, raw HTML as verbatim placeholders. `emit(doc)` is called after
+// returns what the editor should show: one node per block, anchor edges
+// as elements, raw HTML as verbatim placeholders. `emit(doc)` is called after
 // the editor changed; it finds the run of top-level nodes that differ
 // from the last known document by identity (ProseMirror keeps untouched
 // nodes as the same objects), serializes just that run, and splices it
@@ -19,7 +19,7 @@
 
 import type { Fragment, Node as PMNode } from "@tiptap/pm/model";
 import { splitBlocks, spliceBlocks, type BlockMap } from "../format/blocks";
-import { bodyWithAnchorSpans, bodyFromAnchorSpans } from "../format/markers-display";
+import { bodyWithAnchorElements, coalesceAnchorMarkers } from "../format/markers-display";
 import { verbatimTag } from "./VerbatimBlock";
 
 export type Serializer = { serialize(content: Fragment): string };
@@ -54,7 +54,7 @@ export function createBlockSync(): BlockSync {
 
   const display = (m: BlockMap) => {
     const shown = m.blocks
-      .map((b) => (b.kind === "verbatim" ? verbatimTag(b.text) : bodyWithAnchorSpans(b.text)))
+      .map((b) => (b.kind === "verbatim" ? verbatimTag(b.text) : bodyWithAnchorElements(b.text)))
       .join("\n\n");
     const defs = definitions(m);
     return defs.length ? `${shown}\n\n${defs.join("\n")}` : shown;
@@ -79,7 +79,7 @@ export function createBlockSync(): BlockSync {
       const blockCount = map.blocks.length;
       const whole = () => {
         mode = "whole";
-        const body = bodyFromAnchorSpans(serializer.serialize(doc.content));
+        const body = coalesceAnchorMarkers(serializer.serialize(doc.content));
         map = splitBlocks(body);
         lastDoc = doc;
         return body;
@@ -125,7 +125,7 @@ export function createBlockSync(): BlockSync {
       const replacement =
         changed.length === 0
           ? ""
-          : bodyFromAnchorSpans(
+          : coalesceAnchorMarkers(
               serializer.serialize(
                 doc.content.cut(nodeStart(doc, prefix), nodeStart(doc, prefix + changed.length)),
               ),

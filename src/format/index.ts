@@ -57,7 +57,7 @@ export {
   type HtmlTextRun,
 } from "./html/textmap";
 export { escapeContent, unescapeContent } from "./escape";
-export { bodyWithAnchorSpans, bodyFromAnchorSpans, coalesceAnchorMarkers } from "./markers-display";
+export { bodyWithAnchorElements, coalesceAnchorMarkers } from "./markers-display";
 export {
   nextCommentId,
   insertMarkersIntoBody,

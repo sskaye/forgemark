@@ -7,12 +7,12 @@
 //     "SKILL.md" in prose came back as a link to http://SKILL.md (the
 //     `.md` TLD), and so did every www. and e-mail address.
 //   - Code with `excludes: ""`. Tiptap's Code mark excludes every other
-//     mark, so bold and anchor marks were dropped from inline code at
-//     parse time; `**bold `code`**` came back as `**bold** `code` ****`,
-//     and an anchor whose passage touched `code` lost its markers.
-//     Registered after the anchor mark so the mark order nests correctly.
+//     mark, so bold was dropped from inline code at parse time and
+//     `**bold `code`**` came back as `**bold** `code` ****`.
 //   - `CodeBlockAnchor` in place of the stock code block, which keeps a
-//     whole-block anchor on the node across the round trip.
+//     whole-block anchor on the node across the round trip; `AnchorEdge`
+//     for inline anchors, whose edges are nodes so they serialize where
+//     they sit.
 
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
@@ -28,7 +28,7 @@ import { TaskList } from "@tiptap/extension-task-list";
 import { TaskItem } from "@tiptap/extension-task-item";
 import { Markdown } from "tiptap-markdown";
 import type { AnyExtension } from "@tiptap/core";
-import { AnchorMark } from "./AnchorMark";
+import { AnchorEdge } from "./AnchorEdge";
 import { CodeBlockAnchor } from "./CodeBlockAnchor";
 import { VerbatimBlock } from "./VerbatimBlock";
 
@@ -77,7 +77,7 @@ export function renderedExtensions(extra: AnyExtension[] = []): AnyExtension[] {
     Link.configure({ openOnClick: false, autolink: false }),
     SubscriptMark,
     SuperscriptMark,
-    AnchorMark,
+    AnchorEdge,
     CodeInAnchor,
     VerbatimBlock,
     ...extra,
@@ -89,8 +89,8 @@ export function renderedExtensions(extra: AnyExtension[] = []): AnyExtension[] {
     TaskList,
     TaskItem.configure({ nested: true }),
     Markdown.configure({
-      // html: true is what allows the anchor `<span>` wrappers we inject
-      // to survive the markdown→ProseMirror round-trip. Markdown bodies
+      // html: true is what lets the `<fm-anchor>` edge elements we inject
+      // survive the markdown→ProseMirror round-trip. Markdown bodies
       // we receive are from our own format layer; arbitrary user-typed
       // HTML still flows through, which is acceptable inside the local
       // Tauri webview.

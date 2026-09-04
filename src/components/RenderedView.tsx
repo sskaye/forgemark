@@ -10,6 +10,14 @@ import { splitFrontmatter } from "../format";
 import { createBlockSync, type BlockSync, type Serializer } from "./blockSync";
 import { renderedExtensions } from "./editorExtensions";
 import { anchorIdOf } from "../services/anchorDom";
+import {
+  ANCHOR_EDGE,
+  anchorEdges,
+  anchorEdgesTransaction,
+  anchorRanges,
+  plainText,
+  setAnchorHighlight,
+} from "./AnchorEdge";
 import { normalizeExternalUrl } from "../services/externalLinks";
 import { findLiteralMatches } from "../services/findReplace";
 import {
@@ -81,9 +89,9 @@ export type RenderedSearchMatch = {
 
 type Props = {
   // Markdown body of the document. Marker comments (`<!-- fmc:N -->...
-  // <!-- /fmc:N -->`) are pre-processed into `<span data-anchor-id="N">`
-  // wrappers before being passed to Tiptap so the editor renders them as
-  // styled inline highlights.
+  // <!-- /fmc:N -->`) become AnchorEdge nodes in the editor, and the
+  // passage between a pair is highlighted by a decoration carrying
+  // `data-anchor-id`.
   body: string;
   // Fires after the user types anything that mutates the doc. Markdown is
   // the serialized form via tiptap-markdown.
@@ -107,10 +115,11 @@ type Props = {
   onSelectionChange?: (capture: CapturedSelection | null) => void;
 };
 
-// Phase 4 rendered view. Inline anchor spans are pre-rendered into the
-// markdown body before Tiptap ingests it; `tiptap-markdown` with
-// `html: true` preserves them. Click + hover handlers on the editor's
-// root DOM element delegate to the matching anchor by `data-anchor-id`.
+// Phase 4 rendered view. Anchor edges are pre-rendered into the markdown
+// body as `<fm-anchor>` elements before Tiptap ingests it;
+// `tiptap-markdown` with `html: true` preserves them. Click + hover
+// handlers on the editor's root DOM element delegate to the matching
+// anchor by `data-anchor-id`, which the highlight decorations carry.
 //
 // The editor is configured editable=false when read-only is requested
 // (or when the parent decides — Phase 4 keeps editing disabled when a
@@ -194,8 +203,8 @@ export function RenderedView({
       // `emitUpdate: false`. Without this gate, the editor would
       // dispatch an "edit" with stale content and clobber state.body.
       if (!editorReadyRef.current) return;
-      // Only the blocks whose nodes changed are re-serialized (anchor
-      // spans back to markers on the way) and spliced into the source.
+      // Only the blocks whose nodes changed are re-serialized (edge
+      // nodes write their markers) and spliced into the source.
       // This is the single editor → state boundary.
       const restBody = blockSyncRef.current!.emit(editor.state.doc, markdownSerializer(editor));
       // Pre-emptively update the ref so the upcoming setContent
@@ -242,7 +251,7 @@ export function RenderedView({
     editor.setEditable(!readOnly);
   }, [editor, readOnly]);
 
-  // Click + hover delegation on links and anchor spans. Links win over
+  // Click + hover delegation on links and anchor highlights. Links win over
   // comment-anchor focus: clicking an anchored link should open the link,
   // not just focus the comment card.
   useEffect(() => {
@@ -288,23 +297,17 @@ export function RenderedView({
     };
   }, [editor, onAnchorClick, onAnchorHover, onExternalLinkError, onOpenExternalLink]);
 
-  // Apply focus / hover classes onto matching anchor spans. We do this
-  // imperatively because Tiptap owns the DOM under the editor root; the
-  // alternative (reseting content on every focus change) would lose the
-  // user's selection.
+  // The focused and hovered comment light up their highlights. The
+  // classes ride on the highlight decorations themselves: Tiptap owns
+  // the DOM under the editor root and redraws a span whose attributes
+  // were changed from outside.
   useEffect(() => {
-    if (!editor) return;
-    const root = editor.view.dom;
-    const all = root.querySelectorAll<HTMLElement>("[data-anchor-id]");
-    all.forEach((el) => {
-      const id = el.dataset.anchorId ? Number(el.dataset.anchorId) : null;
-      el.classList.toggle("is-focused", id === focusedCommentId);
-      el.classList.toggle("is-hovered", id === hoveredCommentId);
-    });
-  }, [editor, focusedCommentId, hoveredCommentId, body]);
+    if (!editor || editor.isDestroyed) return;
+    setAnchorHighlight(editor.view, focusedCommentId, hoveredCommentId);
+  }, [editor, focusedCommentId, hoveredCommentId]);
 
   // Phase 5: expose composer-supporting methods to the parent so the
-  // EditorPane can capture the selection and apply the anchor mark.
+  // EditorPane can capture the selection and insert the anchor's edges.
   useEffect(() => {
     if (!handleRef) return;
     handleRef.current = {
@@ -313,8 +316,8 @@ export function RenderedView({
         if (!editor) return body;
         // Whole code blocks carry the anchor as a node attribute (so it
         // round-trips as comment markers around the fence); everything else
-        // uses the inline AnchorMark. We don't need `editable: true` for
-        // chained commands — Tiptap runs them via dispatchTransaction.
+        // gets an AnchorEdge node at each end. We don't need
+        // `editable: true` for this — the view dispatches regardless.
         const cls = classifyCodeSelection(editor.state.doc, from, to);
         if (cls.kind === "block") {
           editor
@@ -323,14 +326,10 @@ export function RenderedView({
             .updateAttributes("codeBlock", { anchorId: String(id) })
             .run();
         } else {
-          editor
-            .chain()
-            .setTextSelection({ from, to })
-            .setMark("anchor", { anchorId: String(id) })
-            .run();
+          editor.view.dispatch(anchorEdgesTransaction(editor.state, from, to, id));
         }
         // Only the anchored block is re-serialized; the markers come out
-        // of the span (or the fence info string) on the way.
+        // of the edges (or the fence info string) on the way.
         const restBody = blockSyncRef.current!.emit(editor.state.doc, markdownSerializer(editor));
         lastInitialRef.current = createBlockSync().load(restBody);
         return frontRef.current + restBody;
@@ -339,7 +338,7 @@ export function RenderedView({
         if (!editor) return null;
         const { from, to, empty } = editor.state.selection;
         if (empty) return null;
-        const text = editor.state.doc.textBetween(from, to, " ", " ");
+        const text = plainText(editor.state.doc, from, to);
         return text.trim().length > 0 ? text : null;
       },
       search: (query: string, matchCase: boolean, activeIndex: number) => {
@@ -444,11 +443,11 @@ export function captureFrom(editor: ReturnType<typeof useEditor> | null): Captur
   // entire code block (the comment is on the block, not a sub-span).
   const from = cls.kind === "block" ? cls.from : selFrom;
   const to = cls.kind === "block" ? cls.to : selTo;
-  const text = cls.kind === "block" ? cls.text : state.doc.textBetween(from, to, " ", " ");
+  const text = cls.kind === "block" ? cls.text : plainText(state.doc, from, to);
   if (cls.kind !== "reject" && text.trim().length === 0) return null;
 
-  // Overlap: inline anchors are detected via the anchor mark; a block
-  // that already carries an anchorId is itself the overlap target.
+  // Overlap: inline anchors are found by their edges; a block that
+  // already carries an anchorId is itself the overlap target.
   const overlappingAnchorId =
     cls.kind === "block" && cls.existingAnchorId != null
       ? cls.existingAnchorId
@@ -456,13 +455,8 @@ export function captureFrom(editor: ReturnType<typeof useEditor> | null): Captur
 
   const beforeLen = Math.min(120, from);
   const afterLen = Math.min(120, state.doc.content.size - to);
-  const contextBefore = state.doc.textBetween(Math.max(0, from - beforeLen), from, " ", " ");
-  const contextAfter = state.doc.textBetween(
-    to,
-    Math.min(state.doc.content.size, to + afterLen),
-    " ",
-    " ",
-  );
+  const contextBefore = plainText(state.doc, Math.max(0, from - beforeLen), from);
+  const contextAfter = plainText(state.doc, to, Math.min(state.doc.content.size, to + afterLen));
   const rect = selectionRect(view, from, to);
   return {
     from,
@@ -601,6 +595,12 @@ function buildTextIndex(doc: ProseMirrorNode): { text: string; positions: Array<
   const positions: Array<number | null> = [];
   let previousEnd: number | null = null;
   doc.descendants((node, pos) => {
+    // An anchor edge sits between two runs of the same text; it is not
+    // a break in it.
+    if (node.type.name === ANCHOR_EDGE) {
+      if (previousEnd === pos) previousEnd = pos + node.nodeSize;
+      return false;
+    }
     if (!node.isText || !node.text) return true;
     if (previousEnd != null && pos > previousEnd) {
       text += "\n";
@@ -707,19 +707,11 @@ export function classifyCodeSelection(
 // Exported for unit testing — the file format cannot represent overlapping
 // or nested anchors, so this is the gate that diverts an overlapping
 // new-comment into a reply (see OverlapPrompt).
-// Whether [from, to) covers text in more than one anchor state — part
-// inside an anchor and part outside, or parts of two anchors. Replacing
-// such a range would move an anchor's edge.
+// Whether [from, to) holds an anchor's edge — part of the range inside
+// the anchor and part outside, or parts of two anchors. Replacing such a
+// range would delete the edge.
 export function crossesAnchorEdge(doc: ProseMirrorNode, from: number, to: number): boolean {
-  const states = new Set<string | null>();
-  doc.nodesBetween(from, to, (node, pos) => {
-    if (!node.isText) return true;
-    if (pos + node.nodeSize <= from || pos >= to) return true;
-    const mark = node.marks.find((m) => m.type.name === "anchor");
-    states.add(mark ? String(mark.attrs.anchorId) : null);
-    return true;
-  });
-  return states.size > 1;
+  return anchorEdges(doc).some((e) => e.pos >= from && e.pos < to);
 }
 
 export function bestOverlappingAnchorId(
@@ -727,30 +719,16 @@ export function bestOverlappingAnchorId(
   from: number,
   to: number,
 ): number | null {
-  const overlap = new Map<number, { len: number; pos: number }>();
-  doc.nodesBetween(from, to, (node, pos) => {
-    if (!node.isText) return true;
-    const mark = node.marks.find((m) => m.type.name === "anchor");
-    if (!mark) return true;
-    const id = Number(mark.attrs.anchorId);
-    if (!Number.isFinite(id)) return true;
-    const start = Math.max(from, pos);
-    const end = Math.min(to, pos + node.nodeSize);
-    const len = Math.max(0, end - start);
-    if (len === 0) return true;
-    const cur = overlap.get(id);
-    if (cur) cur.len += len;
-    else overlap.set(id, { len, pos: start });
-    return true;
-  });
   let best: number | null = null;
   let bestLen = 0;
-  let bestPos = Infinity;
-  for (const [id, { len, pos }] of overlap) {
-    if (len > bestLen || (len === bestLen && pos < bestPos)) {
-      best = id;
+  let bestFrom = Infinity;
+  for (const r of anchorRanges(doc)) {
+    const len = Math.min(to, r.to) - Math.max(from, r.from);
+    if (len <= 0) continue;
+    if (len > bestLen || (len === bestLen && r.from < bestFrom)) {
+      best = r.id;
       bestLen = len;
-      bestPos = pos;
+      bestFrom = r.from;
     }
   }
   return best;

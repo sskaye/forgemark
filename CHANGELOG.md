@@ -19,6 +19,7 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 
 ### Fixed
 
+- A comment anchored across bold or italic text lost part of its passage each time the paragraph was edited: the anchor was an editor mark ranked outside the emphasis, so its markers came back inside the `**` and the anchor shrank on the next pass. Each marker is now its own inline node and serializes exactly where it sits. Backspace and Delete beside a marker remove the character beyond it rather than the marker, a marker whose partner a deletion swallowed is removed with it so the file never gets a stray one, and pasting a copy of an anchored passage no longer duplicates its markers.
 - On Windows, double-clicking a `.md` or `.html` file now opens it: the installer registered the associations but nothing read the path. A second double-click while the app is running opens the file in the existing window instead of starting a second copy. On every platform, a file handed over during a cold start can no longer be dropped by arriving before the app was listening.
 - After printing once, a hidden second copy of the editor stayed mounted and re-parsed the document on every keystroke, slowing typing for the rest of the session.
 - Comment bodies showed code identifiers wrongly: `snake_case_name` lost its underscores and `a * b * c` its stars.
