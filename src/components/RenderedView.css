@@ -244,3 +244,36 @@
 .ProseMirror-selectednode.fm-verbatim {
   outline: 2px solid var(--fm-accent);
 }
+
+/* Inline HTML kept for the file but shown as nothing: a comment, a tag
+   the editor has no element for. */
+.fm-rendered-view fm-html {
+  display: none;
+}
+
+/* Inline HTML GitHub styles. */
+.fm-rendered-view .fm-prose kbd {
+  font-family: var(--fm-mono);
+  font-size: 0.85em;
+  padding: 1px 5px;
+  border: 0.5px solid var(--fm-code-border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--fm-code);
+}
+.fm-rendered-view .fm-prose mark {
+  background: var(--fm-anchor-bg-hover);
+  color: inherit;
+  padding: 0 1px;
+}
+.fm-rendered-view .fm-prose ins {
+  text-decoration: underline;
+}
+.fm-rendered-view .fm-prose abbr[title] {
+  text-decoration: underline dotted;
+  cursor: help;
+}
+.fm-rendered-view .fm-prose p > img {
+  margin: 0;
+  vertical-align: middle;
+}

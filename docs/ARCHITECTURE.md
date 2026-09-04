@@ -354,6 +354,16 @@ left alone.
    anchor into a run of pairs across inline formatting.
 5. The reducer adds a new `Comment` record and focuses its card.
 
+**Inline HTML.** markdown-it hands inline HTML to the DOM parser, which keeps the
+text of an element it has no schema entry for and drops the element. `HtmlMark`
+(`src/components/HtmlMark.ts`) is one mark for every inline tag GitHub renders
+and the editor does not model, carrying the tag name and attributes as attrs;
+`HtmlInline` (`src/components/HtmlInline.ts`) is an inline atom holding the
+source of a comment, a void tag, or an unknown tag, chosen by the markdown-it
+`html_inline` renderer override. Both write themselves back byte for byte.
+`InlineImage` makes images inline, as on GitHub, and writes an `<img>` tag when a
+width or height is set.
+
 **Anchor edges as nodes.** `AnchorEdge` (`src/components/AnchorEdge.ts`) is an
 inline atom node; the display form `bodyWithAnchorElements` produces is
 `<fm-anchor data-edge="open" data-id="N"></fm-anchor>`, which markdown-it passes

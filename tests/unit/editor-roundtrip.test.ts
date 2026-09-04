@@ -41,6 +41,12 @@ describe("editor round trip: must be byte-identical", () => {
     "anchor inside emphasis": "Text **bo<!-- fmc:1 -->ld and<!-- /fmc:1 --> more** end.\n",
     "anchor around a link": "See <!-- fmc:1 -->[the docs](https://x.y) now<!-- /fmc:1 -->.\n",
     "anchor spanning two paragraphs": "One <!-- fmc:1 -->two.\n\nThree<!-- /fmc:1 --> four.\n",
+    "inline HTML tags":
+      'Press <kbd>Ctrl</kbd>, <mark>hi</mark>, <ins>in</ins>, <abbr title="x">ab</abbr>, <span style="color:red">r</span>.\n',
+    "inline HTML the editor cannot hold":
+      'Line <!-- note --> and a<wbr>b and <video src="a.mp4" controls></video> done.\n',
+    "linked image": "[![badge](https://img.shields.io/x.svg)](https://x.y)\n",
+    "sized image in a sentence": 'Icon <img src="a.png" alt="A" width="20"> here.\n',
     "markers quoted inside a fence":
       "Example:\n\n```\nSome <!-- fmc:1 -->anchored<!-- /fmc:1 --> text\n```\n",
     "nested fences": "````md\n```js\nx()\n```\n````\n",

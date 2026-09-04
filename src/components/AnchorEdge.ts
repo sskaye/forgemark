@@ -32,6 +32,7 @@ import { Node, mergeAttributes, type Editor } from "@tiptap/core";
 import { Plugin, PluginKey, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { Fragment, Slice, type Node as PMNode, type ResolvedPos } from "@tiptap/pm/model";
+import { HTML_INLINE } from "./HtmlInline";
 
 export const ANCHOR_EDGE = "anchorEdge";
 
@@ -163,10 +164,14 @@ export function strayEdges(doc: PMNode): number[] {
   return edges.filter((e) => !keep.has(e.pos)).map((e) => e.pos);
 }
 
-// The text of a range as the reader sees it: edges contribute nothing,
-// other leaves (an image, a hard break) a space.
+// Inline atoms that show no text: an anchor edge, a kept piece of
+// inline HTML.
+export const TEXTLESS = new Set([ANCHOR_EDGE, HTML_INLINE]);
+
+// The text of a range as the reader sees it: text-less atoms contribute
+// nothing, other leaves (an image, a hard break) a space.
 export function plainText(doc: PMNode, from: number, to: number): string {
-  return doc.textBetween(from, to, " ", (leaf) => (leaf.type.name === ANCHOR_EDGE ? "" : " "));
+  return doc.textBetween(from, to, " ", (leaf) => (TEXTLESS.has(leaf.type.name) ? "" : " "));
 }
 
 // A transaction that anchors `from`–`to` as comment `id`: a close edge

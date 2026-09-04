@@ -13,13 +13,16 @@
 //     whole-block anchor on the node across the round trip; `AnchorEdge`
 //     for inline anchors, whose edges are nodes so they serialize where
 //     they sit.
+//   - `HtmlMark` and `HtmlInline` for inline HTML the schema has no
+//     element for, so a <kbd> or a comment survives an edit of its
+//     paragraph; `InlineImage` so an image can sit in a sentence or a
+//     link and keep its width.
 
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
 import Code from "@tiptap/extension-code";
 import Subscript from "@tiptap/extension-subscript";
 import Superscript from "@tiptap/extension-superscript";
-import Image from "@tiptap/extension-image";
 import { Table } from "@tiptap/extension-table";
 import { TableRow } from "@tiptap/extension-table-row";
 import { TableHeader } from "@tiptap/extension-table-header";
@@ -31,6 +34,9 @@ import type { AnyExtension } from "@tiptap/core";
 import { AnchorEdge } from "./AnchorEdge";
 import { CodeBlockAnchor } from "./CodeBlockAnchor";
 import { VerbatimBlock } from "./VerbatimBlock";
+import { HtmlMark } from "./HtmlMark";
+import { HtmlInline } from "./HtmlInline";
+import { InlineImage } from "./InlineImage";
 
 // Subscript / superscript with an explicit markdown serialize spec so
 // `<sub>`/`<sup>` round-trip instead of flattening to plain text.
@@ -78,10 +84,12 @@ export function renderedExtensions(extra: AnyExtension[] = []): AnyExtension[] {
     SubscriptMark,
     SuperscriptMark,
     AnchorEdge,
+    HtmlMark,
     CodeInAnchor,
     VerbatimBlock,
+    HtmlInline,
     ...extra,
-    Image,
+    InlineImage,
     Table.configure({ resizable: false }),
     TableRow,
     TableHeader,

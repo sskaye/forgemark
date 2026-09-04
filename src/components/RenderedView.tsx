@@ -11,7 +11,7 @@ import { createBlockSync, type BlockSync, type Serializer } from "./blockSync";
 import { renderedExtensions } from "./editorExtensions";
 import { anchorIdOf } from "../services/anchorDom";
 import {
-  ANCHOR_EDGE,
+  TEXTLESS,
   anchorEdges,
   anchorEdgesTransaction,
   anchorRanges,
@@ -595,9 +595,9 @@ function buildTextIndex(doc: ProseMirrorNode): { text: string; positions: Array<
   const positions: Array<number | null> = [];
   let previousEnd: number | null = null;
   doc.descendants((node, pos) => {
-    // An anchor edge sits between two runs of the same text; it is not
-    // a break in it.
-    if (node.type.name === ANCHOR_EDGE) {
+    // An anchor edge or a kept piece of inline HTML sits between two
+    // runs of the same text; it is not a break in it.
+    if (TEXTLESS.has(node.type.name)) {
       if (previousEnd === pos) previousEnd = pos + node.nodeSize;
       return false;
     }
