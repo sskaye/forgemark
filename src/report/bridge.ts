@@ -585,7 +585,7 @@ export function installBridge(win: Window, channel: BridgeChannel): () => void {
       case "scrollTo":
         scrollInto(
           anchorElement(doc, message.id) ??
-            doc.querySelector(`[data-fm-passage-host="${message.id}"]`),
+            doc.querySelector(`[data-fm-passage-host~="${message.id}"]`),
           "center",
         );
         break;

@@ -101,6 +101,10 @@ export function locateElement(body: string, selector: string, format: DocFormat)
 // carries the passage so the app can highlight it wherever the element
 // shows it and an agent can tell what was meant. `near` is the rendered
 // text either side of the passage, as the reader saw it.
+//
+// Several passages may live in one element — one chart per tab, drawn
+// into the same figure — so passage pairs may sit one inside another
+// around the same element, the one place the format lets pairs nest.
 export function locatePassage(
   body: string,
   selector: string,
@@ -110,13 +114,27 @@ export function locatePassage(
 ): Placement {
   const text = normalizeAnchorText(phrase);
   if (text.length === 0) throw new AnchorError("The anchor text is empty.");
-  const base = locateElement(body, selector, format);
+  if (format !== "html") {
+    throw new AnchorError("A passage anchor applies to HTML reports only.");
+  }
+  const span = findBySelector(body, selector);
+  if (!span) {
+    throw new AnchorError(
+      `No element matches "${selector}". Only "#id" and "#id tag" selectors are supported, and the id must exist in the report.`,
+    );
+  }
+  rejectOverlapUnlessSameElement(body, span.start, span.end, format);
+  const map = buildHtmlTextMap(body);
+  const around = renderedAround(map, span.start, span.end);
   return {
-    ...base,
-    anchor_kind: "passage",
+    start: span.start,
+    end: span.end,
+    block: false,
     anchor_text: text,
-    context_before: near ? contextSnippet(near.before, "before") : base.context_before,
-    context_after: near ? contextSnippet(near.after, "after") : base.context_after,
+    context_before: near ? contextSnippet(near.before, "before") : around.before,
+    context_after: near ? contextSnippet(near.after, "after") : around.after,
+    anchor_kind: "passage",
+    anchor_selector: selector.trim(),
   };
 }
 
@@ -470,4 +488,39 @@ function rejectOverlap(body: string, start: number, end: number, format: DocForm
 
 function overlaps(p: MarkerPair, start: number, end: number): boolean {
   return start < p.close.end && end > p.open.start;
+}
+
+// Like `rejectOverlap`, but a pair that wraps exactly this element —
+// with nothing but other markers and whitespace between its markers and
+// the element — is allowed: another passage on the same element nests
+// inside it.
+const ONLY_MARKERS = /^(?:\s|<!--\s*\/?fmc:\d+\s*-->)*$/;
+
+export function wrapsSameElement(
+  body: string,
+  p: { open: { end: number }; close: { start: number } },
+  start: number,
+  end: number,
+): boolean {
+  return (
+    p.open.end <= start &&
+    p.close.start >= end &&
+    ONLY_MARKERS.test(body.slice(p.open.end, start)) &&
+    ONLY_MARKERS.test(body.slice(end, p.close.start))
+  );
+}
+
+function rejectOverlapUnlessSameElement(
+  body: string,
+  start: number,
+  end: number,
+  format: DocFormat,
+): void {
+  const { pairs } = pairMarkers(findMarkers(body, format));
+  const hit = pairs.find((p) => overlaps(p, start, end) && !wrapsSameElement(body, p, start, end));
+  if (hit) {
+    throw new AnchorError(
+      `That passage overlaps the anchor of comment ${hit.id}. Reply to comment ${hit.id} instead, or anchor a passage that doesn't overlap it.`,
+    );
+  }
 }

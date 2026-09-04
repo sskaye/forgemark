@@ -67,3 +67,38 @@ describe("a passage record", () => {
     expect(() => parseForgemarkFile(file)).toThrow(/anchor_kind/);
   });
 });
+
+describe("several passages on one element", () => {
+  it("nest their pairs around the element and lint clean", async () => {
+    const one = locatePassage(REPORT, "#agp", "Glucose for the month", "html");
+    const withOne = applyPlacement(REPORT, one, 3);
+    const two = locatePassage(withOne, "#agp", "Sleep for the month", "html");
+    const withTwo = applyPlacement(withOne, two, 6);
+    expect(withTwo).toContain(
+      '<!-- fmc:3 --><!-- fmc:6 --><section id="agp"><h2>Glucose</h2></section><!-- /fmc:6 --><!-- /fmc:3 -->',
+    );
+    const records: Comment[] = [3, 6].map((id) => ({
+      id,
+      anchor_text: id === 3 ? "Glucose for the month" : "Sleep for the month",
+      anchor_kind: "passage",
+      anchor_selector: "#agp",
+      author: "R",
+      timestamp: "2026-09-04T10:00:00Z",
+      resolved: false,
+      body: "x\n",
+    }));
+    const file = serializeForgemarkFile({ body: withTwo, comments: records });
+    expect(parseForgemarkFile(file).comments.map((c) => c.id)).toEqual([3, 6]);
+    const { lintText } = await import("../../../cli/lint");
+    const report = lintText(file, "html");
+    expect(report.problems.filter((p) => p.severity === "error")).toEqual([]);
+  });
+
+  it("still refuses a passage that overlaps a different element's anchor", () => {
+    const outer = locatePassage(REPORT, "#agp", "x", "html");
+    const body = applyPlacement(REPORT, outer, 3);
+    // #tiles is a sibling, fine; a selector inside #agp is not.
+    expect(() => locatePassage(body, "#agp h2", "Glucose", "html")).toThrow(AnchorError);
+    expect(() => locatePassage(body, "#tiles", "y", "html")).not.toThrow();
+  });
+});

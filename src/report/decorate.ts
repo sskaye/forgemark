@@ -24,7 +24,15 @@
 //   passage  markers around an element a script fills at load, with the
 //            comment about text inside it. The element is not marked;
 //            the text is found in its rendered content and wrapped, and
-//            found again after the script redraws it.
+//            found again after the script redraws it. When the text is
+//            everything the element shows — a figure whose caption is
+//            the passage — the element itself is marked, as a block.
+//            Several passages may share one element (one chart per tab),
+//            so the host attribute holds a list of ids. When the text is
+//            everything the element shows — a figure whose caption is
+//            the passage — the element itself is marked, as a block.
+//            Several passages may share one element (one chart per tab),
+//            so the host attribute holds a list of ids.
 //
 // Every step is idempotent, since the bridge decorates again whenever
 // the document changes.
@@ -121,9 +129,7 @@ function decoratePair(
     if (elements.length > 0 && prose.length === 0) {
       for (const el of elements) {
         if (passage) {
-          el.setAttribute("data-fm-passage-host", String(id));
-          if (el.getAttribute("data-anchor-id") === String(id))
-            el.removeAttribute("data-anchor-id");
+          addHost(el, id);
         } else {
           el.setAttribute("data-anchor-id", String(id));
           el.removeAttribute("data-fm-passage-host");
@@ -161,7 +167,7 @@ function decoratePair(
 // selected, a range not chosen). Wraps that no longer match are undone
 // first, so a redraw of the element is followed by a fresh search.
 export function decoratePassage(doc: Document, id: number, text: string): boolean {
-  const host = doc.querySelector(`[data-fm-passage-host="${id}"]`);
+  const host = doc.querySelector(`[data-fm-passage-host~="${id}"]`);
   if (!host) return false;
   const wanted = text.replace(/\s+/g, " ").trim();
   const current = Array.from(host.querySelectorAll(`[data-anchor-id="${id}"]`));
@@ -175,6 +181,22 @@ export function decoratePassage(doc: Document, id: number, text: string): boolea
     for (const el of current) unwrapSpan(el);
   }
   if (wanted.length === 0) return false;
+
+  // The passage is all the element shows: mark the element, as a block
+  // anchor is marked, and let go when it shows something else.
+  const whole = textNodesUnder(host)
+    .map((n) => n.data)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (host.getAttribute("data-anchor-id") === String(id)) {
+    if (whole === wanted) return true;
+    host.removeAttribute("data-anchor-id");
+  }
+  if (whole === wanted && !host.hasAttribute("data-anchor-id")) {
+    host.setAttribute("data-anchor-id", String(id));
+    return true;
+  }
 
   // Match on the rendered text of the element, whitespace collapsed,
   // then map the match back to text nodes.
@@ -246,6 +268,12 @@ function textNodesUnder(root: Node): Text[] {
   return out;
 }
 
+function addHost(el: Element, id: number): void {
+  const ids = (el.getAttribute("data-fm-passage-host") ?? "").split(/\s+/).filter(Boolean);
+  if (!ids.includes(String(id))) ids.push(String(id));
+  el.setAttribute("data-fm-passage-host", ids.join(" "));
+}
+
 function unwrapSpan(el: Element): void {
   const parent = el.parentNode;
   if (!parent) return;
@@ -264,8 +292,16 @@ export function removeAnchor(doc: Document, id: number): void {
     if (el.tagName === "SPAN" && el.attributes.length === 1) unwrapSpan(el);
     else el.removeAttribute("data-anchor-id");
   }
-  for (const el of Array.from(doc.querySelectorAll(`[data-fm-passage-host="${id}"]`))) {
-    el.removeAttribute("data-fm-passage-host");
+  for (const el of Array.from(doc.querySelectorAll(".is-focused, .is-hovered, .is-resolved"))) {
+    if (!el.hasAttribute("data-anchor-id"))
+      el.classList.remove("is-focused", "is-hovered", "is-resolved");
+  }
+  for (const el of Array.from(doc.querySelectorAll(`[data-fm-passage-host~="${id}"]`))) {
+    const rest = (el.getAttribute("data-fm-passage-host") ?? "")
+      .split(/\s+/)
+      .filter((v) => v && v !== String(id));
+    if (rest.length) el.setAttribute("data-fm-passage-host", rest.join(" "));
+    else el.removeAttribute("data-fm-passage-host");
   }
 }
 

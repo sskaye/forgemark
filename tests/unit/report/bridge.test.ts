@@ -216,6 +216,28 @@ describe("what the reader does", () => {
     expect(section.querySelector("[data-anchor-id='8']")?.textContent).toBe("1h 05m");
   });
 
+  it("shows each of several passages on one element as its text comes and goes", async () => {
+    // Two comments on one block: the content of one tab, and of another.
+    const table = doc.querySelector("table#t1")!;
+    table.insertAdjacentHTML("beforebegin", "<!-- fmc:11 --><!-- fmc:12 -->");
+    table.insertAdjacentHTML("afterend", "<!-- /fmc:12 --><!-- /fmc:11 -->");
+    init([
+      { id: 11, kind: "passage", text: "Head 42" },
+      { id: 12, kind: "passage", text: "Head 43" },
+    ]);
+    // The whole block reads as the first passage: it is marked as a block.
+    expect(table.getAttribute("data-anchor-id")).toBe("11");
+    expect(table.getAttribute("data-fm-passage-host")).toBe("11 12");
+    table.querySelector("td")!.textContent = "43";
+    await vi.advanceTimersByTimeAsync(100);
+    expect(table.getAttribute("data-anchor-id")).toBe("12");
+    table.querySelector("td")!.textContent = "44";
+    await vi.advanceTimersByTimeAsync(100);
+    expect(table.hasAttribute("data-anchor-id")).toBe(false);
+    tell({ type: "unwrap", id: 11 });
+    expect(table.getAttribute("data-fm-passage-host")).toBe("12");
+  });
+
   it("puts a space between blocks in a selection's surroundings", () => {
     init([]);
     select("42");

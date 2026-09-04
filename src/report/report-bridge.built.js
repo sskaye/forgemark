@@ -62,9 +62,7 @@
       if (elements.length > 0 && prose.length === 0) {
         for (const el of elements) {
           if (passage) {
-            el.setAttribute("data-fm-passage-host", String(id));
-            if (el.getAttribute("data-anchor-id") === String(id))
-              el.removeAttribute("data-anchor-id");
+            addHost(el, id);
           } else {
             el.setAttribute("data-anchor-id", String(id));
             el.removeAttribute("data-fm-passage-host");
@@ -87,7 +85,7 @@
     return "inline";
   }
   function decoratePassage(doc, id, text) {
-    const host = doc.querySelector(`[data-fm-passage-host="${id}"]`);
+    const host = doc.querySelector(`[data-fm-passage-host~="${id}"]`);
     if (!host) return false;
     const wanted = text.replace(/\s+/g, " ").trim();
     const current = Array.from(host.querySelectorAll(`[data-anchor-id="${id}"]`));
@@ -97,6 +95,15 @@
       for (const el of current) unwrapSpan(el);
     }
     if (wanted.length === 0) return false;
+    const whole = textNodesUnder(host).map((n) => n.data).join(" ").replace(/\s+/g, " ").trim();
+    if (host.getAttribute("data-anchor-id") === String(id)) {
+      if (whole === wanted) return true;
+      host.removeAttribute("data-anchor-id");
+    }
+    if (whole === wanted && !host.hasAttribute("data-anchor-id")) {
+      host.setAttribute("data-anchor-id", String(id));
+      return true;
+    }
     const nodes = textNodesUnder(host);
     let joined = "";
     const starts = [];
@@ -159,6 +166,11 @@
     }
     return out;
   }
+  function addHost(el, id) {
+    const ids = (el.getAttribute("data-fm-passage-host") ?? "").split(/\s+/).filter(Boolean);
+    if (!ids.includes(String(id))) ids.push(String(id));
+    el.setAttribute("data-fm-passage-host", ids.join(" "));
+  }
   function unwrapSpan(el) {
     const parent = el.parentNode;
     if (!parent) return;
@@ -174,8 +186,14 @@
       if (el.tagName === "SPAN" && el.attributes.length === 1) unwrapSpan(el);
       else el.removeAttribute("data-anchor-id");
     }
-    for (const el of Array.from(doc.querySelectorAll(`[data-fm-passage-host="${id}"]`))) {
-      el.removeAttribute("data-fm-passage-host");
+    for (const el of Array.from(doc.querySelectorAll(".is-focused, .is-hovered, .is-resolved"))) {
+      if (!el.hasAttribute("data-anchor-id"))
+        el.classList.remove("is-focused", "is-hovered", "is-resolved");
+    }
+    for (const el of Array.from(doc.querySelectorAll(`[data-fm-passage-host~="${id}"]`))) {
+      const rest = (el.getAttribute("data-fm-passage-host") ?? "").split(/\s+/).filter((v) => v && v !== String(id));
+      if (rest.length) el.setAttribute("data-fm-passage-host", rest.join(" "));
+      else el.removeAttribute("data-fm-passage-host");
     }
   }
   function nodesBetween(start, end) {
@@ -712,7 +730,7 @@
           break;
         case "scrollTo":
           scrollInto(
-            anchorElement(doc, message.id) ?? doc.querySelector(`[data-fm-passage-host="${message.id}"]`),
+            anchorElement(doc, message.id) ?? doc.querySelector(`[data-fm-passage-host~="${message.id}"]`),
             "center"
           );
           break;

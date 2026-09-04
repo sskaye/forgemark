@@ -16,6 +16,7 @@
 import { parseForgemarkFile, findStrayBlock, ForgemarkParseError } from "../src/format/parser";
 import { findMarkers, pairMarkers } from "../src/format/markers";
 import { anchorTextMatches } from "../src/format/anchor-text";
+import { wrapsSameElement } from "../src/format/locate";
 import { BLOCK_OPEN, type DocFormat, type ParsedFile } from "../src/format/types";
 
 export type Problem = {
@@ -78,7 +79,8 @@ export function lintText(text: string, format: DocFormat): LintReport {
   for (let i = 1; i < sorted.length; i++) {
     const prev = sorted[i - 1];
     const cur = sorted[i];
-    if (cur.open.start < prev.close.end) {
+    // Passage anchors on the same element sit one inside another.
+    if (cur.open.start < prev.close.end && !sameElement(file.body, prev, cur)) {
       problems.push({
         severity: "error",
         commentId: cur.id,
@@ -172,4 +174,17 @@ function lineAt(s: string, offset: number): number {
 function flat(s: string, max = 80): string {
   const f = s.replace(/\s+/g, " ").trim();
   return f.length > max ? f.slice(0, max - 1) + "…" : f;
+}
+
+// Whether two nested pairs wrap the same element, with only other
+// markers and whitespace between the outer markers and the inner ones.
+function sameElement(
+  body: string,
+  outer: { open: { end: number }; close: { start: number } },
+  inner: { open: { start: number; end: number }; close: { start: number; end: number } },
+): boolean {
+  return (
+    outer.close.start >= inner.close.end &&
+    wrapsSameElement(body, outer, inner.open.start, inner.close.end)
+  );
 }
