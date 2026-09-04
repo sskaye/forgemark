@@ -193,7 +193,11 @@ function SkillRow({
       justInstalled && target.afterInstall
         ? `Installed ${status.version} · ${target.afterInstall}`
         : `Up to date${sent(status)}`;
-    button = { label: "Update", disabled: true, onClick: onInstall };
+    // A hand-off cannot see whether Claude took the file, so the row
+    // never locks: Claude may have declined, or been closed.
+    button = handoff
+      ? { label: "Install again", onClick: onInstall }
+      : { label: "Update", disabled: true, onClick: onInstall };
   } else if (status.kind === "outdated") {
     glyph = "up";
     text = `${status.installed} → ${SHIPPED.version}${sent(status)}`;

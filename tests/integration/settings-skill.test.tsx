@@ -154,6 +154,12 @@ describe("Settings → AI agents", () => {
       expect.stringMatching(/forgemark-skill\.skill$/),
       "Claude",
     );
+    // Claude may have declined the file; the row stays open to a retry.
+    const again = screen.getByTestId("fm-skill-action-claude-app");
+    expect(again).toHaveTextContent("Install again");
+    expect(again).toBeEnabled();
+    fireEvent.click(again);
+    await waitFor(() => expect(fakeTauri.opener.openPath).toHaveBeenCalledTimes(2));
   });
 
   it("shows the Claude app row as out of date with the date it was last sent", async () => {
