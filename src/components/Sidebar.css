@@ -137,17 +137,4 @@
 
 .fm-sidebar-resolve-all {
   margin-left: auto;
-  font: 500 11.5px var(--fm-ui);
-  color: var(--fm-chrome-muted);
-  background: transparent;
-  border: 0;
-  padding: 2px 6px;
-  border-radius: 5px;
-  cursor: pointer;
-}
-.fm-sidebar-resolve-all:hover,
-.fm-sidebar-resolve-all:focus-visible {
-  background: var(--fm-hover-bg);
-  color: var(--fm-chrome-text);
-  outline: none;
 }

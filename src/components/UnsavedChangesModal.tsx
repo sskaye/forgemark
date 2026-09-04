@@ -42,18 +42,13 @@ export function UnsavedChangesModal({
         </p>
       </header>
       <footer className="fm-modal-footer">
-        <button
-          type="button"
-          className="fm-modal-button"
-          onClick={onCancel}
-          data-testid="fm-unsaved-cancel"
-        >
+        <button type="button" className="fm-btn" onClick={onCancel} data-testid="fm-unsaved-cancel">
           Cancel
         </button>
         <div className="fm-modal-spacer" />
         <button
           type="button"
-          className="fm-modal-button fm-modal-button-danger"
+          className="fm-btn fm-btn-danger"
           onClick={onDiscard}
           data-testid="fm-unsaved-discard"
         >
@@ -62,7 +57,7 @@ export function UnsavedChangesModal({
         {!conflictPending && (
           <button
             type="button"
-            className="fm-modal-button fm-modal-button-primary"
+            className="fm-btn fm-btn-primary"
             onClick={onSave}
             data-testid="fm-unsaved-save"
             autoFocus

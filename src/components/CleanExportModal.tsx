@@ -41,7 +41,7 @@ export function CleanExportModal({ commentCount, onCancel, onConfirm }: Props) {
       <footer className="fm-modal-footer">
         <button
           type="button"
-          className="fm-modal-button"
+          className="fm-btn"
           onClick={onCancel}
           data-testid="fm-clean-export-cancel"
         >
@@ -50,7 +50,7 @@ export function CleanExportModal({ commentCount, onCancel, onConfirm }: Props) {
         <div className="fm-modal-spacer" />
         <button
           type="button"
-          className="fm-modal-button fm-modal-button-primary"
+          className="fm-btn fm-btn-primary"
           onClick={onConfirm}
           data-testid="fm-clean-export-confirm"
         >

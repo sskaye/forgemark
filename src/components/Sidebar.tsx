@@ -389,7 +389,7 @@ function SidebarHeader({
         {openVisibleIds.length > 1 && (
           <button
             type="button"
-            className="fm-sidebar-resolve-all"
+            className="fm-btn fm-btn-sm fm-btn-quiet fm-sidebar-resolve-all"
             data-testid="fm-sidebar-resolve-all"
             title="Resolve every open comment shown"
             onClick={() => onResolveAll(openVisibleIds)}

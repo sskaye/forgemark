@@ -136,26 +136,6 @@
   visibility: visible;
 }
 
-.fm-card-reply-action {
-  font-family: var(--fm-ui);
-  font-size: 11px;
-  color: var(--fm-chrome-muted);
-  background: transparent;
-  border: none;
-  padding: 2px 6px;
-  border-radius: 4px;
-  cursor: default;
-}
-
-.fm-card-reply-action:hover {
-  background: var(--fm-hover-bg);
-  color: var(--fm-chrome-text);
-}
-
-.fm-card-reply-action-danger:hover {
-  color: var(--fm-danger);
-}
-
 /* Action row revealed on focus. */
 .fm-card-actions {
   display: flex;
@@ -170,52 +150,7 @@
   flex: 1;
 }
 
-.fm-card-action {
-  font-family: var(--fm-ui);
-  font-size: 11.5px;
-  color: var(--fm-chrome-text);
-  background: transparent;
-  border: 0.5px solid var(--fm-divider);
-  border-radius: 5px;
-  padding: 3px 10px;
-  cursor: default;
-}
-
-.fm-card-action:hover {
-  background: var(--fm-hover-bg);
-}
-
-.fm-card-action:focus-visible {
-  outline: 0.5px solid var(--fm-accent);
-  outline-offset: 2px;
-}
-
-.fm-card-action-danger {
-  color: var(--fm-danger);
-  border-color: rgba(0, 0, 0, 0);
-}
-
-.fm-card-action-danger:hover {
-  background: var(--fm-danger-soft);
-}
-
-[data-theme="dark"] .fm-card-action-danger:hover {
-  background: rgba(255, 69, 58, 0.1);
-}
-
-.fm-card-action-accept {
-  font-weight: 600;
-  color: var(--fm-accent-text);
-  background: var(--fm-success);
-  border-color: rgba(0, 0, 0, 0.1);
-}
-
-.fm-card-action-accept:hover {
-  background: var(--fm-success);
-  filter: brightness(1.05);
-}
-
-/* Phase 9 — orphan / floating pills. The pill sits between the author
+[data-theme="dark"] /* Phase 9 — orphan / floating pills. The pill sits between the author
    row and the body, signalling the card's anchor state. */
 .fm-card-pill {
   display: inline-flex;

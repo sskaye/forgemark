@@ -108,12 +108,12 @@ export function InlineComposer({
         <span className="fm-inline-composer-hint" aria-hidden>
           ⌘↵ to submit · Esc to cancel
         </span>
-        <button type="button" className="fm-inline-composer-cancel" onClick={onCancel}>
+        <button type="button" className="fm-btn fm-btn-sm" onClick={onCancel}>
           Cancel
         </button>
         <button
           type="button"
-          className="fm-inline-composer-submit"
+          className="fm-btn fm-btn-sm fm-btn-primary"
           disabled={!valid}
           onClick={() => valid && onSubmit(body.trim())}
           data-testid="fm-inline-composer-submit"

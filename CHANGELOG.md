@@ -48,6 +48,7 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 
 ### Changed
 
+- Every text button in the app is drawn by one stylesheet family (`fm-btn` with size and role modifiers) instead of eight near-identical rulesets, so hover, focus, and disabled states are the same everywhere.
 - Timestamps on comment cards and the hints under Settings fields and composers are drawn at the readable muted tone rather than the decorative faint one. The hover, selected-segment, and danger backgrounds are theme tokens instead of literals copied into nine stylesheets.
 - The app now ships a content-security policy: scripts only from the app itself, images from the app, data URLs, and HTTPS, frames only for the report view. The filesystem scope stays unrestricted, and says why. The release script no longer prints the Apple app-specific password in its log, the version script matches only the top-level version key, and CI builds the macOS app on pushes to main instead of finding bundle breakage on release day.
 - Dead code removed: a reducer action, a file-open helper, a test-only fingerprint helper, two HTML helpers, and the styles for an in-frame button that no longer exists; the marker regex and the "which anchor is this node in" lookup exist once each. Two unused npm packages and two unused Rust crates are gone. A file at a Windows drive root is watched correctly, and a watcher event that names no path no longer triggers a read.

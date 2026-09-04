@@ -29,19 +29,13 @@
   flex: 1;
 }
 
+/* The bulk action wears the orphan colour, not the accent. */
 .fm-lost-banner-button {
-  font-family: var(--fm-ui);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--fm-accent-text);
   background: var(--fm-orphan-underline);
-  border: 0.5px solid rgba(0, 0, 0, 0.1);
-  border-radius: 5px;
-  padding: 4px 10px;
-  cursor: default;
 }
 
-.fm-lost-banner-button:hover {
+.fm-lost-banner-button:hover:not(:disabled) {
+  background: var(--fm-orphan-underline);
   filter: brightness(1.05);
 }
 

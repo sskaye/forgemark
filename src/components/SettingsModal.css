@@ -105,25 +105,12 @@
 .fm-settings-stepper-btn {
   width: 24px;
   height: 24px;
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 0.5px solid var(--fm-divider-strong);
-  border-radius: 5px;
-  background: var(--fm-card-bg);
-  color: var(--fm-chrome-text);
   font-size: 14px;
   font-weight: 600;
-  cursor: default;
-}
-
-.fm-settings-stepper-btn:hover:not(:disabled) {
-  background: var(--fm-hover-bg);
-}
-
-.fm-settings-stepper-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
 }
 
 .fm-settings-stepper-value {

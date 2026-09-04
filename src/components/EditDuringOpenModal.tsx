@@ -37,7 +37,7 @@ export function EditDuringOpenModal({ state, onReloadFromDisk, onKeepYours, onCa
       <footer className="fm-modal-footer">
         <button
           type="button"
-          className="fm-modal-button"
+          className="fm-btn"
           onClick={onCancel}
           data-testid="fm-edit-during-cancel"
         >
@@ -46,7 +46,7 @@ export function EditDuringOpenModal({ state, onReloadFromDisk, onKeepYours, onCa
         <div className="fm-modal-spacer" />
         <button
           type="button"
-          className="fm-modal-button"
+          className="fm-btn"
           onClick={onKeepYours}
           data-testid="fm-edit-during-keep"
         >
@@ -54,7 +54,7 @@ export function EditDuringOpenModal({ state, onReloadFromDisk, onKeepYours, onCa
         </button>
         <button
           type="button"
-          className="fm-modal-button fm-modal-button-primary"
+          className="fm-btn fm-btn-primary"
           onClick={onReloadFromDisk}
           data-testid="fm-edit-during-reload"
         >

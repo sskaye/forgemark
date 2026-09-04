@@ -90,7 +90,7 @@ export function SettingsModal({ onClose }: Props) {
             <div className="fm-settings-stepper">
               <button
                 type="button"
-                className="fm-settings-stepper-btn"
+                className="fm-btn fm-btn-sm fm-settings-stepper-btn"
                 onClick={() => setFontSize(fontSize - 1)}
                 disabled={fontSize <= FONT_SIZE_RANGE.min}
                 aria-label="Decrease text size"
@@ -103,7 +103,7 @@ export function SettingsModal({ onClose }: Props) {
               </span>
               <button
                 type="button"
-                className="fm-settings-stepper-btn"
+                className="fm-btn fm-btn-sm fm-settings-stepper-btn"
                 onClick={() => setFontSize(fontSize + 1)}
                 disabled={fontSize >= FONT_SIZE_RANGE.max}
                 aria-label="Increase text size"
@@ -134,7 +134,7 @@ export function SettingsModal({ onClose }: Props) {
           <div className="fm-settings-ai-buttons">
             <button
               type="button"
-              className="fm-modal-button fm-modal-button-primary"
+              className="fm-btn fm-btn-primary"
               onClick={() => onDownload("claude")}
               disabled={downloadState.inFlight !== null}
               data-testid="fm-settings-skill-claude"
@@ -143,7 +143,7 @@ export function SettingsModal({ onClose }: Props) {
             </button>
             <button
               type="button"
-              className="fm-modal-button fm-modal-button-primary"
+              className="fm-btn fm-btn-primary"
               onClick={() => onDownload("codex")}
               disabled={downloadState.inFlight !== null}
               data-testid="fm-settings-skill-codex"
@@ -170,7 +170,7 @@ export function SettingsModal({ onClose }: Props) {
       <footer className="fm-settings-footer">
         <button
           type="button"
-          className="fm-modal-button fm-modal-button-primary"
+          className="fm-btn fm-btn-primary"
           onClick={onClose}
           data-testid="fm-settings-done"
         >

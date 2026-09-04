@@ -51,7 +51,7 @@ export function SaveConflictModal({ state, onCancel, onOverwrite }: Props) {
       <footer className="fm-modal-footer">
         <button
           type="button"
-          className="fm-modal-button"
+          className="fm-btn"
           onClick={onCancel}
           data-testid="fm-save-conflict-cancel"
         >
@@ -60,7 +60,7 @@ export function SaveConflictModal({ state, onCancel, onOverwrite }: Props) {
         <div className="fm-modal-spacer" />
         <button
           type="button"
-          className="fm-modal-button fm-modal-button-danger"
+          className="fm-btn fm-btn-danger"
           onClick={onOverwrite}
           data-testid="fm-save-conflict-overwrite"
         >

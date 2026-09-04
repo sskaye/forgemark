@@ -59,18 +59,13 @@ export function PrintOptionsModal({ onCancel, onContinue }: Props) {
         </label>
       </section>
       <footer className="fm-modal-footer">
-        <button
-          type="button"
-          className="fm-modal-button"
-          onClick={onCancel}
-          data-testid="fm-print-cancel"
-        >
+        <button type="button" className="fm-btn" onClick={onCancel} data-testid="fm-print-cancel">
           Cancel
         </button>
         <div className="fm-modal-spacer" />
         <button
           type="button"
-          className="fm-modal-button fm-modal-button-primary"
+          className="fm-btn fm-btn-primary"
           onClick={() => onContinue({ includeComments, includeSuggestions })}
           data-testid="fm-print-continue"
         >

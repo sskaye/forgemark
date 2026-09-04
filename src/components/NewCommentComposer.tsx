@@ -224,7 +224,7 @@ export function NewCommentComposer({
         </span>
         <button
           type="button"
-          className="fm-composer-submit"
+          className="fm-btn fm-btn-primary"
           disabled={!valid}
           onClick={submit}
           data-testid="fm-composer-submit"

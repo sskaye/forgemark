@@ -40,7 +40,7 @@ export function LostAnchorBanner({
       {showBulk && (
         <button
           type="button"
-          className="fm-lost-banner-button"
+          className="fm-btn fm-btn-sm fm-btn-primary fm-lost-banner-button"
           onClick={onReattachConfident}
           data-testid="fm-lost-banner-reattach-all"
         >
@@ -51,7 +51,10 @@ export function LostAnchorBanner({
       )}
       <button
         type="button"
-        className={"fm-lost-banner-button" + (showBulk ? " fm-lost-banner-button-secondary" : "")}
+        className={
+          "fm-btn fm-btn-sm " +
+          (showBulk ? "fm-lost-banner-button-secondary" : "fm-btn-primary fm-lost-banner-button")
+        }
         onClick={onRecover}
         data-testid="fm-lost-banner-recover"
       >

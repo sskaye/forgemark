@@ -210,7 +210,7 @@ export function FMCard({
             <>
               <button
                 type="button"
-                className="fm-card-action fm-card-action-accept"
+                className="fm-btn fm-btn-sm fm-btn-success"
                 onClick={(e) => {
                   e.stopPropagation();
                   onReattach?.();
@@ -222,7 +222,7 @@ export function FMCard({
               <div className="fm-card-actions-spacer" />
               <button
                 type="button"
-                className="fm-card-action fm-card-action-danger"
+                className="fm-btn fm-btn-sm fm-btn-danger"
                 onClick={(e) => {
                   e.stopPropagation();
                   onDelete();
@@ -236,7 +236,7 @@ export function FMCard({
             <>
               <button
                 type="button"
-                className="fm-card-action fm-card-action-accept"
+                className="fm-btn fm-btn-sm fm-btn-success"
                 onClick={(e) => {
                   e.stopPropagation();
                   onAcceptSuggestion();
@@ -247,7 +247,7 @@ export function FMCard({
               </button>
               <button
                 type="button"
-                className="fm-card-action"
+                className="fm-btn fm-btn-sm"
                 onClick={(e) => {
                   e.stopPropagation();
                   onRejectSuggestion();
@@ -259,7 +259,7 @@ export function FMCard({
               {isOwn && (
                 <button
                   type="button"
-                  className="fm-card-action"
+                  className="fm-btn fm-btn-sm"
                   onClick={(e) => {
                     e.stopPropagation();
                     onEdit();
@@ -272,7 +272,7 @@ export function FMCard({
               <div className="fm-card-actions-spacer" />
               <button
                 type="button"
-                className="fm-card-action fm-card-action-danger"
+                className="fm-btn fm-btn-sm fm-btn-danger"
                 onClick={(e) => {
                   e.stopPropagation();
                   onDelete();
@@ -286,7 +286,7 @@ export function FMCard({
             <>
               <button
                 type="button"
-                className="fm-card-action"
+                className="fm-btn fm-btn-sm"
                 onClick={(e) => {
                   e.stopPropagation();
                   onReply();
@@ -298,7 +298,7 @@ export function FMCard({
               {isOwn && (
                 <button
                   type="button"
-                  className="fm-card-action"
+                  className="fm-btn fm-btn-sm"
                   onClick={(e) => {
                     e.stopPropagation();
                     onEdit();
@@ -310,7 +310,7 @@ export function FMCard({
               )}
               <button
                 type="button"
-                className="fm-card-action"
+                className="fm-btn fm-btn-sm"
                 onClick={(e) => {
                   e.stopPropagation();
                   onResolve();
@@ -322,7 +322,7 @@ export function FMCard({
               <div className="fm-card-actions-spacer" />
               <button
                 type="button"
-                className="fm-card-action fm-card-action-danger"
+                className="fm-btn fm-btn-sm fm-btn-danger"
                 onClick={(e) => {
                   e.stopPropagation();
                   onDelete();
@@ -379,7 +379,7 @@ function ReplyView({
             {isOwn && (
               <button
                 type="button"
-                className="fm-card-reply-action"
+                className="fm-btn fm-btn-sm fm-btn-quiet"
                 onClick={(e) => {
                   e.stopPropagation();
                   onEdit();
@@ -390,7 +390,7 @@ function ReplyView({
             )}
             <button
               type="button"
-              className="fm-card-reply-action fm-card-reply-action-danger"
+              className="fm-btn fm-btn-sm fm-btn-quiet fm-btn-danger"
               onClick={(e) => {
                 e.stopPropagation();
                 onDelete();

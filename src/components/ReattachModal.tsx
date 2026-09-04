@@ -115,7 +115,7 @@ export function ReattachModal({
       <footer className="fm-modal-footer">
         <button
           type="button"
-          className="fm-modal-button fm-modal-button-danger"
+          className="fm-btn fm-btn-danger"
           onClick={onDiscard}
           data-testid="fm-reattach-discard"
         >
@@ -124,7 +124,7 @@ export function ReattachModal({
         <div className="fm-modal-spacer" />
         <button
           type="button"
-          className="fm-modal-button"
+          className="fm-btn"
           onClick={onCancel}
           data-testid="fm-reattach-cancel"
         >
@@ -132,7 +132,7 @@ export function ReattachModal({
         </button>
         <button
           type="button"
-          className="fm-modal-button"
+          className="fm-btn"
           onClick={onKeepFloating}
           data-testid="fm-reattach-keep-floating"
         >
@@ -140,7 +140,7 @@ export function ReattachModal({
         </button>
         <button
           type="button"
-          className="fm-modal-button fm-modal-button-primary"
+          className="fm-btn fm-btn-primary"
           disabled={selected < 0 || candidates.length === 0}
           onClick={() => selected >= 0 && onReattach(candidates[selected])}
           data-testid="fm-reattach-apply"

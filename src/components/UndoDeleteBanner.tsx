@@ -33,7 +33,7 @@ export function UndoDeleteBanner() {
       </span>
       <button
         type="button"
-        className="fm-undo-banner-button"
+        className="fm-btn fm-btn-sm fm-btn-quiet fm-undo-banner-button"
         data-testid="fm-undo-delete-button"
         onClick={() => dispatch({ type: "undoDelete" })}
       >

@@ -17,19 +17,8 @@
   z-index: 40;
 }
 .fm-undo-banner-button {
-  font: inherit;
   font-weight: 600;
   color: var(--fm-accent);
-  background: transparent;
-  border: 0;
-  padding: 4px 8px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.fm-undo-banner-button:hover,
-.fm-undo-banner-button:focus-visible {
-  background: var(--fm-accent-soft);
-  outline: none;
 }
 .fm-undo-banner-dismiss {
   font: inherit;
