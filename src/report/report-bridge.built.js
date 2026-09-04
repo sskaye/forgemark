@@ -2,6 +2,68 @@
 // src/report/bridge-entry.ts; do not edit.
 "use strict";
 (() => {
+  // src/report/dom.ts
+  var SKIP_CONTENT = /* @__PURE__ */ new Set(["SCRIPT", "STYLE", "TITLE", "TEXTAREA", "NOSCRIPT"]);
+  var INJECTED_ATTR = "data-forgemark";
+  function walkTextNodes(root) {
+    const out = [];
+    const visit = (node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        out.push(node);
+        return;
+      }
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node;
+        if (SKIP_CONTENT.has(el.tagName) || el.hasAttribute(INJECTED_ATTR)) return;
+      }
+      for (let child = node.firstChild; child; child = child.nextSibling) visit(child);
+    };
+    visit(root);
+    return out;
+  }
+  function renderedText(root) {
+    return walkTextNodes(root).map((n) => n.data).join("");
+  }
+  function textIndexOf(root, container, offset) {
+    const nodes = walkTextNodes(root);
+    if (container.nodeType === Node.TEXT_NODE) {
+      let total = 0;
+      for (const node of nodes) {
+        if (node === container) return total + Math.min(offset, node.data.length);
+        total += node.data.length;
+      }
+      return null;
+    }
+    const children = Array.from(container.childNodes);
+    const target = children[offset];
+    if (!target) {
+      const inside2 = walkTextNodes(container);
+      const last = inside2[inside2.length - 1];
+      if (!last) return null;
+      const at = textIndexOf(root, last, last.data.length);
+      return at;
+    }
+    const inside = walkTextNodes(target);
+    const first = inside[0];
+    if (!first) return null;
+    return textIndexOf(root, first, 0);
+  }
+  function describeElement(el) {
+    const caption = el.querySelector("figcaption, caption");
+    const captionText = caption?.textContent?.trim();
+    if (captionText) return collapse(captionText);
+    const heading = el.querySelector("th");
+    const headingText = heading?.textContent?.trim();
+    if (headingText) return collapse(`${el.tagName.toLowerCase()}: ${headingText}`);
+    const own = el.textContent?.trim();
+    if (own) return collapse(own);
+    return el.tagName.toLowerCase();
+  }
+  function collapse(s, max = 120) {
+    const flat = s.replace(/\s+/g, " ").trim();
+    return flat.length > max ? flat.slice(0, max - 1).trimEnd() + "\u2026" : flat;
+  }
+
   // src/report/decorate.ts
   var OPEN_RE = /^\s*fmc:(\d+)\s*$/;
   var CLOSE_RE = /^\s*\/fmc:(\d+)\s*$/;
@@ -96,11 +158,12 @@
     }
     if (wanted.length === 0) return false;
     const whole = textNodesUnder(host).map((n) => n.data).join(" ").replace(/\s+/g, " ").trim();
+    const named = whole === wanted || describeElement(host).replace(/\s+/g, " ").trim() === wanted;
     if (host.getAttribute("data-anchor-id") === String(id)) {
-      if (whole === wanted) return true;
+      if (named) return true;
       host.removeAttribute("data-anchor-id");
     }
-    if (whole === wanted && !host.hasAttribute("data-anchor-id")) {
+    if (named && !host.hasAttribute("data-anchor-id")) {
       host.setAttribute("data-anchor-id", String(id));
       return true;
     }
@@ -226,68 +289,6 @@
   }
   function anchorElement(doc, id) {
     return doc.querySelector(`[data-anchor-id="${id}"]`);
-  }
-
-  // src/report/dom.ts
-  var SKIP_CONTENT = /* @__PURE__ */ new Set(["SCRIPT", "STYLE", "TITLE", "TEXTAREA", "NOSCRIPT"]);
-  var INJECTED_ATTR = "data-forgemark";
-  function walkTextNodes(root) {
-    const out = [];
-    const visit = (node) => {
-      if (node.nodeType === Node.TEXT_NODE) {
-        out.push(node);
-        return;
-      }
-      if (node.nodeType === Node.ELEMENT_NODE) {
-        const el = node;
-        if (SKIP_CONTENT.has(el.tagName) || el.hasAttribute(INJECTED_ATTR)) return;
-      }
-      for (let child = node.firstChild; child; child = child.nextSibling) visit(child);
-    };
-    visit(root);
-    return out;
-  }
-  function renderedText(root) {
-    return walkTextNodes(root).map((n) => n.data).join("");
-  }
-  function textIndexOf(root, container, offset) {
-    const nodes = walkTextNodes(root);
-    if (container.nodeType === Node.TEXT_NODE) {
-      let total = 0;
-      for (const node of nodes) {
-        if (node === container) return total + Math.min(offset, node.data.length);
-        total += node.data.length;
-      }
-      return null;
-    }
-    const children = Array.from(container.childNodes);
-    const target = children[offset];
-    if (!target) {
-      const inside2 = walkTextNodes(container);
-      const last = inside2[inside2.length - 1];
-      if (!last) return null;
-      const at = textIndexOf(root, last, last.data.length);
-      return at;
-    }
-    const inside = walkTextNodes(target);
-    const first = inside[0];
-    if (!first) return null;
-    return textIndexOf(root, first, 0);
-  }
-  function describeElement(el) {
-    const caption = el.querySelector("figcaption, caption");
-    const captionText = caption?.textContent?.trim();
-    if (captionText) return collapse(captionText);
-    const heading = el.querySelector("th");
-    const headingText = heading?.textContent?.trim();
-    if (headingText) return collapse(`${el.tagName.toLowerCase()}: ${headingText}`);
-    const own = el.textContent?.trim();
-    if (own) return collapse(own);
-    return el.tagName.toLowerCase();
-  }
-  function collapse(s, max = 120) {
-    const flat = s.replace(/\s+/g, " ").trim();
-    return flat.length > max ? flat.slice(0, max - 1).trimEnd() + "\u2026" : flat;
   }
 
   // src/report/bridge.ts

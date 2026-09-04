@@ -246,15 +246,16 @@ export function HtmlView({
         token: e.token,
       };
       if (e.existingAnchorId != null) return { ...base, from: 0, to: 0, kind: "element" };
-      if (e.elementId && findBySelector(body, `#${e.elementId}`)) {
+      const own = e.elementId ? findBySelector(body, `#${e.elementId}`) : null;
+      if (own) {
         try {
-          const p = locateElement(body, `#${e.elementId}`, "html");
           // An element the source has but whose content it does not — a
           // chart a script draws into an empty figure — is anchored as a
           // passage, so the highlight follows what it shows now, not the
           // container it will show something else in after a redraw.
-          const sourceText = body
-            .slice(p.start, p.end)
+          // Decided before any locating: a passage may join others on
+          // the element, where a block anchor may not.
+          const sourceText = own.text
             .replace(/<[^>]*>/g, "")
             .replace(/\s+/g, " ")
             .trim();
@@ -269,6 +270,7 @@ export function HtmlView({
               anchorSelector: `#${e.elementId}`,
             };
           }
+          const p = locateElement(body, `#${e.elementId}`, "html");
           return {
             ...base,
             from: p.start,

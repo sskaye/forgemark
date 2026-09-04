@@ -37,6 +37,8 @@
 // Every step is idempotent, since the bridge decorates again whenever
 // the document changes.
 
+import { describeElement } from "./dom";
+
 const OPEN_RE = /^\s*fmc:(\d+)\s*$/;
 const CLOSE_RE = /^\s*\/fmc:(\d+)\s*$/;
 
@@ -182,18 +184,20 @@ export function decoratePassage(doc: Document, id: number, text: string): boolea
   }
   if (wanted.length === 0) return false;
 
-  // The passage is all the element shows: mark the element, as a block
-  // anchor is marked, and let go when it shows something else.
+  // The passage is the element's own name — its caption, or all it
+  // shows: mark the element, as a block anchor is marked, and let go
+  // when it shows something else.
   const whole = textNodesUnder(host)
     .map((n) => n.data)
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();
+  const named = whole === wanted || describeElement(host).replace(/\s+/g, " ").trim() === wanted;
   if (host.getAttribute("data-anchor-id") === String(id)) {
-    if (whole === wanted) return true;
+    if (named) return true;
     host.removeAttribute("data-anchor-id");
   }
-  if (whole === wanted && !host.hasAttribute("data-anchor-id")) {
+  if (named && !host.hasAttribute("data-anchor-id")) {
     host.setAttribute("data-anchor-id", String(id));
     return true;
   }

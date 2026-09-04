@@ -238,6 +238,26 @@ describe("what the reader does", () => {
     expect(table.getAttribute("data-fm-passage-host")).toBe("12");
   });
 
+  it("marks a figure as a block when the passage is its caption, axis labels and all", async () => {
+    const figure = doc.querySelector("figure#fig-1")!;
+    figure.querySelector("svg")!.innerHTML = "<text>1</text><text>2</text>";
+    figure.insertAdjacentHTML("beforebegin", "<!-- fmc:21 -->");
+    figure.insertAdjacentHTML("afterend", "<!-- /fmc:21 -->");
+    // The fixture's own pair 2 is outside; pair 21 is the passage.
+    init([
+      { id: 2, kind: "element" },
+      { id: 21, kind: "passage", text: "Figure 1. Control holds" },
+    ]);
+    // Pair 2 marks the figure as its block; the passage cannot also.
+    expect(figure.getAttribute("data-anchor-id")).toBe("2");
+    tell({ type: "unwrap", id: 2 });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(figure.getAttribute("data-anchor-id")).toBe("21");
+    figure.querySelector("figcaption")!.textContent = "Figure 1. Sleep holds";
+    await vi.advanceTimersByTimeAsync(100);
+    expect(figure.hasAttribute("data-anchor-id")).toBe(false);
+  });
+
   it("puts a space between blocks in a selection's surroundings", () => {
     init([]);
     select("42");

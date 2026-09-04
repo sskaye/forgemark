@@ -48,6 +48,7 @@ function Harness(props: {
   onRequestElementComment?: (capture: unknown) => void;
   handleOut?: (h: HtmlViewHandle | null) => void;
   baseDir?: string | null;
+  comments?: Comment[];
 }) {
   const ref = useRef<HtmlViewHandle | null>(null);
   return (
@@ -55,7 +56,7 @@ function Harness(props: {
       <main className="fm-editor-pane">
         <HtmlView
           body={props.body ?? REPORT}
-          comments={COMMENTS}
+          comments={props.comments ?? COMMENTS}
           focusedCommentId={1}
           hoveredCommentId={null}
           onAnchorClick={props.onAnchorClick ?? (() => {})}
@@ -157,6 +158,40 @@ describe("HtmlView", () => {
     expect(capture.kind).toBe("passage");
     expect(capture.anchorSelector).toBe("#chart");
     expect(capture.text).toBe("Figure 2. Sleep, 7 points.");
+  });
+
+  it("takes a second passage on a figure that already carries one", async () => {
+    const onElement = vi.fn();
+    const body =
+      '<html><body><p>Intro.</p><!-- fmc:3 --><figure id="chart"></figure><!-- /fmc:3 --></body></html>';
+    const comments: Comment[] = [
+      {
+        id: 3,
+        anchor_text: "Figure 2. Sleep, 7 points.",
+        anchor_kind: "passage",
+        anchor_selector: "#chart",
+        author: "R",
+        timestamp: "2026-09-04T10:00:00Z",
+        resolved: false,
+        body: "x",
+      },
+    ];
+    const { container } = render(
+      <Harness body={body} comments={comments} onRequestElementComment={onElement} />,
+    );
+    await waitFor(() => expect(frameDoc(container).querySelector("figure")).not.toBeNull());
+    const figure = frameDoc(container).querySelector("figure")!;
+    figure.innerHTML =
+      '<svg viewBox="0 0 10 10"><text>1</text></svg><figcaption>Figure 2. Glucose, 10 points.</figcaption>';
+    await waitFor(() =>
+      expect(frameDoc(container).querySelector("button[data-forgemark='block']")).not.toBeNull(),
+    );
+    frameDoc(container).querySelector<HTMLButtonElement>("button[data-forgemark='block']")!.click();
+    await waitFor(() => expect(onElement).toHaveBeenCalled());
+    const capture = onElement.mock.calls[0][0];
+    expect(capture.rejectReason).toBeUndefined();
+    expect(capture.kind).toBe("passage");
+    expect(capture.text).toBe("Figure 2. Glucose, 10 points.");
   });
 
   it("raises an element capture when a block button is clicked", async () => {
