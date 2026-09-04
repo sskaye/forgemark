@@ -1,4 +1,5 @@
-import CodeBlock from "@tiptap/extension-code-block";
+import { CodeBlockLowlight } from "@tiptap/extension-code-block-lowlight";
+import { createLowlight, common } from "lowlight";
 
 // CodeBlock with whole-block comment anchoring. The file format can't
 // place markers *inside* a fenced block (they'd be read as code), so a
@@ -24,6 +25,20 @@ import CodeBlock from "@tiptap/extension-code-block";
 // The marker⇄info-string conversion on the display side keeps the stored
 // markdown clean (plain comment markers), while the editor still gets the
 // anchor as a real node attribute.
+//
+// The block is highlighted by lowlight for the languages highlight.js
+// calls common, as GitHub highlights it. A block with no language, or
+// one lowlight does not know, is left plain: the extension would guess
+// a language for it, and a guess colours prose and shell transcripts in
+// ways that mislead.
+
+const lowlight = createLowlight(common);
+const quietLowlight = {
+  highlight: lowlight.highlight.bind(lowlight),
+  highlightAuto: () => ({ type: "root", children: [] }),
+  listLanguages: lowlight.listLanguages.bind(lowlight),
+  registered: lowlight.registered.bind(lowlight),
+};
 
 interface MarkdownToken {
   info: string;
@@ -60,7 +75,7 @@ interface CodeBlockNode {
 
 const FMC_INFO_RE = /(?:^|\s)fmc=(\d+)(?:\s|$)/;
 
-export const CodeBlockAnchor = CodeBlock.extend({
+export const CodeBlockAnchor = CodeBlockLowlight.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
@@ -119,4 +134,4 @@ export const CodeBlockAnchor = CodeBlock.extend({
       },
     };
   },
-});
+}).configure({ lowlight: quietLowlight });

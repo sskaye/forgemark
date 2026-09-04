@@ -86,6 +86,52 @@
   font-size: inherit;
 }
 
+/* Syntax highlighting (lowlight), in the theme's own colours. */
+.fm-rendered-view .fm-prose pre .hljs-comment,
+.fm-rendered-view .fm-prose pre .hljs-quote {
+  color: var(--fm-prose-muted);
+  font-style: italic;
+}
+.fm-rendered-view .fm-prose pre .hljs-keyword,
+.fm-rendered-view .fm-prose pre .hljs-selector-tag,
+.fm-rendered-view .fm-prose pre .hljs-built_in,
+.fm-rendered-view .fm-prose pre .hljs-type,
+.fm-rendered-view .fm-prose pre .hljs-doctag,
+.fm-rendered-view .fm-prose pre .hljs-meta {
+  color: var(--fm-accent);
+}
+.fm-rendered-view .fm-prose pre .hljs-string,
+.fm-rendered-view .fm-prose pre .hljs-regexp,
+.fm-rendered-view .fm-prose pre .hljs-addition,
+.fm-rendered-view .fm-prose pre .hljs-template-tag {
+  color: var(--fm-success);
+}
+.fm-rendered-view .fm-prose pre .hljs-number,
+.fm-rendered-view .fm-prose pre .hljs-literal,
+.fm-rendered-view .fm-prose pre .hljs-symbol,
+.fm-rendered-view .fm-prose pre .hljs-attr,
+.fm-rendered-view .fm-prose pre .hljs-variable,
+.fm-rendered-view .fm-prose pre .hljs-template-variable {
+  color: var(--fm-orphan-text);
+}
+.fm-rendered-view .fm-prose pre .hljs-title,
+.fm-rendered-view .fm-prose pre .hljs-section,
+.fm-rendered-view .fm-prose pre .hljs-name,
+.fm-rendered-view .fm-prose pre .hljs-selector-id,
+.fm-rendered-view .fm-prose pre .hljs-selector-class {
+  color: var(--fm-prose-ink);
+  font-weight: 600;
+}
+.fm-rendered-view .fm-prose pre .hljs-deletion {
+  color: var(--fm-danger);
+}
+.fm-rendered-view .fm-prose pre .hljs-emphasis {
+  font-style: italic;
+}
+.fm-rendered-view .fm-prose pre .hljs-strong {
+  font-weight: 600;
+}
+
 .fm-rendered-view .fm-prose sub,
 .fm-rendered-view .fm-prose sup {
   font-size: 0.75em;

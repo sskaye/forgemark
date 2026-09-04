@@ -19,6 +19,7 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 
 ### Fixed
 
+- Fenced code is syntax-highlighted for the languages highlight.js calls common, in the theme's own colours. A block with no language stays plain rather than being guessed at.
 - GitHub alerts (`> [!NOTE]` and the other four kinds) and footnotes (`[^1]` with `[^1]: text`) are rendered as GitHub renders them, and an edit near either keeps it. Both used to show as literal text and come back escaped and broken after an edit. A single tilde strikes through, as the GFM spec allows. A pipe written as `\|` in a table cell stays escaped when the table is edited instead of splitting the cell.
 - Bare `https://…` and `www.` addresses and e-mail addresses are links again, under GitHub's rule: a scheme, `www.`, or an `@`, never a bare domain, so `SKILL.md` stays text. An edited paragraph writes such an address back bare rather than as `<…>` or `[…](…)`.
 - Raw HTML blocks in Markdown are rendered as GitHub renders them: a centred `<p align="center">` image, an `<img>` with a width, an HTML table, a `<details>` summary. Anything that runs or loads (scripts, frames, event handlers) is left out of the page and kept in the file. A block with nothing to show, such as an HTML comment, keeps its quiet placeholder.

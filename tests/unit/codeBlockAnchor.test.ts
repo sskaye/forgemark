@@ -146,3 +146,20 @@ describe("whole-block anchor round-trip", () => {
     expect(out).toMatch(/<!-- fmc:7 -->\n```python\nprint\('hi'\)\n```\n<!-- \/fmc:7 -->/);
   });
 });
+
+describe("syntax highlighting", () => {
+  it("colours a block whose language it knows", () => {
+    const editor = makeEditor("```python\ndef f():\n    return 'x'\n```");
+    const pre = editor.view.dom.querySelector("pre");
+    expect(pre?.querySelector(".hljs-keyword")?.textContent).toBe("def");
+    expect(pre?.querySelector(".hljs-string")?.textContent).toBe("'x'");
+    expect(getMd(editor)).toBe("```python\ndef f():\n    return 'x'\n```");
+    editor.destroy();
+  });
+
+  it("leaves a block without a language plain rather than guessing", () => {
+    const editor = makeEditor("```\ndef f():\n    return 'x'\n```\n\n```transcript\n$ ls\n```");
+    expect(editor.view.dom.querySelector("pre [class^='hljs-']")).toBeNull();
+    editor.destroy();
+  });
+});
