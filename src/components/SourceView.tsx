@@ -6,7 +6,9 @@ import {
   type DecorationSet,
   ViewPlugin,
   type ViewUpdate,
+  keymap,
 } from "@codemirror/view";
+import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { html as htmlLanguage } from "@codemirror/lang-html";
 import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
@@ -22,7 +24,7 @@ import {
 import "./SourceView.css";
 import { MARKER_ANY_RE_G } from "../format/types";
 
-// Phase 8 source view: CodeMirror 6 in read-only mode.
+// Phase 8 source view: CodeMirror 6.
 //
 // Why a real editor and not just `<pre>`: we want markdown syntax
 // highlighting on the outer markdown layer (headings, emphasis, lists,
@@ -32,9 +34,12 @@ import { MARKER_ANY_RE_G } from "../format/types";
 // otherwise be reinventing both. Per-language highlighting *inside*
 // fenced code is out of scope for v1.
 //
-// The view is read-only — comments are added from Rendered view only.
-// The "read-only review" chip in EditorPane communicates this; the
-// editable=false attribute and EditorState.readOnly facet enforce it.
+// With `editable`, the text can be edited directly: every change goes
+// out through `onChange` as the whole text, and the pane keeps it as a
+// draft the save writes verbatim. Text pushed in through `text` is
+// applied only while the view is not focused, so the user's own
+// keystrokes, which come back through that prop, never move their
+// caret. Commenting stays a Rendered-view action either way.
 
 export type SourceViewHandle = {
   // Scroll the source view so the opening marker `<!-- fmc:N -->` is in
@@ -51,6 +56,11 @@ type Props = {
   // decorations below are regex-based and identical either way — only
   // the syntax layer underneath them changes.
   format?: DocFormat;
+  // Whether keystrokes change the text. Off, the view is a read-only
+  // review surface, as it always was.
+  editable?: boolean;
+  // The whole text after a user edit; never for text set through `text`.
+  onChange?: (text: string) => void;
 };
 
 const MARKER_RE = MARKER_ANY_RE_G;
@@ -110,9 +120,15 @@ function languageFor(format: DocFormat) {
   return format === "html" ? htmlLanguage() : markdown();
 }
 
+// Editability flips at runtime (a file can become read-only), so it
+// lives in a Compartment and is reconfigured in place.
+function editableExtensions(editable: boolean) {
+  return [EditorState.readOnly.of(!editable), EditorView.editable.of(editable)];
+}
+
 const baseExtensions = [
-  EditorState.readOnly.of(true),
-  EditorView.editable.of(false),
+  history(),
+  keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
   syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
   decorationPlugin,
   EditorView.theme(
@@ -126,7 +142,7 @@ const baseExtensions = [
       },
       ".cm-content": {
         padding: "0",
-        caretColor: "transparent",
+        caretColor: "var(--fm-prose-ink)",
       },
       ".cm-line": { padding: "0" },
       ".cm-scroller": { fontFamily: "var(--fm-mono)" },
@@ -138,7 +154,7 @@ const baseExtensions = [
 ];
 
 export const SourceView = forwardRef<SourceViewHandle, Props>(function SourceView(
-  { text, format = "markdown" },
+  { text, format = "markdown", editable = false, onChange },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -147,6 +163,12 @@ export const SourceView = forwardRef<SourceViewHandle, Props>(function SourceVie
   // rebuilding the editor, so a format change can't discard scroll
   // position or the decorations layered over it.
   const languageCompartment = useRef(new Compartment());
+  const editableCompartment = useRef(new Compartment());
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  // True while `text` is being applied, so the listener does not report
+  // it back out as an edit.
+  const applyingRef = useRef(false);
 
   // Mount once.
   useEffect(() => {
@@ -154,10 +176,21 @@ export const SourceView = forwardRef<SourceViewHandle, Props>(function SourceVie
     if (!host) return;
     const state = EditorState.create({
       doc: text,
-      extensions: [...baseExtensions, languageCompartment.current.of(languageFor(format))],
+      extensions: [
+        ...baseExtensions,
+        editableCompartment.current.of(editableExtensions(editable)),
+        languageCompartment.current.of(languageFor(format)),
+        EditorView.updateListener.of((update) => {
+          if (!update.docChanged || applyingRef.current) return;
+          onChangeRef.current?.(update.state.doc.toString());
+        }),
+      ],
     });
     const view = new EditorView({ state, parent: host });
     viewRef.current = view;
+    if (import.meta.env.DEV) {
+      (host as unknown as { __forgemarkSourceView?: EditorView }).__forgemarkSourceView = view;
+    }
     return () => {
       view.destroy();
       viewRef.current = null;
@@ -166,18 +199,33 @@ export const SourceView = forwardRef<SourceViewHandle, Props>(function SourceVie
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Replace the doc when the source text changes (e.g. user toggles
-  // back to Rendered, edits, then toggles to Source). CodeMirror's
-  // changes API is the right shape: replace 0..length with new text.
+  // Replace the doc when the source text changes from outside (a file
+  // open, a reload, toggling back from Rendered after edits). Not while
+  // the view has focus: the user's own keystrokes come back through
+  // this prop, and applying them again would move the caret.
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
     const current = view.state.doc.toString();
     if (current === text) return;
-    view.dispatch({
-      changes: { from: 0, to: view.state.doc.length, insert: text },
-    });
+    if (view.hasFocus) return;
+    applyingRef.current = true;
+    try {
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: text },
+      });
+    } finally {
+      applyingRef.current = false;
+    }
   }, [text]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: editableCompartment.current.reconfigure(editableExtensions(editable)),
+    });
+  }, [editable]);
 
   useEffect(() => {
     const view = viewRef.current;

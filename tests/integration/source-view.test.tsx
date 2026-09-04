@@ -94,11 +94,11 @@ describe("Source view (Phase 8)", () => {
     expect(screen.queryByTestId("fm-rendered-view")).not.toBeInTheDocument();
   });
 
-  it('shows the "Source view · read-only review" chip with a hover tooltip', async () => {
+  it('shows the "Source view · editable" chip with a hover tooltip', async () => {
     renderApp(SAMPLE);
     fireEvent.click(screen.getByTestId("probe-set-source"));
     const chip = await screen.findByTestId("fm-source-chip");
-    expect(chip).toHaveTextContent(/Source view.*read-only review/i);
+    expect(chip).toHaveTextContent(/Source view.*editable/i);
     expect(chip).toHaveAttribute("title");
     expect(chip.getAttribute("title")).toMatch(/Rendered/i);
     // Chip is hidden in Rendered view.
