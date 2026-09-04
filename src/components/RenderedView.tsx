@@ -8,6 +8,7 @@ import { Decoration as PMDecoration, DecorationSet } from "@tiptap/pm/view";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { bodyFromAnchorSpans, bodyWithAnchorSpans, splitFrontmatter } from "../format";
 import { renderedExtensions } from "./editorExtensions";
+import { anchorIdOf } from "../services/anchorDom";
 import { normalizeExternalUrl } from "../services/externalLinks";
 import { findLiteralMatches } from "../services/findReplace";
 import {
@@ -239,14 +240,7 @@ export function RenderedView({
   useEffect(() => {
     if (!editor) return;
     const root = editor.view.dom;
-    const findAnchor = (target: EventTarget | null): number | null => {
-      if (!(target instanceof HTMLElement)) return null;
-      const el = target.closest("[data-anchor-id]");
-      if (!el || !(el instanceof HTMLElement)) return null;
-      const raw = el.dataset.anchorId;
-      const id = raw ? Number(raw) : NaN;
-      return Number.isFinite(id) ? id : null;
-    };
+    const findAnchor = anchorIdOf;
     const onClick = (e: Event) => {
       const link = findExternalLink(e.target);
       if (link) {

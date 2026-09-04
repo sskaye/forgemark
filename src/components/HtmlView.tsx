@@ -10,6 +10,7 @@ import {
 import { describeElement, renderedText, selectionTextRange } from "../services/htmlDom";
 import { useTheme } from "../theme/ThemeProvider";
 import "./HtmlView.css";
+import { anchorIdOf } from "../services/anchorDom";
 
 // Rendered view for HTML documents.
 //
@@ -367,13 +368,7 @@ export function HtmlView({
       decorateAnchors(doc);
       applyAnchorState(doc, focusedCommentId, hoveredCommentId, resolvedIds);
 
-      const findAnchorId = (target: EventTarget | null): number | null => {
-        if (!(target instanceof doc.defaultView!.Element)) return null;
-        const el = (target as Element).closest("[data-anchor-id]");
-        const raw = el?.getAttribute("data-anchor-id");
-        const id = raw == null ? NaN : Number(raw);
-        return Number.isFinite(id) ? id : null;
-      };
+      const findAnchorId = anchorIdOf;
 
       const onClick = (e: Event) => {
         // Links inside a report would navigate the iframe away from the
@@ -622,19 +617,7 @@ const BLOCK_SELECTOR = "figure, table, blockquote, pre, img, video, svg";
 // width plus the gap either side of it.
 const GUTTER_MIN = 96;
 
-// The comment id of the anchor containing a node, if any.
-function anchorIdAt(node: Node | null): number | null {
-  const el =
-    node == null
-      ? null
-      : node.nodeType === Node.ELEMENT_NODE
-        ? (node as Element)
-        : node.parentElement;
-  const anchor = el?.closest?.("[data-anchor-id]");
-  const raw = anchor?.getAttribute("data-anchor-id");
-  const id = raw == null ? NaN : Number(raw);
-  return Number.isFinite(id) ? id : null;
-}
+const anchorIdAt = anchorIdOf;
 
 function isHidden(el: Element): boolean {
   const view = el.ownerDocument?.defaultView;

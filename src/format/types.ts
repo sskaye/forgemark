@@ -103,6 +103,9 @@ export const BLOCK_CLOSE = "-->";
 export const MARKER_OPEN_RE = /<!--\s*fmc:(\d+)\s*-->/;
 export const MARKER_CLOSE_RE = /<!--\s*\/fmc:(\d+)\s*-->/;
 export const MARKER_OPEN_RE_G = /<!--\s*fmc:(\d+)\s*-->/g;
+// Either marker of any id. Global; safe to share because `matchAll` and
+// `replace` clone it before use.
+export const MARKER_ANY_RE_G = /<!--\s*\/?fmc:\d+\s*-->/g;
 export const MARKER_CLOSE_RE_G = /<!--\s*\/fmc:(\d+)\s*-->/g;
 
 export function openMarker(id: number): string {

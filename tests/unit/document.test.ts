@@ -158,20 +158,6 @@ describe("document reducer", () => {
     expect(next.viewMode).toBe("source");
   });
 
-  it("newUntitled resets to the initial state", () => {
-    const loaded = reduceDocument(INITIAL_STATE, baseLoad);
-    const fresh = reduceDocument(loaded, { type: "newUntitled" });
-    // Every document field resets — except loadGeneration, which is an
-    // editor-remount counter rather than document content and has to
-    // keep climbing so the discarded buffer's undo stack dies with it.
-    // Structural equality is still asserted over everything else.
-    const { loadGeneration, ...rest } = fresh;
-    const { loadGeneration: initialGeneration, ...initialRest } = INITIAL_STATE;
-    expect(rest).toEqual(initialRest);
-    expect(loadGeneration).toBe(loaded.loadGeneration + 1);
-    expect(initialGeneration).toBe(0);
-  });
-
   it("load preserves read-only state", () => {
     const next = reduceDocument(INITIAL_STATE, {
       ...baseLoad,
@@ -249,18 +235,6 @@ describe("document reducer — loadGeneration (undo isolation)", () => {
     const reloaded = reduceDocument(conflicted, { type: "applyExternalChange" });
     expect(reloaded.body).toBe("alpha from disk");
     expect(reloaded.loadGeneration).toBe(loaded.loadGeneration + 1);
-  });
-
-  it("bumps on newUntitled even from a never-loaded buffer", () => {
-    // Regression guard: newUntitled spreads INITIAL_STATE, whose
-    // generation is 0. A naive spread would leave 0 -> 0 here, the key
-    // wouldn't change, and the discarded buffer's undo stack would
-    // survive into the new document.
-    expect(INITIAL_STATE.loadGeneration).toBe(0);
-    const edited = reduceDocument(INITIAL_STATE, { type: "edit", body: "typed but never saved" });
-    const fresh = reduceDocument(edited, { type: "newUntitled" });
-    expect(fresh.body).toBe("");
-    expect(fresh.loadGeneration).toBe(edited.loadGeneration + 1);
   });
 
   it("does not bump on ordinary edits", () => {

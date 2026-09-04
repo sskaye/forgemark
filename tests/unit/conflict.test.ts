@@ -1,33 +1,33 @@
 import { describe, it, expect } from "vitest";
-import { compareFingerprints, fingerprint, fingerprintSync } from "../../src/services/conflict";
+import { compareFingerprints, fingerprint } from "../../src/services/conflict";
 
 describe("conflict detection — mtime fast path", () => {
   it("mtime equal → unchanged, regardless of hash", () => {
-    const prev = fingerprintSync("a", 1000, "hashA");
-    const next = fingerprintSync("b", 1000, "hashB");
+    const prev = { mtimeMs: 1000, hash: "hashA" };
+    const next = { mtimeMs: 1000, hash: "hashB" };
     expect(compareFingerprints(prev, next)).toBe("unchanged");
   });
 
   it("mtime null on either side falls through to hash", () => {
-    expect(
-      compareFingerprints(fingerprintSync("a", null, "h1"), fingerprintSync("a", 1000, "h1")),
-    ).toBe("unchanged");
-    expect(
-      compareFingerprints(fingerprintSync("a", null, "h1"), fingerprintSync("a", 1000, "h2")),
-    ).toBe("changed");
+    expect(compareFingerprints({ mtimeMs: null, hash: "h1" }, { mtimeMs: 1000, hash: "h1" })).toBe(
+      "unchanged",
+    );
+    expect(compareFingerprints({ mtimeMs: null, hash: "h1" }, { mtimeMs: 1000, hash: "h2" })).toBe(
+      "changed",
+    );
   });
 });
 
 describe("conflict detection — hash check", () => {
   it("mtime differs but hash equal → unchanged (touch-save)", () => {
-    const prev = fingerprintSync("same", 1000, "hashA");
-    const next = fingerprintSync("same", 2000, "hashA");
+    const prev = { mtimeMs: 1000, hash: "hashA" };
+    const next = { mtimeMs: 2000, hash: "hashA" };
     expect(compareFingerprints(prev, next)).toBe("unchanged");
   });
 
   it("mtime differs and hash differs → changed", () => {
-    const prev = fingerprintSync("a", 1000, "hashA");
-    const next = fingerprintSync("b", 2000, "hashB");
+    const prev = { mtimeMs: 1000, hash: "hashA" };
+    const next = { mtimeMs: 2000, hash: "hashB" };
     expect(compareFingerprints(prev, next)).toBe("changed");
   });
 });

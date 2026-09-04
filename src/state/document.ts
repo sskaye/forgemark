@@ -258,7 +258,6 @@ export type DocumentAction =
       fileName?: string;
     }
   | { type: "setViewMode"; viewMode: "rendered" | "source" }
-  | { type: "newUntitled" }
   | { type: "error"; message: string }
   | { type: "dismissError" }
   | { type: "setFocusedComment"; id: number | null }
@@ -420,17 +419,7 @@ function reduce(state: DocumentState, action: DocumentAction): DocumentState {
     case "clearIntent":
       if (!state.pendingIntent && !state.intentResolution) return state;
       return { ...state, pendingIntent: null, intentResolution: null };
-    case "newUntitled":
-      return {
-        ...INITIAL_STATE,
-        filter: state.filter,
-        sort: state.sort,
-        // Must keep climbing, not reset to INITIAL_STATE's 0 — otherwise
-        // ⌘N out of a never-loaded Untitled buffer (generation still 0)
-        // wouldn't change the key, and the discarded document's undo
-        // stack would survive into the new one.
-        loadGeneration: state.loadGeneration + 1,
-      };
+
     case "error":
       return { ...state, error: action.message };
     case "dismissError":

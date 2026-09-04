@@ -129,7 +129,9 @@ function parentDirOf(p: string): string {
   const idx = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
   if (idx < 0) return ".";
   if (idx === 0) return "/"; // root
-  return p.slice(0, idx);
+  const dir = p.slice(0, idx);
+  // "C:\\doc.md" → "C:\\", not "C:" (which notify reads as a relative path).
+  return /^[A-Za-z]:$/.test(dir) ? dir + p[idx] : dir;
 }
 
 function baseNameOf(p: string): string {
@@ -138,12 +140,12 @@ function baseNameOf(p: string): string {
 }
 
 // notify's event payload varies by platform but always includes a
-// `paths` array. We accept anything with a paths field and filter on
-// suffix match (the file we care about lives somewhere in the dir).
+// `paths` array; filter on it, so a change to another file in the same
+// directory doesn't cost a read of ours.
 function eventTouchesFile(event: unknown, fileName: string): boolean {
-  if (!event || typeof event !== "object") return true; // be permissive
+  if (!event || typeof event !== "object") return false;
   const paths = (event as { paths?: unknown }).paths;
-  if (!Array.isArray(paths)) return true;
+  if (!Array.isArray(paths)) return false;
   return paths.some(
     (p) =>
       typeof p === "string" &&

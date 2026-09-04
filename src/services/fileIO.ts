@@ -38,17 +38,6 @@ export type OpenedFile = {
   format: DocFormat;
 };
 
-// Open a single document. Returns null if the user cancelled.
-// Throws if the chosen file can't be read (e.g. moved between dialog
-// pick and read).
-//
-// Kept for callers that want exactly one document; multi-select lives in
-// `openDocuments` below.
-export async function openDocument(): Promise<OpenedFile | null> {
-  const [first = null] = await openDocuments({ multiple: false });
-  return first;
-}
-
 // Open one or more documents. Each becomes its own tab.
 //
 // Reads are sequential rather than concurrent: a fistful of parallel

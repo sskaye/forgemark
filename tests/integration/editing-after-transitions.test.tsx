@@ -55,7 +55,22 @@ function Probe() {
           })
         }
       />
-      <button data-testid="new" onClick={() => dispatch({ type: "newUntitled" })} />
+      <button
+        data-testid="new"
+        onClick={() =>
+          // A fresh Untitled buffer replacing this one: what ⌘N did before
+          // tabs, and what closing the last tab still does.
+          dispatch({
+            type: "load",
+            filePath: null,
+            fileName: "Untitled",
+            text: "",
+            body: "",
+            comments: [],
+            readOnly: false,
+          })
+        }
+      />
       <button
         data-testid="detect-external"
         onClick={() =>
@@ -117,7 +132,7 @@ describe("typing still reaches state after each transition", () => {
   });
 
   it("after New (⌘N) from a loaded document", async () => {
-    // newUntitled bumps loadGeneration and empties the body — the exact
+    // A fresh buffer bumps loadGeneration and empties the body — the exact
     // combination that reproduced the original bug.
     const { container } = mount();
     await click("load");

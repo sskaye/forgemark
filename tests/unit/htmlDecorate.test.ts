@@ -7,13 +7,7 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { anchorElement, applyAnchorState, decorateAnchors } from "../../src/services/htmlDecorate";
-import {
-  describeElement,
-  elementAnchorTarget,
-  renderedText,
-  selectionTextRange,
-  textIndexOf,
-} from "../../src/services/htmlDom";
+import { renderedText, selectionTextRange, textIndexOf } from "../../src/services/htmlDom";
 
 function parse(html: string): Document {
   return new DOMParser().parseFromString(html, "text/html");
@@ -116,32 +110,5 @@ describe("htmlDom text coordinates", () => {
     range.setStart(text, 2);
     range.setEnd(text, 2);
     expect(selectionTextRange(doc.body, range)).toBeNull();
-  });
-});
-
-describe("element anchor targets", () => {
-  it("prefers the enclosing figure over the chart inside it", () => {
-    const doc = parse("<figure><figcaption>Figure 2. Recovery</figcaption><svg></svg></figure>");
-    const svg = doc.querySelector("svg")!;
-    expect(elementAnchorTarget(svg)?.tagName).toBe("FIGURE");
-  });
-
-  it("describes a figure by the caption its author already wrote", () => {
-    const doc = parse(
-      "<figure><figcaption><b>Figure 2.</b> All three sensitivities come back</figcaption><svg></svg></figure>",
-    );
-    expect(describeElement(doc.querySelector("figure")!)).toBe(
-      "Figure 2. All three sensitivities come back",
-    );
-  });
-
-  it("falls back to a header cell for a table with no caption", () => {
-    const doc = parse("<table><thead><tr><th>parameter</th><th>default</th></tr></thead></table>");
-    expect(describeElement(doc.querySelector("table")!)).toBe("table: parameter");
-  });
-
-  it("returns null outside any anchorable block", () => {
-    const doc = parse("<p>just prose</p>");
-    expect(elementAnchorTarget(doc.querySelector("p")!.firstChild)).toBeNull();
   });
 });

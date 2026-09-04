@@ -36,6 +36,28 @@ describe("watchMarkdownFile", () => {
     expect(opts.delayMs!).toBeLessThanOrEqual(300);
   });
 
+  it("watches the drive root itself for a file at a drive root", async () => {
+    const baseline = await fingerprint("mem\n", null);
+    await watchMarkdownFile(
+      "C:\\doc.md",
+      () => baseline,
+      () => {},
+    );
+    expect((fsMock.watch.mock.calls[0] as unknown as [string])[0]).toBe("C:\\");
+  });
+
+  it("ignores an event that names no paths", async () => {
+    const onChange = vi.fn();
+    const baseline = await fingerprint("mem\n", null);
+    await watchMarkdownFile("/notes/draft.md", () => baseline, onChange, { debounceMs: 5 });
+    const cb = (fsMock.watch.mock.calls[0] as unknown as [string, (e: unknown) => void])[1];
+    fsMock.readTextFile.mockResolvedValue("disk\n");
+    cb({ type: "any" });
+    await new Promise((r) => setTimeout(r, 40));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(fsMock.readTextFile).not.toHaveBeenCalled();
+  });
+
   it("fires only when the disk differs from the baseline", async () => {
     // Real timers: the hash runs on Web Crypto, which resolves on the
     // event loop rather than the microtask queue fake timers flush.

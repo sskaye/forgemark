@@ -206,25 +206,6 @@ img[data-anchor-id].is-focused, svg[data-anchor-id].is-focused {
   background: ${tokens.anchorBgFocus};
 }
 
-/* The affordance for commenting on something with no text to select. */
-.fm-element-target {
-  position: absolute;
-  z-index: 2147483000;
-  font: 500 11px/1 ui-sans-serif, system-ui, -apple-system, sans-serif;
-  letter-spacing: 0.02em;
-  padding: 5px 9px;
-  border-radius: 5px;
-  border: 1px solid ${tokens.border};
-  background: ${tokens.surface};
-  color: ${tokens.text};
-  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 100ms ease-out;
-}
-.fm-element-target[data-visible="true"] { opacity: 1; }
-.fm-element-target:hover { border-color: ${tokens.accent}; color: ${tokens.accent}; }
-
 /* Forgemark owns selection colour here so a report's own ::selection
    rule can't make a review selection invisible. */
 ::selection { background: ${tokens.anchorBgFocus}; }

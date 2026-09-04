@@ -3,7 +3,7 @@ import { render, screen, waitFor, fireEvent, act } from "@testing-library/react"
 import { ThemeProvider } from "../../src/theme/ThemeProvider";
 import { DocumentProvider, useWorkspace } from "../../src/state/DocumentProvider";
 import { AppShell } from "../../src/components/AppShell";
-import { saveDocument, openDocument } from "../../src/services/fileIO";
+import { saveDocument } from "../../src/services/fileIO";
 import { invoke } from "@tauri-apps/api/core";
 
 vi.mock("../../src/services/fileIO", () => ({
@@ -98,9 +98,6 @@ async function requestQuit() {
 describe("opening no longer discards anything", () => {
   beforeEach(() => {
     vi.mocked(saveDocument).mockReset().mockResolvedValue("/tmp/saved.md");
-    vi.mocked(openDocument)
-      .mockReset()
-      .mockResolvedValue(null as never);
     vi.mocked(invoke).mockClear();
   });
 
