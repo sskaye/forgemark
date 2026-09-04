@@ -367,8 +367,10 @@ width or height is set.
 
 **Beyond the GFM spec.** `src/format/markdownExtras.ts` teaches markdown-it what
 github.com renders on top of the spec: footnotes, alerts, single-tilde
-strikethrough, and (in the editor only) autolinking of scheme, `www.`, and e-mail
-addresses. The block splitter and the editor both apply it, so the two agree on
+strikethrough, `$…$` and `$$` math, and (in the editor only) autolinking of
+scheme, `www.`, and e-mail addresses. `MathInline`/`MathBlock` draw TeX with
+KaTeX and `MermaidBlock` draws a diagram through a node view that loads Mermaid
+on first use. The block splitter and the editor both apply it, so the two agree on
 where a footnote definition starts and ends. `AlertBlockquote`, `FootnoteRef`,
 `FootnoteDef`, and `MarkdownTable` (which escapes a pipe in a cell) render and
 write those forms back.

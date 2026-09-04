@@ -8,6 +8,7 @@
 //     WARNING, CAUTION) carries the kind on its blockquote;
 //   - strikethrough with a single tilde, which the GFM spec allows and
 //     markdown-it does not;
+//   - math: `$…$` in text and `$$` on its own lines around a block;
 //   - with `linkify`, bare `https://…` and `www.…` addresses and e-mail
 //     addresses become links, as on GitHub, while a bare `example.com`
 //     or `SKILL.md` stays text.
@@ -38,7 +39,15 @@ export function markdownExtras(md: MarkdownIt, options: { linkify?: boolean } = 
   md.block.ruler.before("reference", "fm_footnote_def", footnoteDef, { alt: ["paragraph"] });
   md.inline.ruler.before("link", "fm_footnote_ref", footnoteRef);
   md.inline.ruler.before("strikethrough", "fm_strike_single", strikeSingle);
+  md.block.ruler.before("fence", "fm_math_block", mathBlock, {
+    alt: ["paragraph", "reference", "blockquote", "list"],
+  });
+  md.inline.ruler.before("escape", "fm_math_inline", mathInline);
   md.core.ruler.after("block", "fm_alert", alerts);
+  md.renderer.rules.fm_math_block = (tokens, idx) =>
+    `<div data-fm-math-block="${escapeAttr(tokens[idx].content)}"></div>\n`;
+  md.renderer.rules.fm_math_inline = (tokens, idx) =>
+    `<span data-fm-math="${escapeAttr(tokens[idx].content)}"></span>`;
   md.renderer.rules.fm_footnote_ref = (tokens, idx) => {
     const label = escapeAttr(String(tokens[idx].meta.label));
     return `<sup data-fm-footnote="${label}">${label}</sup>`;
@@ -133,6 +142,55 @@ function strikeSingle(state: StateInline, silent: boolean) {
   state.posMax = oldMax;
   const close = state.push("s_close", "s", -1);
   close.markup = "~";
+  state.pos = end + 1;
+  return true;
+}
+
+// `$$` alone on a line, the TeX, and `$$` alone on a line; or all three
+// on one line.
+function mathBlock(state: StateBlock, startLine: number, endLine: number, silent: boolean) {
+  if (state.sCount[startLine] - state.blkIndent >= 4) return false;
+  const lineText = (n: number) =>
+    state.src.slice(state.bMarks[n] + state.tShift[n], state.eMarks[n]);
+  const first = lineText(startLine).trim();
+  if (!first.startsWith("$$")) return false;
+  let content: string;
+  let nextLine: number;
+  if (first.length > 4 && first.endsWith("$$")) {
+    content = first.slice(2, -2).trim();
+    nextLine = startLine + 1;
+  } else if (first === "$$") {
+    let n = startLine + 1;
+    while (n < endLine && lineText(n).trim() !== "$$") n++;
+    if (n >= endLine) return false;
+    content = state.getLines(startLine + 1, n, state.blkIndent, false).replace(/\n$/, "");
+    nextLine = n + 1;
+  } else {
+    return false;
+  }
+  if (silent) return true;
+  const token = state.push("fm_math_block", "div", 0);
+  token.content = content;
+  token.map = [startLine, nextLine];
+  state.line = nextLine;
+  return true;
+}
+
+// `$…$` with no space just inside either dollar, nothing after the
+// closing one that could be a price, and no dollar in between.
+function mathInline(state: StateInline, silent: boolean) {
+  const { src, pos, posMax } = state;
+  if (src.charCodeAt(pos) !== 0x24 /* $ */ || src.charCodeAt(pos + 1) === 0x24) return false;
+  if (pos + 1 >= posMax || isSpace(src.charCodeAt(pos + 1))) return false;
+  let end = pos + 2;
+  while (end < posMax && src.charCodeAt(end) !== 0x24) end++;
+  if (end >= posMax || isSpace(src.charCodeAt(end - 1))) return false;
+  const after = src.charCodeAt(end + 1);
+  if (after >= 0x30 && after <= 0x39) return false;
+  if (!silent) {
+    const token = state.push("fm_math_inline", "span", 0);
+    token.content = src.slice(pos + 1, end);
+  }
   state.pos = end + 1;
   return true;
 }

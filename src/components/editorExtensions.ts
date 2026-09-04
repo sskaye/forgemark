@@ -19,9 +19,10 @@
 //     element for, so a <kbd> or a comment survives an edit of its
 //     paragraph; `InlineImage` so an image can sit in a sentence or a
 //     link and keep its width.
-//   - `AlertBlockquote`, `FootnoteRef`/`FootnoteDef`, and
-//     `MarkdownTable` for what GitHub renders beyond the spec
-//     (src/format/markdownExtras.ts teaches markdown-it the syntax).
+//   - `AlertBlockquote`, `FootnoteRef`/`FootnoteDef`, `MarkdownTable`,
+//     `MathInline`/`MathBlock`, and `MermaidBlock` for what GitHub
+//     renders beyond the spec (src/format/markdownExtras.ts teaches
+//     markdown-it the syntax).
 
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
@@ -34,12 +35,15 @@ import { TableCell } from "@tiptap/extension-table-cell";
 import { TaskList } from "@tiptap/extension-task-list";
 import { TaskItem } from "@tiptap/extension-task-item";
 import { Markdown } from "tiptap-markdown";
+import Text from "@tiptap/extension-text";
 import { Extension, type AnyExtension } from "@tiptap/core";
 import type { Mark as PMMark, Node as PMNode } from "@tiptap/pm/model";
 import { markdownExtras } from "../format/markdownExtras";
 import { AlertBlockquote } from "./AlertBlockquote";
 import { FootnoteDef, FootnoteRef } from "./Footnotes";
 import { MarkdownTable } from "./MarkdownTable";
+import { MathBlock, MathInline } from "./Math";
+import { MermaidBlock } from "./Mermaid";
 import { AnchorEdge } from "./AnchorEdge";
 import { CodeBlockAnchor } from "./CodeBlockAnchor";
 import { VerbatimBlock } from "./VerbatimBlock";
@@ -126,6 +130,39 @@ const MarkdownLink = Link.extend({
   },
 });
 
+// Text, with `$` escaped alongside the characters prosemirror-markdown
+// escapes, so a dollar in prose cannot pair with a later one and turn
+// into math once the paragraph is rewritten.
+interface TextState {
+  inAutolink?: boolean;
+  write(): void;
+  atBlank(): boolean;
+  esc(text: string, startOfLine?: boolean): string;
+  text(text: string, escape?: boolean): void;
+}
+const MarkdownText = Text.extend({
+  addStorage() {
+    return {
+      markdown: {
+        serialize(state: TextState, node: { text?: string }) {
+          const text = node.text ?? "";
+          if (state.inAutolink) {
+            state.text(text, false);
+            return;
+          }
+          const lines = text.split("\n");
+          lines.forEach((line, i) => {
+            state.write();
+            state.text(state.esc(line, state.atBlank()).replace(/\$/g, "\\$"), false);
+            if (i < lines.length - 1) state.text("\n", false);
+          });
+        },
+        parse: {},
+      },
+    };
+  },
+});
+
 // Teaches the parser the syntax the extensions above render.
 const MarkdownSyntax = Extension.create({
   name: "markdownSyntax",
@@ -146,13 +183,23 @@ export function renderedExtensions(extra: AnyExtension[] = []): AnyExtension[] {
   return [
     // StarterKit ships its own Link, Code, and CodeBlock; each is
     // replaced by a configured variant below.
-    StarterKit.configure({ link: false, codeBlock: false, code: false, blockquote: false }),
+    StarterKit.configure({
+      link: false,
+      codeBlock: false,
+      code: false,
+      blockquote: false,
+      text: false,
+    }),
+    MarkdownText,
     CodeBlockAnchor,
     AlertBlockquote,
     MarkdownLink.configure({ openOnClick: false, autolink: false }),
     MarkdownSyntax,
     FootnoteRef,
     FootnoteDef,
+    MathInline,
+    MathBlock,
+    MermaidBlock,
     SubscriptMark,
     SuperscriptMark,
     AnchorEdge,

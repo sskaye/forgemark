@@ -62,9 +62,14 @@ export const HtmlMark = Mark.create({
     return HTML_MARK_TAGS.map((tag) => ({
       tag,
       getAttrs: (el: HTMLElement) => {
-        // The editor's own spans (anchor highlights, search matches)
-        // are not the document's.
-        if (tag === "span" && (el.hasAttribute("data-anchor-id") || /(^|\s)fm-/.test(el.className)))
+        // The editor's own spans (anchor highlights, search matches,
+        // math) are not the document's.
+        if (
+          tag === "span" &&
+          (el.hasAttribute("data-anchor-id") ||
+            /(^|\s)fm-/.test(el.className) ||
+            Array.from(el.attributes).some((a) => a.name.startsWith("data-fm-")))
+        )
           return false;
         return { tag, attrs: attributesOf(el) };
       },

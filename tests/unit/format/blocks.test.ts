@@ -59,6 +59,11 @@ describe("splitBlocks", () => {
     expect(blocks.map((b) => b.kind)).toEqual(["verbatim", "verbatim", "markdown"]);
   });
 
+  it("gives a $$ math block its own block", () => {
+    const { blocks } = splitBlocks("Text.\n$$\nx = 1\n$$\n\n$$ y $$\n");
+    expect(blocks.map((b) => b.text)).toEqual(["Text.", "$$\nx = 1\n$$", "$$ y $$"]);
+  });
+
   it("gives a footnote definition its own block", () => {
     const { blocks } = splitBlocks("Claim[^1].\n[^1]: Note\nwrapped.\n[^2]: Two.\n\nAfter.\n");
     expect(blocks.map((b) => b.text)).toEqual([

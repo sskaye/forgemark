@@ -115,6 +115,9 @@ export const CodeBlockAnchor = CodeBlockLowlight.extend({
         },
         parse: {
           setup(markdownit: MarkdownIt) {
+            // tiptap-markdown runs setup on every parse; wrap the rule once.
+            const rules = markdownit.renderer.rules as { fence?: { fmAnchor?: boolean } };
+            if (rules.fence?.fmAnchor) return;
             const previous = markdownit.renderer.rules.fence;
             markdownit.renderer.rules.fence = (tokens, idx, options, env, self) => {
               const token = tokens[idx];
@@ -129,6 +132,7 @@ export const CodeBlockAnchor = CodeBlockLowlight.extend({
                 : self.renderToken(tokens, idx, options);
               return match ? html.replace(/^<pre/, `<pre data-anchor-id="${match[1]}"`) : html;
             };
+            (markdownit.renderer.rules.fence as { fmAnchor?: boolean }).fmAnchor = true;
           },
         },
       },
