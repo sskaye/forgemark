@@ -196,6 +196,13 @@
   color: var(--fm-danger);
 }
 
+/* One width for every row's button, whatever it says, so the column
+   lines up: the widest label is "Replace…". */
+.fm-skill-action {
+  width: 88px;
+  text-align: center;
+}
+
 .fm-skill-path {
   color: var(--fm-chrome-muted);
   font-family: ui-monospace, "SF Mono", Menlo, monospace;

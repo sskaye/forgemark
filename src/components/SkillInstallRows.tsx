@@ -196,7 +196,7 @@ function SkillRow({
     // A hand-off cannot see whether Claude took the file, so the row
     // never locks: Claude may have declined, or been closed.
     button = handoff
-      ? { label: "Install again", onClick: onInstall }
+      ? { label: "Reinstall", onClick: onInstall }
       : { label: "Update", disabled: true, onClick: onInstall };
   } else if (status.kind === "outdated") {
     glyph = "up";
@@ -234,7 +234,7 @@ function SkillRow({
       </div>
       <button
         type="button"
-        className={`fm-btn${button.primary ? " fm-btn-primary" : ""}`}
+        className={`fm-btn fm-skill-action${button.primary ? " fm-btn-primary" : ""}`}
         disabled={button.disabled}
         onClick={button.onClick}
         title={handoff ? "Opens the skill in the Claude app, which asks to install it." : undefined}
