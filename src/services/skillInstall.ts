@@ -145,6 +145,7 @@ async function readTree(folder: string): Promise<SkillFile[]> {
   const out: SkillFile[] = [];
   const walk = async (dir: string, prefix: string) => {
     for (const entry of await readDir(dir)) {
+      if (entry.name === ".DS_Store") continue;
       const rel = `${prefix}${entry.name}`;
       if (entry.isDirectory) await walk(`${dir}/${entry.name}`, `${rel}/`);
       else if (entry.isFile)

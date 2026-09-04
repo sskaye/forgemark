@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default permissions for the main window. The filesystem scope is deliberately everything the user can reach: Forgemark opens whatever file it is pointed at, and the review it writes goes back beside it. The CSP in tauri.conf.json is what stands between a reviewed document and that scope. The opener may hand any path to its default application, or to the Claude app, which is how the agent skill is installed there.",
+  "description": "Default permissions for the main window. The filesystem scope is deliberately everything the user can reach: Forgemark opens whatever file it is pointed at, and the review it writes goes back beside it. The CSP in tauri.conf.json is what stands between a reviewed document and that scope. Dot-folders are in scope too (plugins.fs.requireLiteralLeadingDot in tauri.conf.json): the agent skill is installed under ~/.claude, ~/.codex, and ~/.agents. The opener may hand any path to its default application, or to the Claude app, which is how the agent skill is installed there.",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -31,8 +31,7 @@
         {
           "path": "**"
         }
-      ],
-      "requireLiteralLeadingDot": false
+      ]
     },
     {
       "identifier": "opener:allow-open-path",

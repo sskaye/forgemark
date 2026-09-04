@@ -232,3 +232,12 @@ describe("formatSent", () => {
     expect(formatSent("nonsense", now)).toBe("earlier");
   });
 });
+
+describe("when the machine cannot be looked at", () => {
+  it("says so in the rows instead of looking forever", async () => {
+    fakeTauri.path.homeDir.mockRejectedValue(new Error("path.resolve_directory not allowed"));
+    renderApp();
+    fireEvent.click(screen.getByTestId("fm-titlebar-settings"));
+    expect(await screen.findByTestId("fm-skill-detect-error")).toHaveTextContent(/not allowed/);
+  });
+});

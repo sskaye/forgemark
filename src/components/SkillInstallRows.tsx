@@ -29,13 +29,20 @@ export const SKILL_INSTALLED_EVENT = "forgemark:skill-installed";
 
 export function SkillInstallRows() {
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [detectError, setDetectError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<Row | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const targets = await detectTargets();
+      let targets: SkillTarget[];
+      try {
+        targets = await detectTargets();
+      } catch (err) {
+        if (!cancelled) setDetectError(err instanceof Error ? err.message : String(err));
+        return;
+      }
       if (cancelled) return;
       setRows(
         targets.map((target) => ({
@@ -94,7 +101,15 @@ export function SkillInstallRows() {
         app&rsquo;s own tool. Install it where your agents look.
       </p>
       <div className="fm-skill-rows" data-testid="fm-skill-rows">
-        {rows === null ? (
+        {detectError ? (
+          <div
+            className="fm-skill-row fm-skill-row--quiet"
+            role="alert"
+            data-testid="fm-skill-detect-error"
+          >
+            Couldn&rsquo;t look for agents on this Mac: {detectError}
+          </div>
+        ) : rows === null ? (
           <div className="fm-skill-row fm-skill-row--quiet">Looking for agents on this Mac…</div>
         ) : (
           rows.map((row) => (
