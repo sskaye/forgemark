@@ -25,7 +25,8 @@
     "opener:default",
     {
       "identifier": "fs:scope",
-      "allow": [{ "path": "**" }]
+      "allow": [{ "path": "**" }],
+      "requireLiteralLeadingDot": false
     }
   ]
 }

@@ -156,7 +156,7 @@ describe("file open edge cases", () => {
     // Written beside the file and renamed into place (atomic save).
     await waitFor(() => {
       expect(mockWriteTextFile).toHaveBeenCalledWith(
-        expect.stringMatching(/^\/tmp\/\.example\.md\..+\.tmp$/),
+        expect.stringMatching(/^\/tmp\/example\.md\..+\.forgemark-tmp$/),
         "alpha\n",
       );
     });

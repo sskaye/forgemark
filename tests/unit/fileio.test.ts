@@ -56,7 +56,9 @@ describe("saveDocument", () => {
   it("writes through a temp file in the same directory, then renames it into place", async () => {
     await saveDocument("/notes/draft.md", "new\n");
     const [tmp, text] = fsMock.writeTextFile.mock.calls[0] as unknown as [string, string];
-    expect(tmp).toMatch(/^\/notes\/\.draft\.md\.[^/]+\.tmp$/);
+    // Same directory, and never dot-prefixed: Tauri's filesystem scope
+    // refuses hidden names, and a hidden temp file made every save fail.
+    expect(tmp).toMatch(/^\/notes\/draft\.md\.[^/.]+\.forgemark-tmp$/);
     expect(text).toBe("new\n");
     expect(fsMock.rename).toHaveBeenCalledWith(tmp, "/notes/draft.md");
     expect(fsMock.writeTextFile.mock.invocationCallOrder[0]).toBeLessThan(
@@ -81,7 +83,7 @@ describe("saveDocument", () => {
   it("handles Windows paths", async () => {
     await saveDocument("C:\\notes\\draft.md", "x\n");
     const [tmp] = fsMock.writeTextFile.mock.calls[0] as unknown as [string];
-    expect(tmp).toMatch(/^C:\\notes\\\.draft\.md\..+\.tmp$/);
+    expect(tmp).toMatch(/^C:\\notes\\draft\.md\..+\.forgemark-tmp$/);
     expect(fsMock.rename).toHaveBeenCalledWith(tmp, "C:\\notes\\draft.md");
   });
 });

@@ -140,11 +140,10 @@ async function writeAtomically(target: string, text: string): Promise<void> {
     await writeTextFile(target, text);
     return;
   }
-  const sep = target.lastIndexOf("\\") > target.lastIndexOf("/") ? "\\" : "/";
-  const idx = target.lastIndexOf(sep);
-  const dir = idx >= 0 ? target.slice(0, idx + 1) : "";
-  const name = idx >= 0 ? target.slice(idx + 1) : target;
-  const tmp = `${dir}.${name}.${Date.now().toString(36)}.tmp`;
+  // Beside the target, and not dot-prefixed: the filesystem scope's
+  // `**` does not match hidden names, so a `.name.tmp` was refused and
+  // every save failed with "forbidden path".
+  const tmp = `${target}.${Date.now().toString(36)}.forgemark-tmp`;
   await writeTextFile(tmp, text);
   try {
     await rename(tmp, target);
