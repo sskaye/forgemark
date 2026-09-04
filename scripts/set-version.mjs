@@ -96,4 +96,6 @@ for (const file of FILES) {
 
 console.log(`Set ${before} → ${arg}:\n`);
 check();
-console.log(`\nNext: update CHANGELOG.md, then follow RELEASING.md.`);
+console.log(
+  `\nNext: update CHANGELOG.md, run npm run build:skill (the CLI and the skill manifest embed the version), commit, then follow RELEASING.md.`,
+);

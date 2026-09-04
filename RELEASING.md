@@ -36,7 +36,10 @@ The `npm run release` script captures every step of the macOS build/sign/notariz
 ```sh
 # Bump the version everywhere it's recorded (four files, all must agree):
 #   npm run version:set 1.5.0
-# Then update CHANGELOG.md with the new release line.
+# Then update CHANGELOG.md with the new release line, and rebuild the
+# skill, which embeds the version in the CLI and the manifest:
+#   npm run build:skill
+# Commit all of that; the release pre-flight's tests check both.
 
 export APPLE_KEYCHAIN_PROFILE=forgemark-notary
 export APPLE_SIGNING_IDENTITY="Developer ID Application: Your Name (XXXXXXXXXX)"
