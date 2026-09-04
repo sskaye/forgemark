@@ -67,3 +67,9 @@ A report is written into an iframe with `sandbox="allow-same-origin"` and no `al
 ## Reading the two lists together
 
 Three defects are the same problem in both formats: relative paths never resolve against the file's folder (Markdown 13, HTML 4), links to other places do nothing (Markdown 14, HTML 5), and markup the editor does not model is either stripped or shown raw (Markdown 1, 11, 12). The script question (HTML 1) is the largest single gap and the only one that needs a design decision before any code.
+
+## Open items after the work
+
+- **Printing shows blank pages on macOS** for every document, Markdown and HTML alike, and did before this branch as far as anyone knows; nobody had used it. The print path renders a hidden copy of the document and asks the webview to print with the app hidden by print styles; the cause has not been found by reading, and the print dialog cannot be driven from tests.
+- **One passage comment per tab, per element** is now supported by nesting passage pairs around the same element, the one place pairs may nest. Agents can read such records but the CLI cannot yet create a passage anchor.
+- **Group C normalizations** (hard-break style, fence style, setext headings, table alignment markers, reference links, hard wraps) remain as listed; task lists now stay tight.

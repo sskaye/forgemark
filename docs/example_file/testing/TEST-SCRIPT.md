@@ -15,7 +15,7 @@ Open `docs/example_file/testing/gfm-showcase.md`.
 7. **Tables.** The pipe cells show `x | y` and `a|b`. Type into any cell, then check Source view: `\|` is still escaped in both. The wide table scrolls sideways instead of squeezing.
 8. **Code.** The Python block is coloured; the block with no language is plain.
 9. **Math and diagram.** The inline formula, the `$$` block, and the ```` ```math ```` block are typeset. The Mermaid block draws a flowchart after a moment.
-10. **Print.** File → Print: the print preview shows the same rendering, images included.
+10. **Print.** File → Print: the print preview shows the same rendering, images included. Known open item: on macOS the preview currently shows blank pages for every document; see the open items in `docs/reviews/2026-09-03-rendering-gaps.md`.
 
 ## Part 2 — HTML report: `dashboard/dashboard.html`
 
@@ -39,3 +39,7 @@ Open `docs/example_file/testing/dashboard/dashboard.html`. Everything below the 
 ## Part 3 — Round trip
 
 After Part 2, open the saved `dashboard.html` in a browser directly. It should render and work exactly as before; the markers are invisible comments. Run `npm run cli -- lint docs/example_file/testing/dashboard/dashboard.html`: no problems.
+
+## What the browser tests already cover
+
+`npm run test:e2e` runs most of Part 2 and the rendering half of Part 1 in Chromium against the dev server (`tests/e2e/report.spec.ts`, `tests/e2e/markdown.spec.ts`), with Tauri replaced by an in-page stand-in and the report served from a blob URL. What still needs the app by hand: the Rust protocol serving the report and its sibling files (Part 2 step 1's stylesheet and logo), WebKit's own caret and right-click behaviour, printing, and reloads from disk (step 14).
