@@ -335,7 +335,14 @@
         } catch {
           continue;
         }
-        if (rect.width === 0 && rect.height === 0 && typeof win.getComputedStyle === "function") {
+        const laidOut = rect.width > 0 || rect.height > 0;
+        if (laidOut && (rect.width < 120 || rect.height < 48)) {
+          const button2 = buttons.get(el);
+          if (button2) {
+            button2.remove();
+            buttons.delete(el);
+          }
+          continue;
         }
         live.add(el);
         let button = buttons.get(el);

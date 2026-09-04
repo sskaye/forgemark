@@ -8,9 +8,9 @@ This file exercises what Forgemark renders beyond plain CommonMark. Each section
 
 ## Inline HTML
 
-Press <kbd>Ctrl</kbd>+<kbd>C</kbd> to copy. This is <mark>highlighted</mark>, this is <ins>inserted</ins>, and H<sub>2</sub>O has a <abbr title="subscript">sub</abbr>. A <span style="color: #d70015">red span</span> keeps its style. Hidden here: <!-- an inline comment --> a comment, and a<wbr>b has a word break.
+Press <kbd>Ctrl</kbd>+<kbd>C</kbd> to copy. This is <mark>highlighted</mark>, this is <ins>inserted</ins>, and H<sub>2</sub>O has a <abbr title="subscript">sub</abbr>. A <span style="color: #d70015">red span</span> keeps its style. Hidden here: <!-- an inline comment --> a comment, and a<wbr>b has a word break. Done.
 
-Inline image with a width: <img src="images/swatch.png" width="40" alt="swatch"> and a linked badge: [![swatch](images/swatch.png)](https://example.com).
+Inline image with a width: <img src="images/swatch.png" alt="swatch" width="40"> and a linked badge: [![swatch](images/swatch.png)](https://example.com).
 
 ## Raw HTML blocks
 
@@ -33,7 +33,7 @@ Body of the details block, in **Markdown**.
 ## Alerts
 
 > [!NOTE]
-> Useful information the reader should know.
+> Useful information the reader should know. Test type
 
 > [!WARNING]
 > Careful, this can go wrong.
@@ -42,11 +42,11 @@ Body of the details block, in **Markdown**.
 
 ## Footnotes and strikethrough
 
-A claim with a footnote[^1] and another[^note]. Struck with ~one tilde~ and ~~two~~. A lone ~ tilde and a $5 price stay as they are.
+A claim with a footnote[^1] and another[^note]. Struck with ~~one tilde~~ and ~~two~~. A lone \~ tilde and a \$5 price stay as they are.
 
 [^1]: The first note.
-[^note]: The second note, which
-    continues on a lazy line.
+
+[^note]: The second note, which continues on a lazy line.
 
 ## Links
 
@@ -55,14 +55,14 @@ Bare addresses become links: https://example.com/a_b?c=1, www.example.com, and m
 ## Tables
 
 | Left | Centre | Right | Pipe |
-| :--- | :----: | ----: | ---- |
+| --- | --- | --- | --- |
 | a | b | c | x \| y |
 | **bold** | `code` | 3 | `a\|b` |
 
 A wide table that should scroll rather than squeeze:
 
 | col0 | col1 | col2 | col3 | col4 | col5 | col6 | col7 | col8 | col9 | col10 | col11 | col12 | col13 |
-| ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ----- | ----- | ----- | ----- |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | some longer text | some longer text | some longer text | some longer text | some longer text | some longer text | some longer text | some longer text | some longer text | some longer text | some longer text | some longer text | some longer text | some longer text |
 
 ## Code
@@ -100,5 +100,6 @@ graph TD
 
 ## Task list
 
-- [x] done
-- [ ] not yet
+- [ ] <input class="task-list-item-checkbox" disabled="" type="checkbox"> <input class="task-list-item-checkbox" disabled="" type="checkbox"> <input class="task-list-item-checkbox" checked="" disabled="" type="checkbox"> done
+
+- [ ] <input class="task-list-item-checkbox" disabled="" type="checkbox"> <input class="task-list-item-checkbox" disabled="" type="checkbox"> <input class="task-list-item-checkbox" disabled="" type="checkbox"> not yet

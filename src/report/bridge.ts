@@ -123,9 +123,17 @@ export function installBridge(win: Window, channel: BridgeChannel): () => void {
       } catch {
         continue;
       }
-      if (rect.width === 0 && rect.height === 0 && typeof win.getComputedStyle === "function") {
-        // No layout at all (a document without a renderer): still offer
-        // the button, at the origin.
+      // An icon, a logo, a bullet: too small to be a figure. A document
+      // without a layout engine reports zero for everything and keeps
+      // its buttons.
+      const laidOut = rect.width > 0 || rect.height > 0;
+      if (laidOut && (rect.width < 120 || rect.height < 48)) {
+        const button = buttons.get(el);
+        if (button) {
+          button.remove();
+          buttons.delete(el);
+        }
+        continue;
       }
       live.add(el);
       let button = buttons.get(el);

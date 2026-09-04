@@ -830,7 +830,11 @@ export function EditorPane({ docId }: Props) {
           <span>HTML report · review only</span>
         </aside>
       )}
-      <div className="fm-document">
+      <div
+        className={
+          "fm-document" + (isHtml && state.viewMode !== "source" ? " fm-document--report" : "")
+        }
+      >
         <LostAnchorBanner
           count={lostAnchorIds.length}
           onRecover={() => {
