@@ -34,6 +34,7 @@ const SYNTHESIZE_AS_KEYDOWN: Record<string, KeyboardEventInit> = {
 // already a keyboard shortcut.
 const APP_LEVEL_IDS = new Set([
   "settings",
+  "install-skill",
   "recent-clear",
   "clean-export",
   "print",

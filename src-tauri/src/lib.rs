@@ -608,12 +608,22 @@ fn build_menu(app: &tauri::AppHandle, recent: &[String]) -> tauri::Result<Menu<t
         .item(&move_resize_submenu)
         .build()?;
 
+    // Help holds the one thing a user may go looking for without
+    // knowing it lives in Settings.
+    let install_skill = MenuItemBuilder::new("Install AI Skill…")
+        .id("install-skill")
+        .build(app)?;
+    let help_submenu = SubmenuBuilder::new(app, "Help")
+        .item(&install_skill)
+        .build()?;
+
     MenuBuilder::new(app)
         .item(&app_submenu)
         .item(&file_submenu)
         .item(&edit_submenu)
         .item(&comment_submenu)
         .item(&window_submenu)
+        .item(&help_submenu)
         .build()
 }
 
