@@ -4,23 +4,17 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [1.7.0] — 2026-09-04
+
 ### Added
 
 - Settings → AI agents installs the agent skill where agents look, and keeps it current. One row per tool on this machine: Claude Code, Codex, the Claude desktop app, and the shared `~/.agents/skills` folder read by Cursor, Gemini CLI, GitHub Copilot, and others. Each row shows Not installed, Up to date, or the installed and shipped versions with an Update button; a folder Forgemark did not write is replaced only after asking. The Claude app row hands the `.skill` file to Claude, which asks to install it, the same as a double-click. When an installed copy is behind the one this app ships, the sidebar shows a one-line notice with an Update link, once per version; nothing is ever written without a click. Help → Install AI Skill… opens the section, and Save skill file… replaces the two download buttons. The skill now carries `forgemark-skill.json`, the app's version and a hash of the skill's files, which is how the app tells one build from another.
 - Source view is editable. A writable document can be changed as text, Markdown or HTML alike, and for an HTML report this is the way to edit. What is typed is what the file gets: a save writes the text as it stands, the sidebar keeps reading the comments while typing, and switching back to Rendered takes the text as the document. A comments block the parser cannot read keeps the view where it is, with the parser's message, rather than dropping the block.
 - Obsidian syntax renders as Obsidian renders it, and stays as written after an edit: any callout type (`> [!Takeaway]`, `> [!Executive Summary]-`, with the `+`/`-` fold marker), image embeds `![[diagram.png]]` and `![[diagram.png|Caption]]`, and wikilinks `[[note]]` and `[[note|label]]`, which show as links in name only. The five GitHub alert kinds keep their colours; any other type gets a neutral rail and its own name as the label.
-
-### Changed
-
-- A new application icon: the marker. Two angle brackets in ink holding the amber bar of a highlighted passage, on the app's own paper, in place of the pilcrow in square brackets on charcoal.
-
-### Added
-
 - A command-line tool for AI agents, shipped inside the skill as `scripts/forgemark.mjs`. `list`, `show`, `comment`, `reply`, `resolve`, `float`, `reattach`, `delete`, and `lint` do everything an agent needs in a review without it ever composing the comments block or placing a marker by hand. It is built from the app's own parser and serializer, checks that every write reads back, and writes atomically; passages are named by quoting them, and the tool refuses an ambiguous phrase or one that overlaps another comment rather than guessing. Works on Markdown and HTML reports, including whole-element anchors by `id`.
 - `forgemark lint` reports everything the app would refuse in a file — with the file line and the comment record for an unreadable block — plus the things a reviewer would rather not meet: an orphaned comment, an anchor description that has drifted, a malformed timestamp.
-
-### Added
-
 - The sidebar header counts lost anchors, offers Resolve all for the open comments it is showing, and ⌘⌥B hides and shows the sidebar.
 - File > Open Recent. The last files opened are listed in the native menu, newest first, with Clear Menu at the bottom; an entry the app can no longer open is dropped from the list.
 - Every keyboard shortcut is now defined in one table, and a test refuses two commands sharing a chord. ⌘⇧E used to open Clean Export, the edit composer, and Find with the selection all at once; it now opens Clean Export only, and editing your own comment is E with the card focused. Card shortcuts act only while the keyboard focus is in the sidebar, never over an open dialog, and never while typing.
@@ -29,8 +23,17 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 
 ### Changed
 
+- A new application icon: the marker. Two angle brackets in ink holding the amber bar of a highlighted passage, on the app's own paper, in place of the pilcrow in square brackets on charcoal.
 - An HTML report now runs its own scripts. A dashboard built by script, with tabs, charts, and controls, works as it does in a browser, on an origin of its own from which the app is unreachable; the files beside the report load from the same origin. The frame fills the pane and scrolls itself, so sticky headers and viewport units behave. Adding or removing a comment no longer reloads the report, so the tab or range the reader chose stays chosen.
 - A comment on text the report's script produced anchors the nearest enclosing element with an `id` and keeps the passage as its text (`anchor_kind: passage`), highlighted wherever the element shows it; with no such element it becomes a floating note that keeps the quoted text. Suggestions are not offered on such text.
+- Every text button in the app is drawn by one stylesheet family (`fm-btn` with size and role modifiers) instead of eight near-identical rulesets, so hover, focus, and disabled states are the same everywhere.
+- Timestamps on comment cards and the hints under Settings fields and composers are drawn at the readable muted tone rather than the decorative faint one. The hover, selected-segment, and danger backgrounds are theme tokens instead of literals copied into nine stylesheets.
+- The app now ships a content-security policy: scripts only from the app itself, images from the app, data URLs, and HTTPS, frames only for the report view. The filesystem scope stays unrestricted, and says why. The release script no longer prints the Apple app-specific password in its log, the version script matches only the top-level version key, and CI builds the macOS app on pushes to main instead of finding bundle breakage on release day.
+- Dead code removed: a reducer action, a file-open helper, a test-only fingerprint helper, two HTML helpers, and the styles for an in-frame button that no longer exists; the marker regex and the "which anchor is this node in" lookup exist once each. Two unused npm packages and two unused Rust crates are gone. A file at a Windows drive root is watched correctly, and a watcher event that names no path no longer triggers a read.
+- Every dialog now uses one modal shell built on the native `dialog` element: it takes focus when it opens, gives it back to whatever opened it when it closes, traps Tab inside itself, and answers Enter only from within. Comment cards are focusable regions rather than buttons, so screen readers hear their content and the reply controls are reachable by keyboard. The Rendered/Source switch and the Settings choices share one segmented control that moves with arrow keys.
+- The test suite mounts the app through one shared harness against one in-memory fake of the Tauri plugins, replacing identical mock blocks in thirty files. Five tests that mounted the document bindings twice, and so ran two auto-save timers against one document, now mount them once. Timing assertions moved behind `npm run test:perf`. The unused AI test harness, its SDK dependency, and the unused retry helper are gone.
+- The skill's instructions lead with the tool; the format reference stays for reading a file and as a fallback. The spec now states that `anchor_text` is advisory and how it is normalised, that ids stay sparse after deletions, and how a regenerated report keeps its review.
+- `npm run verify-ai-output` is now `forgemark lint` over the built tool (the previous script depended on a package that was not installed).
 
 ### Fixed
 
@@ -72,17 +75,6 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 - A comment whose anchor crossed a hard-wrapped line could be written as YAML the app could not read back, hiding every comment in the file on the next open. Such values are now quoted, and the app parses its own output before writing it.
 - Opening a file whose comments block could not be read, then adding a comment, appended a second block with colliding ids. Saving now refuses in that state and says where the unreadable block is, so it can be repaired; prose edits still save.
 - The error shown for an unreadable comments block now names the line and the comment id instead of "couldn't be parsed (yaml)".
-
-### Changed
-
-- Every text button in the app is drawn by one stylesheet family (`fm-btn` with size and role modifiers) instead of eight near-identical rulesets, so hover, focus, and disabled states are the same everywhere.
-- Timestamps on comment cards and the hints under Settings fields and composers are drawn at the readable muted tone rather than the decorative faint one. The hover, selected-segment, and danger backgrounds are theme tokens instead of literals copied into nine stylesheets.
-- The app now ships a content-security policy: scripts only from the app itself, images from the app, data URLs, and HTTPS, frames only for the report view. The filesystem scope stays unrestricted, and says why. The release script no longer prints the Apple app-specific password in its log, the version script matches only the top-level version key, and CI builds the macOS app on pushes to main instead of finding bundle breakage on release day.
-- Dead code removed: a reducer action, a file-open helper, a test-only fingerprint helper, two HTML helpers, and the styles for an in-frame button that no longer exists; the marker regex and the "which anchor is this node in" lookup exist once each. Two unused npm packages and two unused Rust crates are gone. A file at a Windows drive root is watched correctly, and a watcher event that names no path no longer triggers a read.
-- Every dialog now uses one modal shell built on the native `dialog` element: it takes focus when it opens, gives it back to whatever opened it when it closes, traps Tab inside itself, and answers Enter only from within. Comment cards are focusable regions rather than buttons, so screen readers hear their content and the reply controls are reachable by keyboard. The Rendered/Source switch and the Settings choices share one segmented control that moves with arrow keys.
-- The test suite mounts the app through one shared harness against one in-memory fake of the Tauri plugins, replacing identical mock blocks in thirty files. Five tests that mounted the document bindings twice, and so ran two auto-save timers against one document, now mount them once. Timing assertions moved behind `npm run test:perf`. The unused AI test harness, its SDK dependency, and the unused retry helper are gone.
-- The skill's instructions lead with the tool; the format reference stays for reading a file and as a fallback. The spec now states that `anchor_text` is advisory and how it is normalised, that ids stay sparse after deletions, and how a regenerated report keeps its review.
-- `npm run verify-ai-output` is now `forgemark lint` over the built tool (the previous script depended on a package that was not installed).
 
 ## [1.6.0] — 2026-08-18
 
