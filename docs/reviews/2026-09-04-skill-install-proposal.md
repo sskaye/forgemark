@@ -28,7 +28,7 @@ Our README tells Codex users to extract into `~/.agents/skills`. Codex does read
 | Codex | `%USERPROFILE%\.codex\skills\` | `~/.codex/skills/` |
 | Shared | `%USERPROFILE%\.agents\skills\` | `~/.agents/skills/` |
 
-Tauri's `homeDir()` gives the right root on each, so one table entry per tool serves all three platforms. Two overrides exist and the app cannot see either: Claude Code moves its whole folder with `CLAUDE_CONFIG_DIR`, and Codex with `CODEX_HOME`. Both are shell environment variables, and a desktop app launched from the Dock, the Start menu, or a Linux launcher does not inherit the shell's environment. So the app installs to the defaults, and the row for a tool whose default folder is missing offers "Choose folder…" beside Install, for the few people who moved it. The Claude desktop app exists on macOS and Windows only, so the Send to Claude row does not appear on Linux; whether the Windows build registers `.skill` the way the Mac build does is checked when the feature is built.
+Tauri's `homeDir()` gives the right root on each, so one table entry per tool serves all three platforms. Two overrides exist and the app cannot see either: Claude Code moves its whole folder with `CLAUDE_CONFIG_DIR`, and Codex with `CODEX_HOME`. Both are shell environment variables, and a desktop app launched from the Dock, the Start menu, or a Linux launcher does not inherit the shell's environment. So the app installs to the defaults, and the row for a tool whose default folder is missing offers "Choose folder…" beside Install, for the few people who moved it. The Claude desktop app exists on macOS and Windows only, so the Claude app row does not appear on Linux; whether the Windows build registers `.skill` the way the Mac build does is checked when the feature is built.
 
 **Where the app hands off instead.** Claude (chat) in the desktop app and [claude.ai](http://claude.ai) keep skills per account, uploaded through Settings → Capabilities → Skills; there is no folder to write to. But the Claude desktop app registers `.skill` as a document type (its `Info.plist` lists the extension), which is why double-clicking one opens Claude with an offer to install. Forgemark can do exactly what the double-click does: write the bundled `.skill` to its own data folder and ask the system to open that file with Claude. The opener plugin the app already uses takes an application name, so the file goes to Claude even if some other app has claimed the extension. Claude then shows its own install prompt, and the user confirms there. The Code tab of the same desktop app is covered separately, through `~/.claude/skills`.
 
@@ -70,7 +70,7 @@ comments with the app's own tool. Install it where your agents look.
 
   Claude Code        ↑ 1.4.0 → 1.7.0                  [ Update ]
   Codex              ○ Not installed                  [ Install ]
-  Claude app         ↑ Sent 1.4.0 · 12 Aug            [ Send to Claude ]
+  Claude app         ↑ 1.4.0 → 1.7.0 · sent 12 Aug    [ Update ]
   Other tools        ○ Not installed  ~/.agents/skills  [ Install ]
 
   Somewhere else, or claude.ai in a browser:      [ Save skill file… ]
@@ -79,7 +79,7 @@ comments with the app's own tool. Install it where your agents look.
 - A row appears only when the tool is on this machine (`~/.claude` or `~/.codex` exists). "Other tools" always shows, since `~/.agents` is created by whichever tool uses it first and the user may want it ahead of time; it is the one row that is off by default.
 - Install and Update are the same action: write the skill to a fresh folder beside the target, swap it into place, remove the old one. Done in under a second; the row then reads "Installed 1.7.0 · up to date" and, for Claude Code, "New sessions pick it up; restart any that are open."
 - Replace asks first, in the app's existing confirm dialog, and names the folder.
-- Send to Claude opens the bundled `.skill` in the Claude desktop app, which asks to install it, the same as a double-click on the file. The app cannot see the account's skills, so the row cannot say "up to date"; it says which version was last sent and when (remembered locally), and "this app ships" a newer one after an update. The row appears when the Claude app is installed (`/Applications/Claude.app` on macOS, the equivalent on Windows).
+- The Claude app row reads and acts like the others: Install and Update, the same glyphs, the same version pair. The one difference is a date, since the app cannot see the account's skills: the row shows when the skill was last handed to Claude (remembered locally), so "✓ Up to date · sent 12 Aug" and "↑ 1.4.0 → 1.7.0 · sent 12 Aug". Install and Update both open the bundled `.skill` in the Claude desktop app, which asks to install it, the same as a double-click on the file. The row appears when the Claude app is installed (`/Applications/Claude.app` on macOS, the equivalent on Windows).
 - Save skill file… is today's download, kept for the upload-only tools and for anyone installing somewhere else.
 
 **Telling the user without nagging.** The check runs when Settings opens and once at launch. At launch, only two things can happen:
@@ -103,7 +103,7 @@ No modal, no first-run wizard. A user who never opens Settings sees at most one 
 - `AppShell`: the once-per-version footer line, keyed in localStorage by app version.
 - README and the skill's own README: the install section becomes "open Settings → AI agents", with the manual paths kept for other tools, and the Codex path corrected to `~/.codex/skills`.
 
-**Tests.** Unit: the tree hash agrees between the build script and the app (same file order, same separator); each of the four states from a fake folder; install swaps and removes, and leaves the old folder in place when a write fails. Integration: rows appear only for detected tools; Install → "up to date"; Replace asks first; Send to Claude writes the file and opens it with Claude, and records the version; the footer line shows once and opens Settings. Browser: none needed, nothing here depends on layout. Manual: this machine, where both installed copies are stale, is the test bed; after the update, `/forgemark` in a new Claude Code session should describe the CLI.
+**Tests.** Unit: the tree hash agrees between the build script and the app (same file order, same separator); each of the four states from a fake folder; install swaps and removes, and leaves the old folder in place when a write fails. Integration: rows appear only for detected tools; Install → "up to date"; Replace asks first; the Claude app row's Install writes the file, opens it with Claude, and records the version and date; the footer line shows once and opens Settings. Browser: none needed, nothing here depends on layout. Manual: this machine, where both installed copies are stale, is the test bed; after the update, `/forgemark` in a new Claude Code session should describe the CLI.
 
 **Effort.** About a day: the manifest and hash are an hour, the service and its tests half a day, the Settings rows and footer the rest.
 
