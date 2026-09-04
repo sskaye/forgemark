@@ -274,9 +274,14 @@ export function DocumentBindings({
       const s = stateRef.current;
       let text: string;
       try {
-        text = s.dirty
-          ? serializeForgemarkFile({ body: s.body, comments: s.comments })
-          : s.originalText;
+        // Text typed in Source view is written as typed, the way any
+        // editor writes; it is not re-serialized from a parse of it.
+        text =
+          s.sourceDraft != null
+            ? s.sourceDraft
+            : s.dirty
+              ? serializeForgemarkFile({ body: s.body, comments: s.comments })
+              : s.originalText;
       } catch (err) {
         // The serializer refuses output it can't read back (or a body
         // that already holds an unreadable block). Nothing was written.
@@ -512,7 +517,9 @@ export function DocumentBindings({
     const handle = setTimeout(async () => {
       try {
         if (await diskChangedSinceBaseline(path)) return;
-        const text = serializeForgemarkFile({ body: state.body, comments: state.comments });
+        const text =
+          state.sourceDraft ??
+          serializeForgemarkFile({ body: state.body, comments: state.comments });
         await saveDocument(path, text);
         dispatch({ type: "saved", text, body: state.body, comments: state.comments });
         await refreshBaseline(path, text);
@@ -533,6 +540,7 @@ export function DocumentBindings({
     logger,
     diskChangedSinceBaseline,
     refreshBaseline,
+    state.sourceDraft,
   ]);
 
   // Phase 10: pendingSave bridge. When the save-conflict modal's

@@ -19,6 +19,8 @@
 // resolve toggling, deletion, and sidebar filter / sort.
 
 import type { Comment, DocFormat, Reply } from "../format/types";
+import { parseForgemarkFile } from "../format/parser";
+import type { ParsedFile } from "../format/types";
 import { DEFAULT_FORMAT } from "../format/types";
 import { removeMarkersFromBody } from "../format/compose";
 import type { FileFingerprint } from "../services/conflict";
@@ -49,6 +51,12 @@ export type DocumentState = {
   // `filePath` on the `saved` action, which rebinds without reloading).
   loadGeneration: number;
   viewMode: "rendered" | "source";
+  // The file's text as the user is typing it in Source view, or null
+  // when they are not. While it is set it is what a save writes,
+  // verbatim; `body` and `comments` are a tolerant reading of it for
+  // the sidebar, and are not written anywhere. Leaving Source view
+  // commits it with a strict parse (`commitSource`).
+  sourceDraft: string | null;
   readOnly: boolean;
   error: string | null;
   focusedCommentId: number | null;
@@ -216,6 +224,7 @@ export const INITIAL_STATE: DocumentState = {
   dirty: false,
   loadGeneration: 0,
   viewMode: "rendered",
+  sourceDraft: null,
   readOnly: false,
   error: null,
   focusedCommentId: null,
@@ -262,6 +271,11 @@ export type DocumentAction =
       fileName?: string;
     }
   | { type: "setViewMode"; viewMode: "rendered" | "source" }
+  // The user typed in Source view: the whole file text, as typed.
+  | { type: "editSource"; text: string }
+  // Leaving Source view: parse the draft for real and make it the
+  // document, or refuse with the parser's message and stay.
+  | { type: "commitSource" }
   | { type: "error"; message: string }
   | { type: "dismissError" }
   | { type: "setFocusedComment"; id: number | null }
@@ -339,6 +353,33 @@ function sameComments(a: Comment[], b: Comment[]): boolean {
   return a.length === b.length && a.every((c, i) => c === b[i]);
 }
 
+// The Source-view draft, parsed for real. A clean parse becomes the
+// document; a failing one keeps the draft and the view, with the
+// parser's message, so a half-typed comments block is never dropped.
+function commitDraft(state: DocumentState): DocumentState {
+  if (state.sourceDraft == null) return state;
+  let parsed: ParsedFile;
+  try {
+    parsed = parseForgemarkFile(state.sourceDraft, { format: state.format });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    return { ...state, error: `The file can't be read as written: ${detail}` };
+  }
+  return {
+    ...state,
+    body: parsed.body,
+    comments: parsed.comments,
+    sourceDraft: null,
+    viewMode: "rendered",
+    // The text was replaced wholesale; the rendered editor and the
+    // report frame start over, as after a reload from disk.
+    loadGeneration: state.loadGeneration + 1,
+    error: null,
+    focusedCommentId: null,
+    composer: null,
+  };
+}
+
 export function reduceDocument(state: DocumentState, action: DocumentAction): DocumentState {
   const next = reduce(state, action);
   // Any change to the body or comments other than the deletion itself
@@ -368,6 +409,7 @@ function reduce(state: DocumentState, action: DocumentAction): DocumentState {
         dirty: false,
         loadGeneration: state.loadGeneration + 1,
         viewMode: "rendered",
+        sourceDraft: null,
         readOnly: action.readOnly,
         error: null,
         focusedCommentId: null,
@@ -399,7 +441,10 @@ function reduce(state: DocumentState, action: DocumentAction): DocumentState {
       // is not on disk. Keep it, and keep the document dirty so the next
       // auto-save writes it; replacing `body` with the written snapshot
       // used to throw such edits away.
-      const moved = state.body !== action.body || !sameComments(state.comments, action.comments);
+      const moved =
+        state.sourceDraft != null
+          ? state.sourceDraft !== action.text
+          : state.body !== action.body || !sameComments(state.comments, action.comments);
       return {
         ...state,
         originalText: action.text,
@@ -416,7 +461,27 @@ function reduce(state: DocumentState, action: DocumentAction): DocumentState {
       };
     }
     case "setViewMode":
+      // Leaving Source view with a draft commits it (or refuses and stays).
+      if (action.viewMode === "rendered" && state.sourceDraft != null) return commitDraft(state);
       return { ...state, viewMode: action.viewMode };
+    case "editSource": {
+      if (action.text === state.sourceDraft) return state;
+      // A tolerant reading for the sidebar: a half-typed marker or record
+      // must not blank the cards while the user is mid-edit.
+      let body = state.body;
+      let comments = state.comments;
+      try {
+        const parsed = parseForgemarkFile(action.text, { tolerant: true, format: state.format });
+        body = parsed.body;
+        comments = parsed.comments;
+      } catch {
+        // Keep the last readable state on screen.
+      }
+      return { ...state, sourceDraft: action.text, body, comments, dirty: true };
+    }
+    case "commitSource":
+      if (state.sourceDraft == null) return { ...state, viewMode: "rendered" };
+      return commitDraft(state);
     case "requestIntent":
       return { ...state, pendingIntent: action.intent, intentResolution: null };
     case "resolveIntent":
@@ -690,6 +755,7 @@ function reduce(state: DocumentState, action: DocumentAction): DocumentState {
         body: ec.body,
         comments: ec.comments,
         dirty: false,
+        sourceDraft: null,
         // Disk content replaced the buffer — the undo stack describes
         // text that no longer exists. Force a fresh editor.
         loadGeneration: state.loadGeneration + 1,
