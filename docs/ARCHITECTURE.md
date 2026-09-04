@@ -365,6 +365,14 @@ source of a comment, a void tag, or an unknown tag, chosen by the markdown-it
 `InlineImage` makes images inline, as on GitHub, and writes an `<img>` tag when a
 width or height is set.
 
+**Beyond the GFM spec.** `src/format/markdownExtras.ts` teaches markdown-it what
+github.com renders on top of the spec: footnotes, alerts, single-tilde
+strikethrough, and (in the editor only) autolinking of scheme, `www.`, and e-mail
+addresses. The block splitter and the editor both apply it, so the two agree on
+where a footnote definition starts and ends. `AlertBlockquote`, `FootnoteRef`,
+`FootnoteDef`, and `MarkdownTable` (which escapes a pipe in a cell) render and
+write those forms back.
+
 **Anchor edges as nodes.** `AnchorEdge` (`src/components/AnchorEdge.ts`) is an
 inline atom node; the display form `bodyWithAnchorElements` produces is
 `<fm-anchor data-edge="open" data-id="N"></fm-anchor>`, which markdown-it passes

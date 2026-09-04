@@ -303,3 +303,62 @@
   margin: 0;
   vertical-align: middle;
 }
+
+/* GitHub alerts: a quote whose first line named its kind. */
+.fm-rendered-view .fm-prose blockquote[data-alert] {
+  border-left-color: var(--fm-alert, var(--fm-accent));
+  font-style: normal;
+}
+.fm-rendered-view .fm-prose blockquote[data-alert]::before {
+  content: attr(data-alert-label);
+  display: block;
+  font-family: var(--fm-ui);
+  font-weight: 600;
+  font-size: 0.92em;
+  color: var(--fm-alert, var(--fm-accent));
+  margin-bottom: 0.25em;
+}
+.fm-rendered-view .fm-prose blockquote[data-alert="note"] {
+  --fm-alert: #0969da;
+}
+.fm-rendered-view .fm-prose blockquote[data-alert="tip"] {
+  --fm-alert: #1a7f37;
+}
+.fm-rendered-view .fm-prose blockquote[data-alert="important"] {
+  --fm-alert: #8250df;
+}
+.fm-rendered-view .fm-prose blockquote[data-alert="warning"] {
+  --fm-alert: #9a6700;
+}
+.fm-rendered-view .fm-prose blockquote[data-alert="caution"] {
+  --fm-alert: #cf222e;
+}
+
+/* Footnotes: the reference in the text, the definition where written. */
+.fm-rendered-view .fm-prose sup.fm-footnote-ref {
+  font-size: 0.75em;
+  color: var(--fm-accent);
+  user-select: none;
+}
+.fm-rendered-view .fm-prose .fm-footnote-def {
+  display: flex;
+  gap: 0.6em;
+  font-size: 0.92em;
+  color: var(--fm-prose-muted);
+  margin: 0.4em 0;
+}
+.fm-rendered-view .fm-prose .fm-footnote-label {
+  flex: none;
+  color: var(--fm-accent);
+  user-select: none;
+}
+.fm-rendered-view .fm-prose .fm-footnote-label::before {
+  content: "[";
+}
+.fm-rendered-view .fm-prose .fm-footnote-label::after {
+  content: "]";
+}
+.fm-rendered-view .fm-prose .fm-footnote-body {
+  flex: 1;
+  min-width: 0;
+}

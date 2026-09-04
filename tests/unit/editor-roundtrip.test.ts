@@ -46,6 +46,10 @@ describe("editor round trip: must be byte-identical", () => {
     "inline HTML the editor cannot hold":
       'Line <!-- note --> and a<wbr>b and <video src="a.mp4" controls></video> done.\n',
     "linked image": "[![badge](https://img.shields.io/x.svg)](https://x.y)\n",
+    alert: "> [!NOTE]\n> Useful information.\n",
+    footnotes: "Claim[^1].\n\n[^1]: The note.\n",
+    "bare addresses": "Visit www.example.com or https://x.y/a_b?c=1 or foo@bar.com.\n",
+    "escaped pipe in a table": "| a |\n| --- |\n| x \\| y |\n",
     "sized image in a sentence": 'Icon <img src="a.png" alt="A" width="20"> here.\n',
     "markers quoted inside a fence":
       "Example:\n\n```\nSome <!-- fmc:1 -->anchored<!-- /fmc:1 --> text\n```\n",
@@ -79,7 +83,6 @@ describe("editor round trip: still normalized when that block is edited", () => 
     "setext heading": "Title\n=====\n\nText.\n",
     "star bullets": "* one\n* two\n",
     "table alignment": "| a | b |\n|:--|--:|\n| 1 | 2 |\n",
-    footnote: "Claim[^1].\n\n[^1]: Note.\n",
     "backslash escapes": "Not \\*emphasis\\* and 1\\. not a list\n",
     "indented code": "    indented code\n\nafter\n",
   };

@@ -22,6 +22,7 @@
 // — is one block, so the editor sees one anchored code block.
 
 import MarkdownIt from "markdown-it";
+import { markdownExtras } from "./markdownExtras";
 
 export type SourceBlock = {
   // Line range, end exclusive, into the body's lines. Trailing blank
@@ -35,6 +36,7 @@ export type SourceBlock = {
 export type BlockMap = { lines: string[]; blocks: SourceBlock[] };
 
 const md = new MarkdownIt({ html: true, linkify: false });
+markdownExtras(md);
 
 const OPEN_MARKER_LINE = /^\s*<!--\s*fmc:(\d+)\s*-->\s*$/;
 const CLOSE_MARKER_LINE = /^\s*<!--\s*\/fmc:(\d+)\s*-->\s*$/;
