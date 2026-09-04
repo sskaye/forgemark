@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, cleanup, fireEvent } from "@testing-library/react";
 import { useRef } from "react";
 import { HtmlView, type HtmlViewHandle } from "../../src/components/HtmlView";
+import { fakeTauri } from "../utils/harness";
 import { ThemeProvider } from "../../src/theme/ThemeProvider";
 import type { Comment } from "../../src/format/types";
 
@@ -45,6 +46,7 @@ function Harness(props: {
   onAnchorClick?: (id: number | null) => void;
   onRequestElementComment?: (capture: unknown) => void;
   handleOut?: (h: HtmlViewHandle | null) => void;
+  baseDir?: string | null;
 }) {
   const ref = useRef<HtmlViewHandle | null>(null);
   return (
@@ -58,6 +60,7 @@ function Harness(props: {
           onAnchorClick={props.onAnchorClick ?? (() => {})}
           onAnchorHover={() => {}}
           onRequestElementComment={props.onRequestElementComment ?? (() => {})}
+          baseDir={props.baseDir}
           handleRef={ref}
         />
       </main>
@@ -245,5 +248,39 @@ describe("HtmlView", () => {
     const last = paragraphs[paragraphs.length - 1] as HTMLElement;
     last.dispatchEvent(new doc.defaultView!.MouseEvent("click", { bubbles: true }));
     await waitFor(() => expect(onAnchorClick).toHaveBeenCalledWith(null));
+  });
+});
+
+describe("HtmlView relative references and links", () => {
+  beforeEach(() => cleanup());
+
+  it("points the frame at the report's folder", async () => {
+    const { container } = render(<Harness baseDir="/reports" />);
+    await waitFor(() => expect(frameDoc(container).querySelector("base")).toBeTruthy());
+    expect(frameDoc(container).querySelector("base")?.getAttribute("href")).toBe(
+      "asset://localhost/" + encodeURIComponent("/reports/"),
+    );
+  });
+
+  it("opens an address outside, another document in a tab, and scrolls to a fragment", async () => {
+    const body =
+      '<html><head></head><body><h2 id="sec">Sec</h2><p><a href="https://x.y/p">out</a> <a href="other.md">doc</a> <a href="#sec">frag</a></p></body></html>';
+    const { container } = render(<Harness body={body} baseDir="/reports" />);
+    await waitFor(() => expect(frameDoc(container).querySelector("a")).toBeTruthy());
+    const doc = frameDoc(container);
+    const opened = vi.fn();
+    window.addEventListener("forgemark:open-path", opened as (e: Event) => void);
+
+    (doc.querySelector("a[href='https://x.y/p']") as HTMLElement).click();
+    expect(fakeTauri.opener.openUrl).toHaveBeenCalledWith("https://x.y/p");
+
+    (doc.querySelector("a[href='other.md']") as HTMLElement).click();
+    window.removeEventListener("forgemark:open-path", opened as (e: Event) => void);
+    expect((opened.mock.calls[0][0] as CustomEvent).detail.path).toBe("/reports/other.md");
+
+    const pane = container.querySelector(".fm-editor-pane") as HTMLElement;
+    pane.scrollTo = vi.fn();
+    (doc.querySelector("a[href='#sec']") as HTMLElement).click();
+    expect(pane.scrollTo).toHaveBeenCalled();
   });
 });

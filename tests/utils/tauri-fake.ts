@@ -75,8 +75,11 @@ export function createFakeTauri() {
       ask: async () => false,
       message: async () => undefined,
     },
-    opener: { openUrl: async () => undefined },
-    core: { invoke: async () => undefined as unknown },
+    opener: { openUrl: async () => undefined, openPath: async () => undefined },
+    core: {
+      invoke: async () => undefined as unknown,
+      convertFileSrc: (path: string) => `asset://localhost/${encodeURIComponent(path)}`,
+    },
   };
 
   type Mocked<T> = {

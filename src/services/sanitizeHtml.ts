@@ -24,18 +24,29 @@ function safeUrl(value: string): boolean {
   return !/^\s*(javascript|vbscript|data:text\/html)/i.test(value);
 }
 
+export interface SanitizeOptions {
+  // Rewrites a resource reference (an image's `src`, say) for display.
+  resolve?: (ref: string) => string;
+}
+
+const RESOURCE_ATTRS = new Set(["src", "poster"]);
+
 // The sanitized body of `html`, as a fragment of `doc`'s own document.
-export function sanitizeHtml(html: string, doc: Document): DocumentFragment {
+export function sanitizeHtml(
+  html: string,
+  doc: Document,
+  options: SanitizeOptions = {},
+): DocumentFragment {
   const parsed = new DOMParser().parseFromString(html, "text/html");
   const fragment = doc.createDocumentFragment();
   for (const child of Array.from(parsed.body.childNodes)) {
-    const clean = sanitizeNode(child, doc);
+    const clean = sanitizeNode(child, doc, options);
     if (clean) fragment.appendChild(clean);
   }
   return fragment;
 }
 
-function sanitizeNode(node: Node, doc: Document): Node | null {
+function sanitizeNode(node: Node, doc: Document, options: SanitizeOptions): Node | null {
   if (node.nodeType === Node.TEXT_NODE) return doc.importNode(node, false);
   if (node.nodeType !== Node.ELEMENT_NODE) return null;
   const el = node as Element;
@@ -44,10 +55,14 @@ function sanitizeNode(node: Node, doc: Document): Node | null {
   for (const attr of Array.from(el.attributes)) {
     if (/^on/i.test(attr.name)) continue;
     if (URL_ATTRS.has(attr.name.toLowerCase()) && !safeUrl(attr.value)) continue;
-    out.setAttribute(attr.name, attr.value);
+    const value =
+      options.resolve && RESOURCE_ATTRS.has(attr.name.toLowerCase())
+        ? options.resolve(attr.value)
+        : attr.value;
+    out.setAttribute(attr.name, value);
   }
   for (const child of Array.from(el.childNodes)) {
-    const clean = sanitizeNode(child, doc);
+    const clean = sanitizeNode(child, doc, options);
     if (clean) out.appendChild(clean);
   }
   return out;

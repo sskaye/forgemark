@@ -12,13 +12,22 @@ type Props = {
   fileName: string;
   options: PrintOptions | null;
   format?: DocFormat;
+  // The folder the document is in, for images written relative to it.
+  baseDir?: string | null;
 };
 
 // Printing renders the document into a hidden article and then prints the
 // whole webview. The review-notes appendix is the same either way; only
 // the body differs, and it has to, because a report printed through the
 // Markdown editor would come out as its own source code.
-export function PrintDocument({ body, comments, fileName, options, format = "markdown" }: Props) {
+export function PrintDocument({
+  body,
+  comments,
+  fileName,
+  options,
+  format = "markdown",
+  baseDir = null,
+}: Props) {
   const printOptions = options ?? { includeComments: true, includeSuggestions: true };
   const reviewItems = comments.filter((comment) =>
     comment.suggested_edit ? printOptions.includeSuggestions : printOptions.includeComments,
@@ -29,7 +38,11 @@ export function PrintDocument({ body, comments, fileName, options, format = "mar
       <header className="fm-print-header">
         <h1>{fileName}</h1>
       </header>
-      {format === "html" ? <PrintHtmlBody body={body} /> : <PrintMarkdownBody body={body} />}
+      {format === "html" ? (
+        <PrintHtmlBody body={body} />
+      ) : (
+        <PrintMarkdownBody body={body} baseDir={baseDir} />
+      )}
       {reviewItems.length > 0 && (
         <section className="fm-print-review" data-testid="fm-print-review">
           <h2>Review notes</h2>
@@ -99,11 +112,11 @@ function PrintHtmlBody({ body }: { body: string }) {
   );
 }
 
-function PrintMarkdownBody({ body }: { body: string }) {
+function PrintMarkdownBody({ body, baseDir }: { body: string; baseDir: string | null }) {
   const initialMarkdown = useMemo(() => bodyWithAnchorElements(body), [body]);
   const editor = useEditor({
     // The editor's own pipeline, so the page prints what the reader saw.
-    extensions: renderedExtensions(),
+    extensions: renderedExtensions([], { baseDir }),
     content: initialMarkdown,
     editable: false,
     editorProps: {

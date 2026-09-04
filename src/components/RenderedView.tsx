@@ -5,7 +5,11 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { EditorView } from "@tiptap/pm/view";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration as PMDecoration, DecorationSet } from "@tiptap/pm/view";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openPath, openUrl } from "@tauri-apps/plugin-opener";
+import { classifyLink } from "../services/documentLinks";
+import { deliverOpenPath } from "../state/menuBridge";
+import { scrollToFragment } from "./HeadingIds";
+import { setAssetBase } from "./AssetPaths";
 import { splitFrontmatter } from "../format";
 import { createBlockSync, type BlockSync, type Serializer } from "./blockSync";
 import { renderedExtensions } from "./editorExtensions";
@@ -18,7 +22,6 @@ import {
   plainText,
   setAnchorHighlight,
 } from "./AnchorEdge";
-import { normalizeExternalUrl } from "../services/externalLinks";
 import { findLiteralMatches } from "../services/findReplace";
 import {
   buildNormalizedIndex,
@@ -104,6 +107,9 @@ type Props = {
   onAnchorHover: (id: number | null) => void;
   onExternalLinkError?: (message: string) => void;
   onOpenExternalLink?: (url: string) => Promise<void> | void;
+  // The folder the document is in: relative images load from it and
+  // relative links resolve against it.
+  baseDir?: string | null;
   // Phase 5 composer trigger handle. The parent attaches this and calls
   // `current.captureSelection()` from the ⌘⌥M shortcut handler.
   handleRef?: React.MutableRefObject<RenderedViewHandle | null>;
@@ -135,6 +141,7 @@ export function RenderedView({
   onAnchorHover,
   onExternalLinkError,
   onOpenExternalLink = openUrl,
+  baseDir = null,
   handleRef,
   onSelectionChange,
 }: Props) {
@@ -172,7 +179,7 @@ export function RenderedView({
   onSelectionChangeRef.current = onSelectionChange;
 
   const editor = useEditor({
-    extensions: renderedExtensions([SearchHighlightExtension]),
+    extensions: renderedExtensions([SearchHighlightExtension], { baseDir }),
     content: initialMarkdown,
     editable: !readOnly,
     // The editor is constructed with the right content already, so it's
@@ -251,24 +258,39 @@ export function RenderedView({
     editor.setEditable(!readOnly);
   }, [editor, readOnly]);
 
+  // A Save As moves the document's folder with it.
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    setAssetBase(editor.view, baseDir);
+  }, [editor, baseDir]);
+
   // Click + hover delegation on links and anchor highlights. Links win over
   // comment-anchor focus: clicking an anchored link should open the link,
-  // not just focus the comment card.
+  // not just focus the comment card. An address opens outside; a
+  // fragment scrolls to its heading; another document opens in a tab;
+  // any other file opens in whatever the system uses for it.
   useEffect(() => {
     if (!editor) return;
     const root = editor.view.dom;
     const findAnchor = anchorIdOf;
+    const failed = (what: string) => (err: unknown) => {
+      const detail = err instanceof Error ? err.message : String(err);
+      onExternalLinkError?.(`${what} failed: ${detail}`);
+    };
     const onClick = (e: Event) => {
       const link = findExternalLink(e.target);
       if (link) {
         e.preventDefault();
         e.stopPropagation();
-        const url = normalizeExternalUrl(link.getAttribute("href"));
-        if (url) {
-          void Promise.resolve(onOpenExternalLink(url)).catch((err: unknown) => {
-            const detail = err instanceof Error ? err.message : String(err);
-            onExternalLinkError?.(`Open link failed: ${detail}`);
-          });
+        const target = classifyLink(link.getAttribute("href"), baseDir);
+        if (target.kind === "external") {
+          void Promise.resolve(onOpenExternalLink(target.url)).catch(failed("Open link"));
+        } else if (target.kind === "fragment") {
+          scrollToFragment(root, target.id);
+        } else if (target.kind === "document") {
+          deliverOpenPath(target.path);
+        } else if (target.kind === "file") {
+          void openPath(target.path).catch(failed("Open file"));
         }
         return;
       }
@@ -295,7 +317,7 @@ export function RenderedView({
       root.removeEventListener("mouseover", onMouseOver);
       root.removeEventListener("mouseout", onMouseOut);
     };
-  }, [editor, onAnchorClick, onAnchorHover, onExternalLinkError, onOpenExternalLink]);
+  }, [editor, baseDir, onAnchorClick, onAnchorHover, onExternalLinkError, onOpenExternalLink]);
 
   // The focused and hovered comment light up their highlights. The
   // classes ride on the highlight decorations themselves: Tiptap owns

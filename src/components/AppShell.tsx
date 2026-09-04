@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { dirOf } from "../services/documentLinks";
 import { TitleBar } from "./TitleBar";
 import { TabBar } from "./TabBar";
 import { Sidebar } from "./Sidebar";
@@ -307,6 +308,7 @@ export function AppShell() {
           fileName={state.fileName}
           options={printOptions}
           format={state.format}
+          baseDir={dirOf(state.filePath)}
         />
       )}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}

@@ -375,6 +375,16 @@ where a footnote definition starts and ends. `AlertBlockquote`, `FootnoteRef`,
 `FootnoteDef`, and `MarkdownTable` (which escapes a pipe in a cell) render and
 write those forms back.
 
+**Relative references and links.** `src/services/documentLinks.ts` resolves a
+reference against the document's folder and classifies a clicked link: an
+address, a `#fragment`, another document (opened in a tab through
+`deliverOpenPath`), or any other file (opened with the system). `AssetPaths`
+gives relative images an asset URL through a decoration, so the file keeps the
+path as written; `HeadingIds` gives every heading GitHub's id the same way. The
+report frame gets a `<base>` pointing at the folder, which is why the asset
+protocol is enabled and admitted for stylesheets, fonts, and media in the
+Content Security Policy.
+
 **Anchor edges as nodes.** `AnchorEdge` (`src/components/AnchorEdge.ts`) is an
 inline atom node; the display form `bodyWithAnchorElements` produces is
 `<fm-anchor data-edge="open" data-id="N"></fm-anchor>`, which markdown-it passes

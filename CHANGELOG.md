@@ -19,6 +19,8 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 
 ### Fixed
 
+- Images and links written relative to the document work. `![](images/x.png)`, an `<img src="images/x.png">`, and a report's own stylesheet, fonts, or images next to it load from the document's folder. A link to `#heading` scrolls to it (every heading now carries the id GitHub would give it), a link to another `.md` or `.html` file opens it in a tab, a link to any other file opens it with the system, and an address opens outside as before. Links inside an HTML report, which did nothing, do the same.
+- Wide tables scroll sideways instead of squeezing every column.
 - Math is drawn by KaTeX: `$x^2$` in text, `$$` on its own lines around a block, or a ` ```math ` fence, each written back in the form it came in. Mermaid fences are drawn as diagrams; the library loads the first time one is shown.
 - Fenced code is syntax-highlighted for the languages highlight.js calls common, in the theme's own colours. A block with no language stays plain rather than being guessed at.
 - GitHub alerts (`> [!NOTE]` and the other four kinds) and footnotes (`[^1]` with `[^1]: text`) are rendered as GitHub renders them, and an edit near either keeps it. Both used to show as literal text and come back escaped and broken after an edit. A single tilde strikes through, as the GFM spec allows. A pipe written as `\|` in a table cell stays escaped when the table is edited instead of splitting the cell.

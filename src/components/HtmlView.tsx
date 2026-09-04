@@ -11,6 +11,9 @@ import { describeElement, renderedText, selectionTextRange } from "../services/h
 import { useTheme } from "../theme/ThemeProvider";
 import "./HtmlView.css";
 import { anchorIdOf } from "../services/anchorDom";
+import { openPath, openUrl } from "@tauri-apps/plugin-opener";
+import { assetUrl, classifyLink } from "../services/documentLinks";
+import { deliverOpenPath } from "../state/menuBridge";
 
 // Rendered view for HTML documents.
 //
@@ -83,6 +86,10 @@ type Props = {
   // Fires as the reader selects and deselects text in the report, so the
   // host can float a Comment / Suggest edit affordance at the selection.
   onSelectionChange?: (capture: HtmlCapturedSelection | null) => void;
+  // The folder the report is in: a stylesheet, image, or link written
+  // relative to the report resolves against it.
+  baseDir?: string | null;
+  onLinkError?: (message: string) => void;
   handleRef?: React.MutableRefObject<HtmlViewHandle | null>;
 };
 
@@ -96,6 +103,8 @@ export function HtmlView({
   onRequestElementComment,
   onContextMenu,
   onSelectionChange,
+  baseDir = null,
+  onLinkError,
   handleRef,
 }: Props) {
   // Commentable blocks and where they sit inside the frame, so the host
@@ -130,6 +139,8 @@ export function HtmlView({
     onContextMenu,
     textMap,
     body,
+    baseDir,
+    onLinkError,
   });
   latest.current = {
     onAnchorClick,
@@ -138,6 +149,8 @@ export function HtmlView({
     onContextMenu,
     textMap,
     body,
+    baseDir,
+    onLinkError,
   };
 
   const stylesheet = useMemo(
@@ -353,7 +366,10 @@ export function HtmlView({
       // The elements these point at are about to be discarded.
       setBlocks([]);
       doc.open();
-      doc.write(body);
+      // A `<base>` at the folder the report is in, so a stylesheet,
+      // font, or image written relative to the report loads. It has no
+      // text, so the source text map is unaffected.
+      doc.write(withBase(body, latest.current.baseDir));
       doc.close();
 
       // Reports written for the artifact convention honour an explicit
@@ -371,11 +387,24 @@ export function HtmlView({
       const findAnchorId = anchorIdOf;
 
       const onClick = (e: Event) => {
-        // Links inside a report would navigate the iframe away from the
-        // document under review. Nothing here opens them yet, so the
-        // safe behaviour is to do nothing rather than lose the report.
+        // A link must never navigate the frame away from the report.
+        // An address opens outside; a fragment scrolls the pane to its
+        // target; another document opens in a tab; any other file opens
+        // with whatever the system uses for it.
         const link = (e.target as Element | null)?.closest?.("a[href]");
-        if (link) e.preventDefault();
+        if (link) {
+          e.preventDefault();
+          const target = classifyLink(link.getAttribute("href"), latest.current.baseDir);
+          const failed = (what: string) => (err: unknown) => {
+            const detail = err instanceof Error ? err.message : String(err);
+            latest.current.onLinkError?.(`${what} failed: ${detail}`);
+          };
+          if (target.kind === "external") void openUrl(target.url).catch(failed("Open link"));
+          else if (target.kind === "fragment") scrollPaneTo(frame, doc.getElementById(target.id));
+          else if (target.kind === "document") deliverOpenPath(target.path);
+          else if (target.kind === "file") void openPath(target.path).catch(failed("Open file"));
+          return;
+        }
         latest.current.onAnchorClick(findAnchorId(e.target));
       };
 
@@ -530,21 +559,7 @@ export function HtmlView({
         const frame = frameRef.current;
         const doc = frame?.contentDocument;
         if (!frame || !doc) return;
-        const el = anchorElement(doc, id);
-        const pane = frame.closest<HTMLElement>(".fm-editor-pane");
-        if (!el || !pane) return;
-        const top = el.getBoundingClientRect().top + (doc.defaultView?.scrollY ?? 0);
-        const paneRect = pane.getBoundingClientRect();
-        const frameTop = frame.getBoundingClientRect().top - paneRect.top + pane.scrollTop;
-        const target = Math.max(0, frameTop + top - 80);
-        // The anchor is inside the frame, which can't scroll its own
-        // host, so the pane is moved instead. `scrollTo` is the smooth
-        // path; assigning scrollTop is the one that always exists.
-        if (typeof pane.scrollTo === "function") {
-          pane.scrollTo({ top: target, behavior: "smooth" });
-        } else {
-          pane.scrollTop = target;
-        }
+        scrollPaneTo(frame, anchorElement(doc, id));
       },
     };
     return () => {
@@ -863,4 +878,39 @@ function matchingEndTag(body: string, tag: string, from: number): number {
     if (depth === 0) return match.index + match[0].length;
   }
   return -1;
+}
+
+// Bring an element inside the frame into view. The element is inside
+// the frame, which can't scroll its own host, so the pane is moved
+// instead. `scrollTo` is the smooth path; assigning scrollTop is the
+// one that always exists.
+function scrollPaneTo(frame: HTMLIFrameElement, el: Element | null): void {
+  const doc = frame.contentDocument;
+  const pane = frame.closest<HTMLElement>(".fm-editor-pane");
+  if (!el || !doc || !pane) return;
+  const top = el.getBoundingClientRect().top + (doc.defaultView?.scrollY ?? 0);
+  const paneRect = pane.getBoundingClientRect();
+  const frameTop = frame.getBoundingClientRect().top - paneRect.top + pane.scrollTop;
+  const target = Math.max(0, frameTop + top - 80);
+  if (typeof pane.scrollTo === "function") {
+    pane.scrollTo({ top: target, behavior: "smooth" });
+  } else {
+    pane.scrollTop = target;
+  }
+}
+
+// The report with a `<base href>` at its folder, placed where the
+// parser sees it before any relative reference: right after `<head>`,
+// or at the top when there is no head. A report that sets its own base
+// keeps it.
+export function withBase(html: string, baseDir: string | null): string {
+  if (!baseDir || /<base\s/i.test(html)) return html;
+  const folder = baseDir.endsWith("/") || baseDir.endsWith("\\") ? baseDir : `${baseDir}/`;
+  const tag = `<base href="${assetUrl(folder).replace(/"/g, "&quot;")}">`;
+  const head = /<head(\s[^>]*)?>/i.exec(html);
+  if (head)
+    return (
+      html.slice(0, head.index + head[0].length) + tag + html.slice(head.index + head[0].length)
+    );
+  return tag + html;
 }

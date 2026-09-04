@@ -44,6 +44,8 @@ import { FootnoteDef, FootnoteRef } from "./Footnotes";
 import { MarkdownTable } from "./MarkdownTable";
 import { MathBlock, MathInline } from "./Math";
 import { MermaidBlock } from "./Mermaid";
+import { AssetPaths } from "./AssetPaths";
+import { HeadingIds } from "./HeadingIds";
 import { AnchorEdge } from "./AnchorEdge";
 import { CodeBlockAnchor } from "./CodeBlockAnchor";
 import { VerbatimBlock } from "./VerbatimBlock";
@@ -179,8 +181,18 @@ const MarkdownSyntax = Extension.create({
   },
 });
 
-export function renderedExtensions(extra: AnyExtension[] = []): AnyExtension[] {
+export interface RenderedOptions {
+  // The folder the document is in, for images written relative to it.
+  baseDir?: string | null;
+}
+
+export function renderedExtensions(
+  extra: AnyExtension[] = [],
+  options: RenderedOptions = {},
+): AnyExtension[] {
   return [
+    AssetPaths.configure({ baseDir: options.baseDir ?? null }),
+    HeadingIds,
     // StarterKit ships its own Link, Code, and CodeBlock; each is
     // replaced by a configured variant below.
     StarterKit.configure({

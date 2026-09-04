@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { dirOf } from "../services/documentLinks";
 import { useWorkspace } from "../state/DocumentProvider";
 import type { DocId } from "../state/workspace";
 import { useAuthorName } from "../state/preferences";
@@ -821,6 +822,8 @@ export function EditorPane({ docId }: Props) {
             onAnchorHover={(id) => dispatch({ type: "setHoveredComment", id })}
             onRequestElementComment={(capture) => openComposerFor(capture)}
             onContextMenu={(at) => setContextMenu({ x: at.x, y: at.y })}
+            onLinkError={(message) => dispatch({ type: "error", message })}
+            baseDir={dirOf(state.filePath)}
             // Background documents stay mounted, and the toolbar is
             // position:fixed — an inactive pane must neither poll nor
             // paint one over the document in front.
@@ -840,6 +843,7 @@ export function EditorPane({ docId }: Props) {
             onAnchorClick={(id) => dispatch({ type: "setFocusedComment", id })}
             onAnchorHover={(id) => dispatch({ type: "setHoveredComment", id })}
             onExternalLinkError={(message) => dispatch({ type: "error", message })}
+            baseDir={dirOf(state.filePath)}
             handleRef={handleRef}
             onSelectionChange={
               isActive

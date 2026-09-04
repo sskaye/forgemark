@@ -1,5 +1,6 @@
 import { Node, mergeAttributes } from "@tiptap/core";
 import { sanitizeHtml } from "../services/sanitizeHtml";
+import { resolveResource } from "../services/documentLinks";
 
 // A block the editor cannot hold — raw HTML: a comment, a <div>, a
 // <details> — shown read-only and written back byte for byte.
@@ -53,7 +54,13 @@ export const VerbatimBlock = Node.create({
 
   renderHTML({ node, HTMLAttributes }) {
     const source = String(node.attrs.source);
-    const shown = typeof document === "undefined" ? null : sanitizeHtml(source, document);
+    const baseDir =
+      (this.editor?.storage as { assetPaths?: { baseDir: string | null } } | undefined)?.assetPaths
+        ?.baseDir ?? null;
+    const shown =
+      typeof document === "undefined"
+        ? null
+        : sanitizeHtml(source, document, { resolve: (ref) => resolveResource(baseDir, ref) });
     if (shown && hasVisibleContent(shown)) {
       const wrapper = document.createElement("div");
       for (const [name, value] of Object.entries(HTMLAttributes)) {
