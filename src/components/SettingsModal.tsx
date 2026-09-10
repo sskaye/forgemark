@@ -5,7 +5,9 @@ import {
   useAuthorName,
   useFontSize,
   useDefaultView,
+  useDocumentWidth,
   FONT_SIZE_RANGE,
+  type DocumentWidthPreference,
   type ViewPreference,
 } from "../state/preferences";
 import { useTheme } from "../theme/ThemeProvider";
@@ -23,6 +25,7 @@ export function SettingsModal({ onClose }: Props) {
   const { preference: theme, setPreference: setTheme } = useTheme();
   const [fontSize, setFontSize] = useFontSize();
   const [defaultView, setDefaultView] = useDefaultView();
+  const [documentWidth, setDocumentWidth] = useDocumentWidth();
   const authorRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     authorRef.current?.focus();
@@ -91,6 +94,20 @@ export function SettingsModal({ onClose }: Props) {
                 +
               </button>
             </div>
+          </Field>
+          <Field
+            label="Document width"
+            hint="Readable keeps a book-like column; Wide fills the window."
+          >
+            <Segmented
+              testid="fm-settings-document-width"
+              value={documentWidth}
+              options={[
+                { value: "readable", label: "Readable" },
+                { value: "wide", label: "Wide" },
+              ]}
+              onChange={(v) => setDocumentWidth(v as DocumentWidthPreference)}
+            />
           </Field>
           <Field label="Default view" hint="Applies to the next opened document.">
             <Segmented

@@ -75,6 +75,17 @@ describe("Phase 11 — Settings modal", () => {
     expect(window.localStorage.getItem("forgemark.theme")).toBe("dark");
   });
 
+  it("Document width segmented persists and sets data-doc-width on the root", async () => {
+    renderApp();
+    expect(document.documentElement.dataset.docWidth).toBe("wide");
+    fireEvent.click(screen.getByTestId("fm-titlebar-settings"));
+    fireEvent.click(await screen.findByTestId("fm-settings-document-width-readable"));
+    await waitFor(() => {
+      expect(document.documentElement.dataset.docWidth).toBe("readable");
+    });
+    expect(window.localStorage.getItem("forgemark.documentWidth")).toBe("readable");
+  });
+
   it("Done button closes the modal", async () => {
     renderApp();
     fireEvent.click(screen.getByTestId("fm-titlebar-settings"));

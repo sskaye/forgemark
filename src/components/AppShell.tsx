@@ -22,7 +22,7 @@ import { useDocument, useWorkspace } from "../state/DocumentProvider";
 import { DocumentBindings } from "../state/DocumentBindings";
 import { classifyAnchors, insertMarkersIntoBody, cleanExport } from "../format";
 import { contextSnippet, parseForgemarkFile } from "../format";
-import { useFontSize, useFirstRun } from "../state/preferences";
+import { useDocumentWidth, useFontSize, useFirstRun } from "../state/preferences";
 import { saveDocument } from "../services/fileIO";
 import { applyWindowAction, isWindowAction } from "../services/windowActions";
 import { invoke } from "@tauri-apps/api/core";
@@ -46,6 +46,7 @@ export function AppShell() {
   const [printOptions, setPrintOptions] = useState<PrintOptions | null>(null);
   const [printRequestId, setPrintRequestId] = useState(0);
   const [fontSize] = useFontSize();
+  const [documentWidth] = useDocumentWidth();
   const { firstRunDone, markDone } = useFirstRun();
 
   const requestViewModeChange = useCallback(
@@ -67,6 +68,13 @@ export function AppShell() {
     if (typeof document === "undefined") return;
     document.documentElement.style.setProperty("--fm-font-size", fontSize + "px");
   }, [fontSize]);
+
+  // Settings → Document width. EditorPane.css reads the attribute: the
+  // column stays at its readable measure or fills the pane.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.documentElement.dataset.docWidth = documentWidth;
+  }, [documentWidth]);
 
   const continueToPrint = (options: PrintOptions) => {
     setPrintOptions(options);

@@ -1,11 +1,56 @@
 .fm-sidebar {
-  width: 320px;
+  position: relative; /* anchor for the resize handle */
+  width: var(--fm-sidebar-width, 320px);
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   background: var(--fm-sidebar-bg);
   border-left: 0.5px solid var(--fm-divider);
   overflow: hidden;
+}
+
+/* Drag the left edge to resize. The handle straddles the divider, wide
+   enough to grab without being visible until hovered or dragged. */
+.fm-sidebar-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  width: 7px;
+  cursor: col-resize;
+  z-index: 6;
+  background: transparent;
+  outline: none;
+  touch-action: none;
+}
+
+.fm-sidebar-resize::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 2px;
+  background: var(--fm-accent);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.fm-sidebar-resize:hover::after,
+.fm-sidebar-resize:focus-visible::after,
+.fm-sidebar-resize[data-dragging="true"]::after {
+  opacity: 1;
+}
+
+/* While a drag is in flight the report frame must not swallow the
+   pointer, and the page must not start selecting text. */
+body[data-sidebar-resizing="true"] {
+  cursor: col-resize;
+  user-select: none;
+}
+
+body[data-sidebar-resizing="true"] iframe {
+  pointer-events: none;
 }
 
 .fm-sidebar-header {

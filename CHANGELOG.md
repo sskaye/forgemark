@@ -2,6 +2,13 @@
 
 All notable changes to Forgemark are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Settings → Document width. Wide, the new default, lets a Markdown document fill the window behind a gutter that grows with it, from 48px on a small laptop to 120px on a large display, instead of stopping at a 720px column; Readable keeps the column. An HTML report is not affected: it sets its own width.
+- The comments sidebar can be resized by dragging its left edge, between 240px and 720px. Double-click the edge to reset it, or focus it and use the arrow keys. The width is remembered across launches.
+
 ## [1.7.0] — 2026-09-04
 
 ### Added

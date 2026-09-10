@@ -238,8 +238,8 @@ export const THEMES: Record<"light" | "dark", Theme> = { light: LIGHT, dark: DAR
 // Locked for v1.
 export const LAYOUT = {
   chromeHeight: 44, // titlebar + toolbar combined
-  sidebarWidth: 320, // fixed
-  documentMaxWidth: 720, // centered inside the editor pane
+  sidebarWidth: 320, // default; the user can drag it
+  documentMaxWidth: 720, // the Readable column, centered inside the editor pane
   editorPadding: { vertical: 32, horizontal: 48 },
   cardPadding: { vertical: 12, horizontal: 14 },
   cardGap: 10,
