@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ThemeProvider } from "../../src/theme/ThemeProvider";
 import { DocumentProvider } from "../../src/state/DocumentProvider";
@@ -69,6 +69,88 @@ describe("AppShell layout", () => {
   it("renders in dark mode without throwing", () => {
     renderShell("dark");
     expect(document.documentElement.dataset.theme).toBe("dark");
+  });
+
+  describe("sidebar resize handle", () => {
+    // jsdom has neither PointerEvent nor pointer capture. Without the
+    // constructor, fireEvent falls back to a bare Event and drops
+    // `button` and `clientX`.
+    const proto = HTMLElement.prototype as unknown as Record<string, unknown>;
+    const win = window as unknown as Record<string, unknown>;
+    const saved = {
+      set: proto.setPointerCapture,
+      release: proto.releasePointerCapture,
+      has: proto.hasPointerCapture,
+      PointerEvent: win.PointerEvent,
+    };
+    beforeEach(() => {
+      window.localStorage.clear();
+      proto.setPointerCapture = vi.fn();
+      proto.releasePointerCapture = vi.fn();
+      proto.hasPointerCapture = vi.fn(() => true);
+      win.PointerEvent = class extends MouseEvent {
+        pointerId: number;
+        constructor(type: string, init: globalThis.MouseEventInit & { pointerId?: number } = {}) {
+          super(type, init);
+          this.pointerId = init.pointerId ?? 0;
+        }
+      };
+    });
+    afterEach(() => {
+      proto.setPointerCapture = saved.set;
+      proto.releasePointerCapture = saved.release;
+      proto.hasPointerCapture = saved.has;
+      win.PointerEvent = saved.PointerEvent;
+    });
+
+    const sidebarWidth = () =>
+      screen.getByTestId("fm-sidebar").style.getPropertyValue("--fm-sidebar-width");
+
+    it("starts at the default width", () => {
+      renderShell();
+      expect(sidebarWidth()).toBe("320px");
+      const handle = screen.getByTestId("fm-sidebar-resize");
+      expect(handle).toHaveAttribute("role", "separator");
+      expect(handle).toHaveAttribute("aria-valuenow", "320");
+    });
+
+    it("dragging the handle left widens the sidebar and remembers it", () => {
+      renderShell();
+      const handle = screen.getByTestId("fm-sidebar-resize");
+      fireEvent.pointerDown(handle, { button: 0, clientX: 1000, pointerId: 1 });
+      expect(document.body.dataset.sidebarResizing).toBe("true");
+      fireEvent.pointerMove(handle, { clientX: 900, pointerId: 1 });
+      // Previewed directly on the element, before React commits.
+      expect(sidebarWidth()).toBe("420px");
+      fireEvent.pointerUp(handle, { clientX: 900, pointerId: 1 });
+      expect(document.body.dataset.sidebarResizing).toBeUndefined();
+      expect(sidebarWidth()).toBe("420px");
+      expect(handle).toHaveAttribute("aria-valuenow", "420");
+      expect(window.localStorage.getItem("forgemark.sidebarWidth")).toBe("420");
+    });
+
+    it("clamps a drag past the limits", () => {
+      renderShell();
+      const handle = screen.getByTestId("fm-sidebar-resize");
+      fireEvent.pointerDown(handle, { button: 0, clientX: 1000, pointerId: 1 });
+      fireEvent.pointerMove(handle, { clientX: 1500, pointerId: 1 });
+      fireEvent.pointerUp(handle, { clientX: 1500, pointerId: 1 });
+      expect(sidebarWidth()).toBe("240px");
+    });
+
+    it("double-click resets, arrow keys step", () => {
+      window.localStorage.setItem("forgemark.sidebarWidth", "500");
+      renderShell();
+      expect(sidebarWidth()).toBe("500px");
+      const handle = screen.getByTestId("fm-sidebar-resize");
+      fireEvent.doubleClick(handle);
+      expect(sidebarWidth()).toBe("320px");
+      fireEvent.keyDown(handle, { key: "ArrowLeft" });
+      expect(sidebarWidth()).toBe("336px");
+      fireEvent.keyDown(handle, { key: "ArrowRight" });
+      fireEvent.keyDown(handle, { key: "ArrowRight" });
+      expect(sidebarWidth()).toBe("304px");
+    });
   });
 
   it("layout constants match the design spec", () => {

@@ -61,3 +61,13 @@
   line-height: var(--fm-prose-leading);
   letter-spacing: var(--fm-prose-letterspacing);
 }
+
+/* Settings → Document width → Wide. The column fills the pane behind a
+   gutter that grows with the window: 48px on a small laptop, up to
+   120px on a large display (about 6% of the window each side). Reports
+   are unaffected: the frame already fills the pane and the report sets
+   its own measure. */
+[data-doc-width="wide"] .fm-document:not(.fm-document--report) {
+  max-width: none;
+  padding: 32px clamp(48px, 6vw, 120px);
+}

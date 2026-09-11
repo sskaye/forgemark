@@ -5,9 +5,12 @@ import {
   useThemePreference,
   useFontSize,
   useDefaultView,
+  useDocumentWidth,
+  useSidebarWidth,
   useRecentFiles,
   useFirstRun,
   FONT_SIZE_RANGE,
+  SIDEBAR_WIDTH_RANGE,
 } from "../../src/state/preferences";
 
 beforeEach(() => {
@@ -71,6 +74,46 @@ describe("preferences — font size", () => {
     expect(result.current[0]).toBe(FONT_SIZE_RANGE.max);
     act(() => result.current[1](2));
     expect(result.current[0]).toBe(FONT_SIZE_RANGE.min);
+  });
+});
+
+describe("preferences — document width", () => {
+  it("defaults to 'wide'", () => {
+    const { result } = renderHook(() => useDocumentWidth());
+    expect(result.current[0]).toBe("wide");
+  });
+
+  it("persists and ignores an unknown value", () => {
+    window.localStorage.setItem("forgemark.documentWidth", "enormous");
+    const { result } = renderHook(() => useDocumentWidth());
+    expect(result.current[0]).toBe("wide");
+    act(() => result.current[1]("readable"));
+    expect(result.current[0]).toBe("readable");
+    expect(window.localStorage.getItem("forgemark.documentWidth")).toBe("readable");
+  });
+});
+
+describe("preferences — sidebar width", () => {
+  it("defaults to 320", () => {
+    const { result } = renderHook(() => useSidebarWidth());
+    expect(result.current[0]).toBe(SIDEBAR_WIDTH_RANGE.default);
+  });
+
+  it("clamps to range and rounds", () => {
+    const { result } = renderHook(() => useSidebarWidth());
+    act(() => result.current[1](5000));
+    expect(result.current[0]).toBe(SIDEBAR_WIDTH_RANGE.max);
+    act(() => result.current[1](10));
+    expect(result.current[0]).toBe(SIDEBAR_WIDTH_RANGE.min);
+    act(() => result.current[1](400.6));
+    expect(result.current[0]).toBe(401);
+    expect(window.localStorage.getItem("forgemark.sidebarWidth")).toBe("401");
+  });
+
+  it("clamps a stored value that is out of range", () => {
+    window.localStorage.setItem("forgemark.sidebarWidth", "12");
+    const { result } = renderHook(() => useSidebarWidth());
+    expect(result.current[0]).toBe(SIDEBAR_WIDTH_RANGE.min);
   });
 });
 

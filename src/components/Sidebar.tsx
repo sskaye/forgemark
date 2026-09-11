@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { SkillNotice } from "./SkillNotice";
+import { SidebarResizeHandle } from "./SidebarResizeHandle";
 import { useDocument } from "../state/DocumentProvider";
-import { useAuthorName } from "../state/preferences";
+import { useAuthorName, useSidebarWidth } from "../state/preferences";
 import { FMCard } from "./FMCard";
 import { replaceAnchoredText, stripAnchoredMarkers, type AnchorStatus } from "../format";
 import type { Comment, Reply } from "../format/types";
@@ -23,6 +24,8 @@ type SidebarProps = {
 export function Sidebar({ anchorStatuses }: SidebarProps) {
   const { state, dispatch } = useDocument();
   const [authorName] = useAuthorName();
+  const [sidebarWidth, setSidebarWidth] = useSidebarWidth();
+  const asideRef = useRef<HTMLElement | null>(null);
   const { comments, focusedCommentId, hoveredCommentId, composer, filter, sort } = state;
 
   const visibleComments = useMemo(
@@ -100,7 +103,18 @@ export function Sidebar({ anchorStatuses }: SidebarProps) {
   }, [focusedCommentId, comments, dispatch, authorName, state.body]);
 
   return (
-    <aside className="fm-sidebar" data-testid="fm-sidebar" aria-label="Comments">
+    <aside
+      ref={asideRef}
+      className="fm-sidebar"
+      data-testid="fm-sidebar"
+      aria-label="Comments"
+      style={{ "--fm-sidebar-width": sidebarWidth + "px" } as React.CSSProperties}
+    >
+      <SidebarResizeHandle
+        width={sidebarWidth}
+        onPreview={(w) => asideRef.current?.style.setProperty("--fm-sidebar-width", w + "px")}
+        onCommit={setSidebarWidth}
+      />
       <SidebarHeader
         orphaned={orphans.length}
         openVisibleIds={visibleComments.filter((c) => !c.resolved).map((c) => c.id)}

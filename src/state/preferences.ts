@@ -10,6 +10,8 @@ const KEY_AUTHOR = PREFIX + "author";
 const KEY_THEME = PREFIX + "theme";
 const KEY_FONT_SIZE = PREFIX + "fontSize";
 const KEY_DEFAULT_VIEW = PREFIX + "defaultView";
+const KEY_DOCUMENT_WIDTH = PREFIX + "documentWidth";
+const KEY_SIDEBAR_WIDTH = PREFIX + "sidebarWidth";
 const KEY_RECENT_FILES = PREFIX + "recentFiles";
 const KEY_FIRST_RUN_DONE = PREFIX + "firstRunDone";
 
@@ -19,10 +21,17 @@ const DEFAULT_FONT_SIZE = 17;
 const MIN_FONT_SIZE = 14;
 const MAX_FONT_SIZE = 22;
 const DEFAULT_VIEW: ViewPreference = "rendered";
+const DEFAULT_DOCUMENT_WIDTH: DocumentWidthPreference = "wide";
+const DEFAULT_SIDEBAR_WIDTH = 320;
+const MIN_SIDEBAR_WIDTH = 240;
+const MAX_SIDEBAR_WIDTH = 720;
 const RECENT_FILES_LIMIT = 10;
 
 export type ThemePreference = "light" | "dark" | "system";
 export type ViewPreference = "rendered" | "source";
+// "readable" keeps the document to a book-like column (720px);
+// "wide" lets it fill the pane behind a gutter that grows with the window.
+export type DocumentWidthPreference = "readable" | "wide";
 
 export type RecentFile = {
   path: string;
@@ -74,6 +83,42 @@ export function useDefaultView(): [ViewPreference, (next: ViewPreference) => voi
     (v): v is ViewPreference => v === "rendered" || v === "source",
   );
 }
+
+// ── Document width ────────────────────────────────────────────────────
+
+export function useDocumentWidth(): [
+  DocumentWidthPreference,
+  (next: DocumentWidthPreference) => void,
+] {
+  return useEnumPref<DocumentWidthPreference>(
+    KEY_DOCUMENT_WIDTH,
+    DEFAULT_DOCUMENT_WIDTH,
+    (v): v is DocumentWidthPreference => v === "readable" || v === "wide",
+  );
+}
+
+// ── Sidebar width ─────────────────────────────────────────────────────
+
+// Set by dragging the sidebar's left edge. Clamped so the sidebar can
+// neither vanish nor swallow the document.
+export function useSidebarWidth(): [number, (next: number) => void] {
+  const [width, setWidth] = useNumberPref(KEY_SIDEBAR_WIDTH, DEFAULT_SIDEBAR_WIDTH);
+  const setClamped = (next: number) => {
+    setWidth(clampSidebarWidth(next));
+  };
+  return [clampSidebarWidth(width), setClamped];
+}
+
+export function clampSidebarWidth(next: number): number {
+  if (!Number.isFinite(next)) return DEFAULT_SIDEBAR_WIDTH;
+  return Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, Math.round(next)));
+}
+
+export const SIDEBAR_WIDTH_RANGE = {
+  min: MIN_SIDEBAR_WIDTH,
+  max: MAX_SIDEBAR_WIDTH,
+  default: DEFAULT_SIDEBAR_WIDTH,
+};
 
 // ── Recent files ──────────────────────────────────────────────────────
 
