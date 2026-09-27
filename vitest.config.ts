@@ -1,3 +1,4 @@
+import { availableParallelism } from "node:os";
 import { defineConfig } from "vitest/config";
 
 // Vitest uses esbuild internally to handle JSX/TSX, so we don't need the
@@ -13,5 +14,8 @@ export default defineConfig({
     // tests/ai holds prompt/expectation cases run by hand with a sub-agent
     // (see CONVENTIONS.md); there are no runnable tests in it.
     exclude: ["tests/ai/**"],
+    // A CI runner has three or four cores and nothing else to do; the
+    // default leaves one idle.
+    ...(process.env.CI ? { maxWorkers: availableParallelism() } : {}),
   },
 });
