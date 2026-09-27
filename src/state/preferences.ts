@@ -21,7 +21,11 @@ const DEFAULT_FONT_SIZE = 17;
 const MIN_FONT_SIZE = 14;
 const MAX_FONT_SIZE = 22;
 const DEFAULT_VIEW: ViewPreference = "rendered";
-const DEFAULT_DOCUMENT_WIDTH: DocumentWidthPreference = "wide";
+const DEFAULT_DOCUMENT_WIDTH: DocumentWidth = "full";
+const MIN_DOCUMENT_WIDTH = 40;
+const MAX_DOCUMENT_WIDTH = 160;
+// About what the old "Readable" column (720px at 17px) held.
+const READABLE_DOCUMENT_WIDTH = 70;
 const DEFAULT_SIDEBAR_WIDTH = 320;
 const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 720;
@@ -29,9 +33,10 @@ const RECENT_FILES_LIMIT = 10;
 
 export type ThemePreference = "light" | "dark" | "system";
 export type ViewPreference = "rendered" | "source";
-// "readable" keeps the document to a book-like column (720px);
-// "wide" lets it fill the pane behind a gutter that grows with the window.
-export type DocumentWidthPreference = "readable" | "wide";
+// The document column's measure in average characters of the prose
+// font, so a line holds about the same text at any font size; or "full",
+// filling the pane behind a gutter that grows with the window.
+export type DocumentWidth = number | "full";
 
 export type RecentFile = {
   path: string;
@@ -86,16 +91,38 @@ export function useDefaultView(): [ViewPreference, (next: ViewPreference) => voi
 
 // ── Document width ────────────────────────────────────────────────────
 
-export function useDocumentWidth(): [
-  DocumentWidthPreference,
-  (next: DocumentWidthPreference) => void,
-] {
-  return useEnumPref<DocumentWidthPreference>(
-    KEY_DOCUMENT_WIDTH,
-    DEFAULT_DOCUMENT_WIDTH,
-    (v): v is DocumentWidthPreference => v === "readable" || v === "wide",
-  );
+// Set from the title bar or by dragging the column's edges. Stored as
+// "full" or a whole number; the Readable / Wide setting it replaced
+// reads as its nearest equivalent.
+export function useDocumentWidth(): [DocumentWidth, (next: DocumentWidth) => void] {
+  const [stored, set] = useStringPref(KEY_DOCUMENT_WIDTH, String(DEFAULT_DOCUMENT_WIDTH));
+  const setClamped = (next: DocumentWidth) => {
+    set(String(clampDocumentWidth(next)));
+  };
+  return [parseDocumentWidth(stored), setClamped];
 }
+
+export function parseDocumentWidth(stored: string): DocumentWidth {
+  if (stored === "full" || stored === "wide") return "full";
+  if (stored === "readable") return READABLE_DOCUMENT_WIDTH;
+  const n = Number(stored);
+  return stored.trim() !== "" && Number.isFinite(n)
+    ? clampDocumentWidth(n)
+    : DEFAULT_DOCUMENT_WIDTH;
+}
+
+export function clampDocumentWidth(next: DocumentWidth): DocumentWidth {
+  if (next === "full") return "full";
+  if (!Number.isFinite(next)) return DEFAULT_DOCUMENT_WIDTH;
+  return Math.max(MIN_DOCUMENT_WIDTH, Math.min(MAX_DOCUMENT_WIDTH, Math.round(next)));
+}
+
+export const DOCUMENT_WIDTH_RANGE = {
+  min: MIN_DOCUMENT_WIDTH,
+  max: MAX_DOCUMENT_WIDTH,
+  default: DEFAULT_DOCUMENT_WIDTH,
+  readable: READABLE_DOCUMENT_WIDTH,
+};
 
 // ── Sidebar width ─────────────────────────────────────────────────────
 

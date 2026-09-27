@@ -14,6 +14,7 @@ import { splitFrontmatter } from "../format";
 import { createBlockSync, type BlockSync, type Serializer } from "./blockSync";
 import { renderedExtensions } from "./editorExtensions";
 import { anchorIdOf } from "../services/anchorDom";
+import { isBlockAnchored, nodeText } from "./BlockAnchor";
 import {
   TEXTLESS,
   anchorEdges,
@@ -348,11 +349,13 @@ export function RenderedView({
         // `editable: true` for this — the view dispatches regardless.
         const cls = classifyCodeSelection(editor.state.doc, from, to);
         if (cls.kind === "block") {
-          editor
-            .chain()
-            .setTextSelection({ from: cls.from, to: cls.to })
-            .updateAttributes("codeBlock", { anchorId: String(id) })
-            .run();
+          const node = editor.state.doc.nodeAt(cls.pos)!;
+          editor.view.dispatch(
+            editor.state.tr.setNodeMarkup(cls.pos, undefined, {
+              ...node.attrs,
+              anchorId: String(id),
+            }),
+          );
         } else {
           editor.view.dispatch(anchorEdgesTransaction(editor.state, from, to, id));
         }
@@ -650,8 +653,10 @@ function buildRenderedViewportIndex(doc: ProseMirrorNode) {
 }
 
 // Classify a selection for anchoring relative to code regions:
-//   - "block":  the selection lies within a single fenced code block →
-//               anchor the whole block (from/to/text expanded to it).
+//   - "block":  the selection lies within a single block that is
+//               anchored whole (a code block, an equation, a diagram:
+//               see BlockAnchor.ts) → anchor the whole block (from/to/text
+//               expanded to it; pos is the node's own position).
 //               existingAnchorId is the block's current anchor, if any.
 //   - "reject": the selection is wholly inside inline code, or it crosses
 //               a code-block boundary / spans multiple blocks — neither can
@@ -660,7 +665,14 @@ function buildRenderedViewportIndex(doc: ProseMirrorNode) {
 //               a normal inline anchor.
 export type CodeSelectionClass =
   | { kind: "inline" }
-  | { kind: "block"; from: number; to: number; text: string; existingAnchorId: number | null }
+  | {
+      kind: "block";
+      pos: number;
+      from: number;
+      to: number;
+      text: string;
+      existingAnchorId: number | null;
+    }
   | { kind: "reject"; reason: string };
 
 export function classifyCodeSelection(
@@ -670,19 +682,15 @@ export function classifyCodeSelection(
 ): CodeSelectionClass {
   const blocks: { start: number; end: number; node: ProseMirrorNode }[] = [];
   doc.nodesBetween(from, to, (node, pos) => {
-    if (node.type.name === "codeBlock") {
+    if (isBlockAnchored(node)) {
       blocks.push({ start: pos, end: pos + node.nodeSize, node });
       return false; // don't descend into the code text
     }
     return true;
   });
 
-  if (blocks.length > 1) {
-    return {
-      kind: "reject",
-      reason: "Select within a single code block, or outside it, to comment.",
-    };
-  }
+  const outside = "Select within a single code block or equation, or outside it, to comment.";
+  if (blocks.length > 1) return { kind: "reject", reason: outside };
   if (blocks.length === 1) {
     const b = blocks[0];
     // The whole selection must sit within this block to anchor it cleanly;
@@ -690,20 +698,21 @@ export function classifyCodeSelection(
     if (from >= b.start && to <= b.end) {
       const rawId = b.node.attrs.anchorId;
       const id = rawId == null ? null : Number(rawId);
+      // An atom (an equation, a diagram) is the whole range; a code
+      // block's range is its text.
+      const atom = b.node.isAtom;
       return {
         kind: "block",
-        from: b.start + 1,
-        to: b.end - 1,
-        // textContent can carry a trailing newline; drop it so anchor_text
-        // is the clean code text.
-        text: b.node.textContent.replace(/\n$/, ""),
+        pos: b.start,
+        from: atom ? b.start : b.start + 1,
+        to: atom ? b.end : b.end - 1,
+        // Code can carry a trailing newline; drop it so anchor_text is
+        // the clean code text.
+        text: nodeText(b.node).replace(/\n$/, ""),
         existingAnchorId: id != null && Number.isFinite(id) ? id : null,
       };
     }
-    return {
-      kind: "reject",
-      reason: "Select within a single code block, or outside it, to comment.",
-    };
+    return { kind: "reject", reason: outside };
   }
 
   // No code block — but the selection may be inside inline code. We allow a

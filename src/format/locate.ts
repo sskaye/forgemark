@@ -22,6 +22,7 @@ import { findBySelector } from "./html/elements";
 import { openMarker, closeMarker, type DocFormat } from "./types";
 import { normalizeAnchorText } from "./anchor-text";
 import { contextSnippet } from "./compose";
+import { wholeBlockLines } from "./blocks";
 
 export type Placement = {
   // Source offsets the markers wrap. For a block placement the markers
@@ -29,6 +30,9 @@ export type Placement = {
   start: number;
   end: number;
   block: boolean;
+  // A block in a list item or a quote: what goes before each of its
+  // lines, so the marker lines stay inside it.
+  indent?: string;
   anchor_text: string;
   context_before: string;
   context_after: string;
@@ -146,19 +150,33 @@ export function applyPlacement(body: string, placement: Placement, id: number): 
   if (!placement.block) {
     return body.slice(0, start) + open + body.slice(start, end) + close + body.slice(end);
   }
-  // Own-line markers around a fenced block. `start` is the beginning of
-  // the fence line and `end` the end of the closing fence line.
+  // Own-line markers around a whole block. `start` is where the opening
+  // line's text begins, after any indent, and `end` the end of the
+  // closing line; the marker lines take the same indent.
+  const indent = placement.indent ?? "";
   return (
-    body.slice(0, start) + open + "\n" + body.slice(start, end) + "\n" + close + body.slice(end)
+    body.slice(0, start) +
+    open +
+    "\n" +
+    indent +
+    body.slice(start, end) +
+    "\n" +
+    indent +
+    close +
+    body.slice(end)
   );
 }
 
 // ── Markdown ──────────────────────────────────────────────────────────
 
-type Region = { start: number; end: number; kind: "fence" | "code" };
+// Where a marker cannot go. A "block" is anchored whole, its markers on
+// their own lines around it: a fenced block (code, a math fence, a
+// diagram) or a `$$` equation. An "atom" is widened to: inline code, an
+// inline equation, an image, a wikilink.
+type Region = { start: number; end: number; kind: "block" | "atom"; indent?: string };
 
 function locateInMarkdown(body: string, needle: string, opts: LocateOptions): Placement {
-  const regions = codeRegions(body);
+  const regions = protectedRegions(body);
   const matches = findMatches(body, needle, markdownTolerant(needle));
   const chosen = pick(matches, needle, opts, body);
   let { start, end } = chosen;
@@ -171,18 +189,18 @@ function locateInMarkdown(body: string, needle: string, opts: LocateOptions): Pl
 
   // A match touching a code region is widened to cover the region: a
   // marker inside backticks or a fence would be code, not a comment.
-  let block = false;
+  let block: Region | null = null;
   for (const r of regions) {
     if (r.end <= start || r.start >= end) continue;
-    if (r.kind === "fence") {
+    if (r.kind === "block") {
       if (start < r.start || end > r.end) {
         throw new AnchorError(
-          "The anchor straddles a code block. Anchor the whole block (a phrase inside it) or prose outside it, not both.",
+          "The anchor straddles a code block, an equation, or a diagram. Anchor the whole block (a phrase inside it) or prose outside it, not both.",
         );
       }
       start = r.start;
       end = r.end;
-      block = true;
+      block = r;
       break;
     }
     start = Math.min(start, r.start);
@@ -197,7 +215,8 @@ function locateInMarkdown(body: string, needle: string, opts: LocateOptions): Pl
   return {
     start,
     end,
-    block,
+    block: block !== null,
+    ...(block?.indent ? { indent: block.indent } : {}),
     anchor_text: normalizeAnchorText(source, "markdown"),
     context_before: contextSnippet(normalizeAnchorText(body.slice(0, start), "markdown"), "before"),
     context_after: contextSnippet(normalizeAnchorText(body.slice(end), "markdown"), "after"),
@@ -221,37 +240,52 @@ function balanceEmphasis(body: string, start: number, end: number): { start: num
   return { start, end };
 }
 
-// Fenced blocks (whole lines, fence to fence) and inline code spans.
-function codeRegions(body: string): Region[] {
-  const out: Region[] = [];
+function protectedRegions(body: string): Region[] {
   const lines = body.split("\n");
+  const lineStart: number[] = [];
   let cursor = 0;
-  let fence: { marker: string; start: number } | null = null;
   for (const line of lines) {
-    const lineEnd = cursor + line.length;
-    const m = line.match(/^ {0,3}(`{3,}|~{3,})/);
-    if (fence === null) {
-      if (m) {
-        fence = { marker: m[1], start: cursor };
-      } else {
-        for (const span of inlineCodeSpans(line)) {
-          out.push({ start: cursor + span.start, end: cursor + span.end, kind: "code" });
-        }
-      }
-    } else if (
-      m &&
-      m[1][0] === fence.marker[0] &&
-      m[1].length >= fence.marker.length &&
-      /^\s*$/.test(line.slice(m[0].length))
-    ) {
-      out.push({ start: fence.start, end: lineEnd, kind: "fence" });
-      fence = null;
-    }
-    cursor = lineEnd + 1;
+    lineStart.push(cursor);
+    cursor += line.length + 1;
   }
-  if (fence) out.push({ start: fence.start, end: body.length, kind: "fence" });
+  const out: Region[] = [];
+  const inBlock = new Set<number>();
+  for (const [s, e] of wholeBlockLines(body)) {
+    const indent = lines[s].match(/^\s*/)![0];
+    out.push({
+      start: lineStart[s] + indent.length,
+      end: lineStart[e - 1] + lines[e - 1].length,
+      kind: "block",
+      indent,
+    });
+    for (let n = s; n < e; n++) inBlock.add(n);
+  }
+  lines.forEach((line, n) => {
+    if (inBlock.has(n)) return;
+    for (const span of inlineAtoms(line)) {
+      out.push({ start: lineStart[n] + span.start, end: lineStart[n] + span.end, kind: "atom" });
+    }
+  });
   return out.sort((a, b) => a.start - b.start);
 }
+
+// Spans of a line a marker cannot split: code spans, then, outside
+// them, inline equations, images, and wikilinks.
+function inlineAtoms(line: string): { start: number; end: number }[] {
+  const code = inlineCodeSpans(line);
+  const out = [...code];
+  const inCode = (i: number) => code.some((c) => i >= c.start && i < c.end);
+  for (const m of line.matchAll(INLINE_ATOM)) {
+    if (!inCode(m.index)) out.push({ start: m.index, end: m.index + m[0].length });
+  }
+  return out;
+}
+
+// As markdownExtras reads them: `$…$` with no space just inside either
+// dollar and no digit after the closing one; `![alt](src)`; `<img>`;
+// `![[…]]` and `[[…]]`.
+const INLINE_ATOM =
+  /(?<![\\$])\$(?=[^\s$])[^$\n]*?[^\s$\\]\$(?![\d$])|(?<![\\$])\$[^\s$\\]\$(?![\d$])|!\[[^\]\n]*\]\([^)\n]*\)|<img\b[^>]*>|!?\[\[[^\]\n]+\]\]/g;
 
 function inlineCodeSpans(line: string): { start: number; end: number }[] {
   const out: { start: number; end: number }[] = [];

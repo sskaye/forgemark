@@ -1,22 +1,24 @@
 import { Node } from "@tiptap/core";
 import katex from "katex";
 import "katex/dist/katex.min.css";
+import { blockAnchorAttribute, serializeBlockAnchored, writeLines } from "./BlockAnchor";
 
 // Math as GitHub renders it: `$x^2$` in text, `$$` on its own lines
 // around a block, or a ```math fence. KaTeX draws it; the TeX rides on
 // the node and is written back in the form it came in.
 //
 // src/format/markdownExtras.ts turns the dollar forms into
-// `<span data-fm-math>` and `<div data-fm-math-block>`; the fence form
-// is routed here by the fence renderer below.
+// `<span data-fm-math>` and `<div data-fm-math-block>`, and a math
+// fence into the latter with `data-fm-fence`.
+//
+// An inline equation is commented on like any other text, its TeX
+// standing for it in the comment's anchor text. A block equation is
+// anchored whole (see BlockAnchor.ts).
 
 interface SerializerState {
   write(text: string): void;
+  ensureNewLine(): void;
   closeBlock(node: unknown): void;
-}
-
-function escapeAttr(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
 
 function render(tex: string, displayMode: boolean, attrs: Record<string, string>): HTMLElement {
@@ -60,6 +62,10 @@ export const MathInline = Node.create({
       : render(src, false, { "data-fm-math": src });
   },
 
+  renderText({ node }) {
+    return `$${String(node.attrs.src)}$`;
+  },
+
   addStorage() {
     return {
       markdown: {
@@ -72,14 +78,6 @@ export const MathInline = Node.create({
   },
 });
 
-interface MarkdownIt {
-  renderer: {
-    rules: {
-      fence?: ((...args: never[]) => string) & { fmMath?: boolean };
-    };
-  };
-}
-
 export const MathBlock = Node.create({
   name: "mathBlock",
   group: "block",
@@ -89,6 +87,7 @@ export const MathBlock = Node.create({
   addAttributes() {
     return {
       ...srcAttribute("data-fm-math-block"),
+      ...blockAnchorAttribute,
       // Written as a ```math fence rather than $$ lines.
       fence: {
         default: false,
@@ -102,48 +101,29 @@ export const MathBlock = Node.create({
     return [{ tag: "div[data-fm-math-block]" }];
   },
 
-  renderHTML({ node }) {
+  renderHTML({ node, HTMLAttributes }) {
     const src = String(node.attrs.src);
-    const attrs: Record<string, string> = { "data-fm-math-block": src };
-    if (node.attrs.fence) attrs["data-fm-fence"] = "";
+    const attrs = HTMLAttributes as Record<string, string>;
     return typeof document === "undefined" ? ["div", attrs] : render(src, true, attrs);
+  },
+
+  renderText({ node }) {
+    return String(node.attrs.src);
   },
 
   addStorage() {
     return {
       markdown: {
-        serialize(state: SerializerState, node: { attrs: { src: string; fence: boolean } }) {
-          state.write(
-            node.attrs.fence
-              ? `\`\`\`math\n${node.attrs.src}\n\`\`\``
-              : `$$\n${node.attrs.src}\n$$`,
+        serialize(
+          state: SerializerState,
+          node: { attrs: { src: string; fence: boolean; anchorId: string | null } },
+        ) {
+          const [open, close] = node.attrs.fence ? ["```math", "```"] : ["$$", "$$"];
+          serializeBlockAnchored(state, node, () =>
+            writeLines(state, [open, ...node.attrs.src.split("\n"), close]),
           );
-          state.closeBlock(node);
         },
-        parse: {
-          setup(markdownit: MarkdownIt) {
-            const rules = markdownit.renderer.rules;
-            if (rules.fence?.fmMath) return;
-            const previous = rules.fence;
-            const fence = (
-              tokens: { info: string; content: string }[],
-              idx: number,
-              ...rest: never[]
-            ): string => {
-              const info = (tokens[idx].info || "").trim();
-              const content = tokens[idx].content.replace(/\n$/, "");
-              if (info === "math") {
-                return `<div data-fm-math-block="${escapeAttr(content)}" data-fm-fence=""></div>\n`;
-              }
-              if (info === "mermaid") {
-                return `<div data-fm-mermaid="${escapeAttr(content)}"></div>\n`;
-              }
-              return previous ? previous(tokens as never, idx as never, ...rest) : "";
-            };
-            fence.fmMath = true;
-            rules.fence = fence as typeof rules.fence;
-          },
-        },
+        parse: {},
       },
     };
   },

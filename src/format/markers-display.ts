@@ -19,12 +19,12 @@ import { findMarkersMarkdown, type Marker } from "./markers";
 // Replaces every paired marker with an edge element that carries the
 // anchor id. Other inline HTML in the body is left alone.
 //
-// Whole-code-block anchors are handled first: a marker pair wrapping a
-// fenced block (markers on their own lines, outside the fence) is rewritten
-// so the id rides in the fence info string (`lang fmc=N`), which the
-// CodeBlockAnchor extension reads on parse. Doing this before the inline
-// span replacement also stops those block markers from being turned into
-// (invalid) inline elements around a block.
+// Whole-block anchors are handled first: a marker pair wrapping a fenced
+// block or a `$$` equation (markers on their own lines, outside it) is
+// rewritten so the id rides on the block's opening line (`lang fmc=N`,
+// `$$ fmc=N`), which markdownExtras reads on parse. Doing this before the
+// inline span replacement also stops those block markers from being
+// turned into (invalid) inline elements around a block.
 export function bodyWithAnchorElements(body: string): string {
   const withBlocks = blockAnchorsToInfoString(body);
   const markers = findMarkersMarkdown(withBlocks);
@@ -35,12 +35,9 @@ export function bodyWithAnchorElements(body: string): string {
   );
 }
 
-// A marker pair on its own lines around a fence, with nothing between
-// the markers but the fence itself.
-const FENCE_BLOCK_RE = /^\n(```[^\n]*\n[\s\S]*?\n```)\n$/;
-
-// Move a block anchor's id from surrounding comment markers into the fence
-// info string (`lang fmc=N`). Inverse of CodeBlockAnchor's serialize.
+// Move a whole-block anchor's id from the markers around the block onto
+// its opening line. Inverse of `serializeBlockAnchored`
+// (src/components/BlockAnchor.ts).
 export function blockAnchorsToInfoString(body: string): string {
   const markers = findMarkersMarkdown(body);
   const edits: { start: number; end: number; text: string }[] = [];
@@ -48,17 +45,40 @@ export function blockAnchorsToInfoString(body: string): string {
     const open = markers[i];
     const close = markers[i + 1];
     if (open.type !== "open" || close.type !== "close" || open.id !== close.id) continue;
-    const between = body.slice(open.end, close.start);
-    const m = FENCE_BLOCK_RE.exec(between);
-    if (!m) continue;
-    const fence = m[1].replace(/^```([^\n]*)\n/, (_full, info: string) => {
-      const trimmed = info.trim();
-      return "```" + (trimmed ? trimmed + " " : "") + "fmc=" + open.id + "\n";
-    });
-    edits.push({ start: open.start, end: close.end, text: fence });
+    const text = anchoredBlock(body.slice(open.end, close.start), open.id);
+    if (text === null) continue;
+    edits.push({ start: open.start, end: close.end, text });
     i++;
   }
   return applyEdits(body, edits);
+}
+
+// `between` is what lies between the two markers. When that is one
+// fenced block or `$$` block on lines of its own, return the block with
+// the id on its opening line; otherwise null. The block may sit in a
+// list item, so each line may carry the item's indent; the lines keep it.
+function anchoredBlock(between: string, id: number): string | null {
+  const lines = between.split("\n");
+  if (lines.length < 4 || lines[0].trim() !== "" || lines[lines.length - 1].trim() !== "") {
+    return null;
+  }
+  const block = lines.slice(1, -1);
+  const opener = block[0].trim();
+  const closer = block[block.length - 1].trim();
+  const middle = block.slice(1, -1).map((l) => l.trim());
+  let head: string;
+  const fence = /^(`{3,}|~{3,})(.*)$/.exec(opener);
+  if (fence) {
+    const closes = (l: string) => l.length >= fence[1].length && l === fence[1][0].repeat(l.length);
+    if (!closes(closer) || middle.some(closes)) return null;
+    const info = fence[2].trim();
+    head = fence[1] + (info ? info + " " : "") + "fmc=" + id;
+  } else if (opener === "$$" && closer === "$$" && !middle.includes("$$")) {
+    head = "$$ fmc=" + id;
+  } else {
+    return null;
+  }
+  return [head, ...block.slice(1)].join("\n");
 }
 
 // Collapse a run of same-id marker pairs. The editor used to emit one

@@ -176,3 +176,48 @@ describe("locateElement", () => {
     expect(() => locateElement(MD, "#fig-3", "markdown")).toThrow(/HTML reports only/);
   });
 });
+
+describe("locateAnchor (Markdown) — equations, diagrams, images", () => {
+  const place = (body: string, phrase: string) =>
+    applyPlacement(body, locateAnchor(body, phrase, "markdown"), 7);
+
+  it("snaps TeX inside a $$ block to the whole block", () => {
+    const body = "Model:\n\n$$\nBG(t) = x + e(t) \\tag{1}\n$$\n\nNext.\n";
+    expect(place(body, "BG(t) = x + e(t) \\tag{1}")).toBe(
+      "Model:\n\n<!-- fmc:7 -->\n$$\nBG(t) = x + e(t) \\tag{1}\n$$\n<!-- /fmc:7 -->\n\nNext.\n",
+    );
+  });
+
+  it("keeps a list item's indent on the marker lines", () => {
+    const body = "1. Horizons:\n\n   $$\n   x_T = y\n   $$\n\n2. Next.\n";
+    expect(place(body, "x_T = y")).toBe(
+      "1. Horizons:\n\n   <!-- fmc:7 -->\n   $$\n   x_T = y\n   $$\n   <!-- /fmc:7 -->\n\n2. Next.\n",
+    );
+  });
+
+  it("snaps a diagram's source to its fence", () => {
+    const body = "```mermaid\ngraph TD\n  A --> B\n```\n";
+    const p = locateAnchor(body, "graph TD A --> B", "markdown");
+    expect(p.block).toBe(true);
+    expect(applyPlacement(body, p, 2)).toBe(
+      "<!-- fmc:2 -->\n```mermaid\ngraph TD\n  A --> B\n```\n<!-- /fmc:2 -->\n",
+    );
+  });
+
+  it("widens to a whole inline equation or image, never splitting one", () => {
+    expect(place("Energy $E = mc^2$ here.\n", "E = mc^2")).toBe(
+      "Energy <!-- fmc:7 -->$E = mc^2$<!-- /fmc:7 --> here.\n",
+    );
+    expect(place("See ![](img/logo.png) here.\n", "logo.png")).toBe(
+      "See <!-- fmc:7 -->![](img/logo.png)<!-- /fmc:7 --> here.\n",
+    );
+    expect(place("Costs $5 and $6 now.\n", "5 and")).toBe(
+      "Costs $<!-- fmc:7 -->5 and<!-- /fmc:7 --> $6 now.\n",
+    );
+  });
+
+  it("refuses a span from prose into an equation", () => {
+    const body = "Model:\n\n$$\nx = 1\n$$\n";
+    expect(() => locateAnchor(body, "Model: x = 1", "markdown")).toThrow(AnchorError);
+  });
+});

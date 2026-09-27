@@ -6,6 +6,8 @@ import {
   useFontSize,
   useDefaultView,
   useDocumentWidth,
+  parseDocumentWidth,
+  DOCUMENT_WIDTH_RANGE,
   useSidebarWidth,
   useRecentFiles,
   useFirstRun,
@@ -78,18 +80,29 @@ describe("preferences — font size", () => {
 });
 
 describe("preferences — document width", () => {
-  it("defaults to 'wide'", () => {
+  it("defaults to full", () => {
     const { result } = renderHook(() => useDocumentWidth());
-    expect(result.current[0]).toBe("wide");
+    expect(result.current[0]).toBe("full");
   });
 
-  it("persists and ignores an unknown value", () => {
-    window.localStorage.setItem("forgemark.documentWidth", "enormous");
+  it("persists a measure, clamped and whole", () => {
     const { result } = renderHook(() => useDocumentWidth());
-    expect(result.current[0]).toBe("wide");
-    act(() => result.current[1]("readable"));
-    expect(result.current[0]).toBe("readable");
-    expect(window.localStorage.getItem("forgemark.documentWidth")).toBe("readable");
+    act(() => result.current[1](72.4));
+    expect(result.current[0]).toBe(72);
+    expect(window.localStorage.getItem("forgemark.documentWidth")).toBe("72");
+    act(() => result.current[1](5));
+    expect(result.current[0]).toBe(DOCUMENT_WIDTH_RANGE.min);
+    act(() => result.current[1](1000));
+    expect(result.current[0]).toBe(DOCUMENT_WIDTH_RANGE.max);
+    act(() => result.current[1]("full"));
+    expect(window.localStorage.getItem("forgemark.documentWidth")).toBe("full");
+  });
+
+  it("reads the old Readable and Wide settings as their nearest widths", () => {
+    expect(parseDocumentWidth("readable")).toBe(DOCUMENT_WIDTH_RANGE.readable);
+    expect(parseDocumentWidth("wide")).toBe("full");
+    expect(parseDocumentWidth("enormous")).toBe("full");
+    expect(parseDocumentWidth("")).toBe("full");
   });
 });
 

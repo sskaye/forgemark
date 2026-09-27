@@ -1,4 +1,5 @@
 import Image from "@tiptap/extension-image";
+import { imageText } from "../format/anchor-text";
 
 // Images are inline, as on GitHub: `[![badge](x.svg)](https://…)` keeps
 // its link, and an `<img>` in a sentence stays in the sentence. A
@@ -42,6 +43,12 @@ export const InlineImage = Image.extend({
           attrs.wikitarget ? { "data-wikitarget": attrs.wikitarget } : {},
       },
     };
+  },
+
+  // What an image reads as in a comment's anchor text: its alt text,
+  // or, with none, its file name.
+  renderText({ node }) {
+    return imageText(String(node.attrs.alt ?? ""), String(node.attrs.src ?? ""));
   },
 
   addStorage() {

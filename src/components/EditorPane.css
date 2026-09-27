@@ -50,9 +50,11 @@
 }
 
 .fm-document {
+  --fm-doc-gutter: 48px;
+  position: relative; /* anchor for the column's edge handles */
   width: 100%;
   max-width: 720px;
-  padding: 32px 48px;
+  padding: 32px var(--fm-doc-gutter);
   color: var(--fm-prose-ink);
   font-family: var(--fm-prose);
   /* Phase 11: Settings → Font size sets `--fm-font-size` on the
@@ -62,12 +64,66 @@
   letter-spacing: var(--fm-prose-letterspacing);
 }
 
-/* Settings → Document width → Wide. The column fills the pane behind a
-   gutter that grows with the window: 48px on a small laptop, up to
-   120px on a large display (about 6% of the window each side). Reports
-   are unaffected: the frame already fills the pane and the report sets
-   its own measure. */
-[data-doc-width="wide"] .fm-document:not(.fm-document--report) {
+/* The document width, set from the title bar or the column's edges
+   (src/services/documentWidth.ts). A measure is a number of average
+   characters of the prose font, `--fm-char-width` being the measured
+   width of one (0.5em until it is measured). Full fills the pane behind
+   a gutter that grows with the window: 48px on a small laptop, up to
+   120px on a large display. Reports are unaffected: the frame already
+   fills the pane and the report sets its own measure. */
+[data-doc-width="measure"] .fm-document:not(.fm-document--report) {
+  max-width: calc(var(--fm-doc-chars, 70) * var(--fm-char-width, 0.5em) + 2 * var(--fm-doc-gutter));
+}
+
+[data-doc-width="full"] .fm-document:not(.fm-document--report) {
+  --fm-doc-gutter: clamp(48px, 6vw, 120px);
   max-width: none;
-  padding: 32px clamp(48px, 6vw, 120px);
+}
+
+/* The column's edge handles sit in the gutters, halfway between the
+   text and the column's edge, and show a line on hover or while
+   dragged. */
+.fm-column-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 4;
+}
+
+.fm-column-edge--left {
+  left: calc(var(--fm-doc-gutter) / 2 - 4px);
+}
+
+.fm-column-edge--right {
+  right: calc(var(--fm-doc-gutter) / 2 - 4px);
+}
+
+.fm-column-edge::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 1px;
+  background: var(--fm-accent);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.fm-column-edge:hover::after,
+.fm-column-edge[data-dragging="true"]::after {
+  opacity: 0.6;
+}
+
+body[data-column-resizing="true"],
+body[data-width-scrubbing="true"] {
+  cursor: col-resize;
+  user-select: none;
+}
+
+body[data-width-scrubbing="true"] {
+  cursor: ew-resize;
 }

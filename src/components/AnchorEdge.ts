@@ -29,6 +29,7 @@
 //     document drops the copy; moving one by cut and paste keeps it.
 
 import { Node, mergeAttributes, type Editor } from "@tiptap/core";
+import { isBlockAnchored, nodeText } from "./BlockAnchor";
 import { Plugin, PluginKey, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { Fragment, Slice, type Node as PMNode, type ResolvedPos } from "@tiptap/pm/model";
@@ -169,13 +170,13 @@ export function strayEdges(doc: PMNode): number[] {
 export const TEXTLESS = new Set([ANCHOR_EDGE, HTML_INLINE]);
 
 // The text of a range as the reader sees it: text-less atoms contribute
-// nothing, a wikilink its label, other leaves (an image, a hard break) a
-// space.
+// nothing, an atom that says what it reads as (an equation's TeX, an
+// image's alt text, a wikilink's label) that, other leaves (a hard
+// break) a space.
 export function plainText(doc: PMNode, from: number, to: number): string {
   return doc.textBetween(from, to, " ", (leaf) => {
     if (TEXTLESS.has(leaf.type.name)) return "";
-    if (leaf.type.name === "wikiLink") return String(leaf.attrs.label);
-    return " ";
+    return nodeText(leaf) || " ";
   });
 }
 
@@ -287,7 +288,7 @@ function highlight(doc: PMNode, focused: number | null, hovered: number | null):
       }),
     );
   doc.descendants((node, pos) => {
-    if (node.type.name !== "codeBlock") return !node.isLeaf;
+    if (!isBlockAnchored(node)) return !node.isLeaf;
     const id = Number(node.attrs.anchorId);
     const classes = Number.isFinite(id) ? stateClasses(id, focused, hovered).trim() : "";
     if (classes) decorations.push(Decoration.node(pos, pos + node.nodeSize, { class: classes }));
