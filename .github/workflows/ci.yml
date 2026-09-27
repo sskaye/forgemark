@@ -9,17 +9,22 @@ on:
 # AI-agent cases (tests/ai) are run by hand with a sub-agent, never in CI;
 # timing assertions run only via `npm run test:perf`. See CONVENTIONS.md.
 #
-# This workflow runs format + lint + typecheck + unit on macOS and Windows,
-# the Rust checks the desktop shell needs, and a Playwright smoke.
+# Every job starts at once; none waits on another. The run takes as long
+# as its slowest job, not the sum of a chain. The static checks run once,
+# on Linux, since their results do not depend on the platform; the unit
+# tests run on macOS and Windows, split in two on each so the slowest
+# part of the run is halved.
+
+# A new push to a pull request supersedes the run in flight for it.
+# Pushes to main are left to finish.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  lint-and-unit:
-    name: Lint and unit (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest]
+  checks:
+    name: Format, lint, typecheck
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -35,7 +40,23 @@ jobs:
       - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test
+
+  unit:
+    name: Unit (${{ matrix.os }}, ${{ matrix.shard }}/2)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npm test -- --shard=${{ matrix.shard }}/2
 
   rust:
     name: Rust shell (${{ matrix.os }})
@@ -76,7 +97,6 @@ jobs:
   e2e:
     name: E2E (macOS)
     runs-on: macos-latest
-    needs: lint-and-unit
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -98,12 +118,12 @@ jobs:
   # The bundle itself, on the platform the release script targets. cargo
   # check catches compile errors; a broken icon set, entitlements file, or
   # bundle config only shows up here — and used to show up on release day.
-  # Main pushes only, so pull requests stay quick.
+  # Main pushes only, so pull requests stay quick. It runs alongside the
+  # tests rather than after them: a failure anywhere still fails the run.
   macos-build:
     name: macOS app build
     runs-on: macos-latest
     if: github.event_name == 'push'
-    needs: [lint-and-unit, rust]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
