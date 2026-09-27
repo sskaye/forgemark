@@ -2,6 +2,17 @@
 
 All notable changes to Forgemark are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Comments on equations and diagrams. Select an inline equation (`$…$`) to comment on it like any text; click a block equation (`$$` or a ` ```math ` fence) or a Mermaid diagram to comment on the whole of it, as with a code block. The markers go on their own lines around the block, inside a list item too. An image can be commented on the same way; one without alt text is quoted by its file name. The agent tool places and checks these anchors the same way.
+- The document width is set from the title bar, beside Rendered / Source: a slider, and a number that can be clicked to type or dragged sideways. It is measured in characters of the document's font, from 40 to 160, so a line holds about as much text at any font size; the far end of the slider is Full, the column filling the window. Dragging either edge of the column resizes it too, and double-clicking the slider or an edge resets it. The reading position stays put as the column reflows. An HTML report sets its own width.
+
+### Changed
+
+- The Readable / Wide setting has left Settings for the title bar control. Readable becomes 70 characters; Wide becomes Full.
+
 ## [1.8.0] — 2026-09-10
 
 ### Added

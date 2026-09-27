@@ -92,6 +92,14 @@ $$
 a^2 + b^2 = c^2
 ```
 
+1. An equation inside a list item, with a tag:
+
+   $$
+   \mathrm{ISF}_T = \frac{\Delta BG_{\mathrm{base}}(T) - \left[BG(t + T) - BG(t)\right]}{U\, F_I(T)} \tag{4}
+   $$
+
+   The item goes on after it.
+
 ## Diagram
 
 ```mermaid

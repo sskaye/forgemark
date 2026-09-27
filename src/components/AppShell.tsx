@@ -24,6 +24,7 @@ import { classifyAnchors, insertMarkersIntoBody, cleanExport } from "../format";
 import { contextSnippet, parseForgemarkFile } from "../format";
 import { useDocumentWidth, useFontSize, useFirstRun } from "../state/preferences";
 import { saveDocument } from "../services/fileIO";
+import { applyDocumentWidth, measureCharWidth } from "../services/documentWidth";
 import { applyWindowAction, isWindowAction } from "../services/windowActions";
 import { invoke } from "@tauri-apps/api/core";
 import "./AppShell.css";
@@ -46,7 +47,7 @@ export function AppShell() {
   const [printOptions, setPrintOptions] = useState<PrintOptions | null>(null);
   const [printRequestId, setPrintRequestId] = useState(0);
   const [fontSize] = useFontSize();
-  const [documentWidth] = useDocumentWidth();
+  const [documentWidth, setDocumentWidth] = useDocumentWidth();
   const { firstRunDone, markDone } = useFirstRun();
 
   const requestViewModeChange = useCallback(
@@ -69,12 +70,23 @@ export function AppShell() {
     document.documentElement.style.setProperty("--fm-font-size", fontSize + "px");
   }, [fontSize]);
 
-  // Settings → Document width. EditorPane.css reads the attribute: the
-  // column stays at its readable measure or fills the pane.
+  // The document width, from the title bar or the column's edges.
   useEffect(() => {
-    if (typeof document === "undefined") return;
-    document.documentElement.dataset.docWidth = documentWidth;
+    applyDocumentWidth(documentWidth);
   }, [documentWidth]);
+
+  // A measure is in average characters of the prose font, so it is
+  // measured again when the size changes and once the fonts are in.
+  useEffect(() => {
+    measureCharWidth();
+    let live = true;
+    void document.fonts?.ready.then(() => {
+      if (live) measureCharWidth();
+    });
+    return () => {
+      live = false;
+    };
+  }, [fontSize]);
 
   const continueToPrint = (options: PrintOptions) => {
     setPrintOptions(options);
@@ -237,6 +249,10 @@ export function AppShell() {
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen((s) => !s)}
         onOpenSettings={() => setSettingsOpen(true)}
+        documentWidth={documentWidth}
+        onDocumentWidthChange={setDocumentWidth}
+        // A report sets its own width; its source view does not.
+        documentWidthDisabled={state.format === "html" && state.viewMode === "rendered"}
       />
       <TabBar />
       <ErrorBanner />

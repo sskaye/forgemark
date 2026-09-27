@@ -433,6 +433,13 @@
   overflow-x: auto;
   text-align: center;
 }
+/* An anchored block equation is marked as an anchored code block is:
+   a left accent bar, tinting on hover and focus. */
+.fm-rendered-view .fm-prose .fm-math-block[data-anchor-id] {
+  border-left: 3px solid var(--fm-anchor-underline);
+  border-radius: 2px;
+  padding: 2px 11px;
+}
 .fm-rendered-view .fm-prose .fm-mermaid {
   margin: 1em 0;
   text-align: center;

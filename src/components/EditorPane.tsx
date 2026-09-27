@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ColumnEdges } from "./ColumnEdges";
 import { dirOf } from "../services/documentLinks";
 import { useWorkspace } from "../state/DocumentProvider";
 import type { DocId } from "../state/workspace";
@@ -878,6 +879,7 @@ export function EditorPane({ docId }: Props) {
           "fm-document" + (isHtml && state.viewMode !== "source" ? " fm-document--report" : "")
         }
       >
+        {!(isHtml && state.viewMode !== "source") && <ColumnEdges />}
         <LostAnchorBanner
           count={lostAnchorIds.length}
           onRecover={() => {

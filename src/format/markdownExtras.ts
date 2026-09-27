@@ -10,7 +10,11 @@
 //     the bracket (`[!Summary]-`), and both are kept as written;
 //   - strikethrough with a single tilde, which the GFM spec allows and
 //     markdown-it does not;
-//   - math: `$…$` in text and `$$` on its own lines around a block;
+//   - math: `$…$` in text, and `$$` on its own lines or a ```math
+//     fence around a block; a ```mermaid fence as a diagram;
+//   - whole-block comment anchors: a fence or a `$$` block whose
+//     opening line carries `fmc=N` (put there for display by
+//     src/format/markers-display.ts) renders with `data-anchor-id`;
 //   - Obsidian wikilinks: `![[file.png]]` and `![[file.png|alt]]` render
 //     as images; `[[note]]`, `[[note|label]]`, and an embed of anything
 //     but an image render as their label and are kept as written, since
@@ -37,6 +41,12 @@ const FOOTNOTE_REF = /^\[\^([^\]\s]+)\]/;
 
 const INSTALLED = Symbol("forgemark-markdown-extras");
 
+// The block tokens a comment can anchor whole, with its markers on
+// their own lines around the block (see src/components/BlockAnchor.ts).
+export const BLOCK_ANCHOR_TOKENS = new Set(["fence", "fm_math_block"]);
+
+const FENCE_ANCHOR = /(?:^|\s)fmc=(\d+)(?=\s|$)/;
+
 export function markdownExtras(md: MarkdownIt, options: { linkify?: boolean } = {}): void {
   // tiptap-markdown runs every extension's setup on every parse.
   const marked = md as unknown as Record<symbol, boolean>;
@@ -53,8 +63,25 @@ export function markdownExtras(md: MarkdownIt, options: { linkify?: boolean } = 
   md.inline.ruler.before("image", "fm_wiki_embed", wikiEmbed);
   md.inline.ruler.before("link", "fm_wiki_link", wikiLink);
   md.core.ruler.after("block", "fm_alert", alerts);
+  md.core.ruler.after("block", "fm_fence_anchor", fenceAnchors);
   md.renderer.rules.fm_math_block = (tokens, idx) =>
-    `<div data-fm-math-block="${escapeAttr(tokens[idx].content)}"></div>\n`;
+    withAnchorId(
+      tokens[idx],
+      `<div data-fm-math-block="${escapeAttr(tokens[idx].content)}"></div>\n`,
+    );
+  const codeFence = md.renderer.rules.fence!;
+  md.renderer.rules.fence = (tokens, idx, opts, env, self) => {
+    const token = tokens[idx];
+    const info = token.info.trim();
+    const content = escapeAttr(token.content.replace(/\n$/, ""));
+    const html =
+      info === "math"
+        ? `<div data-fm-math-block="${content}" data-fm-fence=""></div>\n`
+        : info === "mermaid"
+          ? `<div data-fm-mermaid="${content}"></div>\n`
+          : codeFence(tokens, idx, opts, env, self);
+    return withAnchorId(token, html);
+  };
   md.renderer.rules.fm_math_inline = (tokens, idx) =>
     `<span data-fm-math="${escapeAttr(tokens[idx].content)}"></span>`;
   md.renderer.rules.fm_wiki_link = (tokens, idx) => {
@@ -167,14 +194,38 @@ function strikeSingle(state: StateInline, silent: boolean) {
   return true;
 }
 
+// A fence whose info carries `fmc=N` is anchored: the id moves to the
+// token, so it does not reach the language.
+function fenceAnchors(state: StateCore) {
+  for (const token of state.tokens) {
+    if (token.type !== "fence") continue;
+    const m = FENCE_ANCHOR.exec(token.info);
+    if (!m) continue;
+    token.info = token.info.replace(FENCE_ANCHOR, "").trim();
+    token.meta = { ...token.meta, anchorId: m[1] };
+  }
+}
+
+// The rendered block, its first tag carrying the anchor id if it has one.
+function withAnchorId(token: { meta: { anchorId?: string } | null }, html: string): string {
+  const id = token.meta?.anchorId;
+  return id ? html.replace(/^<([a-z][\w-]*)/i, `<$1 data-anchor-id="${id}"`) : html;
+}
+
 // `$$` alone on a line, the TeX, and `$$` alone on a line; or all three
-// on one line.
+// on one line. On display only, an anchored block opens with `$$ fmc=N`
+// (src/format/markers-display.ts puts the id there from the markers
+// around the block).
+const MATH_OPEN_ANCHORED = /^\$\$ fmc=(\d+)$/;
+
 function mathBlock(state: StateBlock, startLine: number, endLine: number, silent: boolean) {
   if (state.sCount[startLine] - state.blkIndent >= 4) return false;
   const lineText = (n: number) =>
     state.src.slice(state.bMarks[n] + state.tShift[n], state.eMarks[n]);
-  const first = lineText(startLine).trim();
+  let first = lineText(startLine).trim();
   if (!first.startsWith("$$")) return false;
+  const anchorId = MATH_OPEN_ANCHORED.exec(first)?.[1];
+  if (anchorId) first = "$$";
   let content: string;
   let nextLine: number;
   if (first.length > 4 && first.endsWith("$$")) {
@@ -192,6 +243,7 @@ function mathBlock(state: StateBlock, startLine: number, endLine: number, silent
   if (silent) return true;
   const token = state.push("fm_math_block", "div", 0);
   token.content = content;
+  if (anchorId) token.meta = { anchorId };
   token.map = [startLine, nextLine];
   state.line = nextLine;
   return true;

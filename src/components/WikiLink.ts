@@ -44,6 +44,10 @@ export const WikiLink = Node.create({
     return ["span", { ...HTMLAttributes, class: "fm-wikilink" }, String(node.attrs.label)];
   },
 
+  renderText({ node }) {
+    return String(node.attrs.label);
+  },
+
   addStorage() {
     return {
       markdown: {

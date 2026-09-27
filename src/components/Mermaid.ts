@@ -1,13 +1,16 @@
 import { Node } from "@tiptap/core";
+import { blockAnchorAttribute, serializeBlockAnchored, writeLines } from "./BlockAnchor";
 
 // A ```mermaid fence, drawn as the diagram GitHub would show. The
 // source rides on the node and is written back as the fence. Mermaid
 // itself is loaded the first time a diagram is shown, since it is the
 // largest thing in the bundle and most documents have none; until it
-// arrives, and if it fails, the block shows the source.
+// arrives, and if it fails, the block shows the source. A diagram is
+// commented on whole (see BlockAnchor.ts).
 
 interface SerializerState {
   write(text: string): void;
+  ensureNewLine(): void;
   closeBlock(node: unknown): void;
 }
 
@@ -44,6 +47,7 @@ export const MermaidBlock = Node.create({
         parseHTML: (el: HTMLElement) => el.getAttribute("data-fm-mermaid") ?? "",
         renderHTML: (attrs: { src: string }) => ({ "data-fm-mermaid": attrs.src }),
       },
+      ...blockAnchorAttribute,
     };
   },
 
@@ -59,11 +63,21 @@ export const MermaidBlock = Node.create({
     ];
   },
 
+  renderText({ node }) {
+    return String(node.attrs.src);
+  },
+
   addNodeView() {
     return ({ node }) => {
       const dom = document.createElement("div");
       dom.className = "fm-mermaid";
       dom.setAttribute("contenteditable", "false");
+      // The anchor's click, hover and focus wiring keys off the id.
+      const setAnchor = (id: unknown) => {
+        if (id == null) dom.removeAttribute("data-anchor-id");
+        else dom.setAttribute("data-anchor-id", String(id));
+      };
+      setAnchor(node.attrs.anchorId);
       const source = document.createElement("pre");
       source.className = "fm-mermaid-source";
       let shown = "";
@@ -91,6 +105,7 @@ export const MermaidBlock = Node.create({
         dom,
         update: (next) => {
           if (next.type !== node.type) return false;
+          setAnchor(next.attrs.anchorId);
           if (String(next.attrs.src) !== shown) draw(String(next.attrs.src));
           return true;
         },
@@ -102,8 +117,9 @@ export const MermaidBlock = Node.create({
     return {
       markdown: {
         serialize(state: SerializerState, node: { attrs: { src: string } }) {
-          state.write(`\`\`\`mermaid\n${node.attrs.src}\n\`\`\``);
-          state.closeBlock(node);
+          serializeBlockAnchored(state, node, () =>
+            writeLines(state, ["```mermaid", ...node.attrs.src.split("\n"), "```"]),
+          );
         },
         parse: {},
       },

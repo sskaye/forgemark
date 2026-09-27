@@ -109,7 +109,7 @@ test("renders what GitHub renders", async ({ page }) => {
   await expect(prose.locator("pre .hljs-keyword").first()).toHaveText("def");
   await expect(prose.locator("pre").nth(1).locator("[class^='hljs-']")).toHaveCount(0);
   await expect(prose.locator(".fm-math .katex")).toBeVisible();
-  await expect(prose.locator(".fm-math-block .katex-display")).toHaveCount(2);
+  await expect(prose.locator(".fm-math-block .katex-display")).toHaveCount(3);
   await expect(prose.locator(".fm-mermaid svg")).toBeVisible({ timeout: 20_000 });
   await expect(prose.locator("ul[data-type='taskList'] input:checked")).toHaveCount(1);
   // Headings carry GitHub's ids.

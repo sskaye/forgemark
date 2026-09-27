@@ -18,11 +18,11 @@
 //     would drop or mangle it, so it is shown as a read-only placeholder
 //     and written back exactly.
 //
-// A whole-code-block anchor — marker lines on their own around a fence
-// — is one block, so the editor sees one anchored code block.
+// A whole-block anchor — marker lines on their own around a fence or a
+// `$$` block — is one block, so the editor sees one anchored block.
 
 import MarkdownIt from "markdown-it";
-import { markdownExtras } from "./markdownExtras";
+import { BLOCK_ANCHOR_TOKENS, markdownExtras } from "./markdownExtras";
 
 export type SourceBlock = {
   // Line range, end exclusive, into the body's lines. Trailing blank
@@ -75,12 +75,13 @@ export function splitBlocks(body: string): BlockMap {
     const text = lines.slice(s, e).join("\n");
 
     // `<!-- fmc:N -->` / fence / `<!-- /fmc:N -->` on consecutive lines:
-    // one anchored code block.
+    // one anchored block.
     if (t.type === "html_block" && OPEN_MARKER_LINE.test(text)) {
       const fence = tokens[i + 1];
       const close = tokens[i + 2];
       if (
-        fence?.type === "fence" &&
+        fence !== undefined &&
+        BLOCK_ANCHOR_TOKENS.has(fence.type) &&
         close?.type === "html_block" &&
         fence.map![0] === e &&
         close.map![0] === fence.map![1]
@@ -138,4 +139,20 @@ function collapseGap(lines: string[], at: number, removed: boolean): string[] {
     return [...lines.slice(0, at), ...lines.slice(at + 1)];
   }
   return lines;
+}
+
+// The line ranges (end exclusive) of every block a comment anchors whole
+// — a fence, a `$$` equation — at any depth, in a list item or a quote
+// as well as at the top level. Where the locator must not put a marker
+// inside (src/format/locate.ts).
+export function wholeBlockLines(body: string): [number, number][] {
+  const lines = body === "" ? [] : body.split("\n");
+  type Tok = { type: string; map: [number, number] | null };
+  return (md.parse(forTokenizing(lines), {}) as Tok[])
+    .filter((t) => t.map && BLOCK_ANCHOR_TOKENS.has(t.type))
+    .map((t) => {
+      let [s, e] = t.map!;
+      while (e > s + 1 && lines[e - 1].trim() === "") e--;
+      return [s, e];
+    });
 }

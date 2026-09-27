@@ -454,14 +454,32 @@ after the transaction, so the comment reattaches by its recorded text instead of
 leaving a stray marker; and pasting content that carries an edge of an anchor
 the document already has drops the copy, while a cut-and-paste move keeps it.
 
-**Whole code block anchors.** Markers can't live inside a fence, so a code-block
-comment is stored as a marker pair on its own lines _around_ the fence
-(`<!-- fmc:N -->` / `<!-- /fmc:N -->`). To survive the markdown ⇄ editor
-round-trip the anchor rides on the `codeBlock` node: `CodeBlockAnchor`
-(`src/components/CodeBlockAnchor.ts`) adds an `anchorId` attribute, serializes
-it to the marker form, and reads it back via the fence info string that
-`blockAnchorsToInfoString` injects on display. The `data-anchor-id` on the
-`<pre>` reuses the same click/hover/focus wiring as inline anchors.
+**Whole-block anchors.** Markers can't live inside a fence or a `$$` block, so
+a comment on a code block, a block equation, or a Mermaid diagram is stored as
+a marker pair on its own lines _around_ the block (`<!-- fmc:N -->` /
+`<!-- /fmc:N -->`), taking a list item's indent when it sits in one. One
+mechanism serves every such block (`src/components/BlockAnchor.ts`): a node opts
+in by adding `blockAnchorAttribute` (an `anchorId` rendered as
+`data-anchor-id`) and serializing through `serializeBlockAnchored`, and
+selection, highlighting, and click/hover find it with `isBlockAnchored`. On
+display `blockAnchorsToInfoString` moves the id onto the block's opening line
+(`lang fmc=N`, `$$ fmc=N`); markdownExtras strips it into the token and renders
+it as `data-anchor-id`, and owns the fence renderer (code, math, and Mermaid
+fences) so no extension wraps it. The block token types are listed once,
+`BLOCK_ANCHOR_TOKENS`; the block splitter merges their marker lines, and the
+locator (`src/format/locate.ts`) snaps a phrase inside one to the whole block.
+Inline objects (an equation, an image, a wikilink) are anchored like text:
+each says what it reads as through `renderText` (TeX between dollars, alt text
+or file name, label), and the locator widens a match to the whole object
+rather than splitting it.
+
+**Document width.** A global preference, a number of average characters of the
+prose font (40–160) or Full. `src/services/documentWidth.ts` applies it to the
+root (`data-doc-width`, `--fm-doc-chars`), measures the font's average
+character width (`--fm-char-width`) from a sample of prose, keeps the line at
+the top of the pane in place as the column reflows, and carries live previews
+so the title bar's `WidthControl` and the column's `ColumnEdges` handles can
+drag without re-rendering the app. HTML reports keep their own width.
 
 **Undo isolation.** ProseMirror's history lives inside the Tiptap instance, not
 in `DocumentState`, so the only way to discard it is to remount the editor.

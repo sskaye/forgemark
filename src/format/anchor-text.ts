@@ -62,6 +62,9 @@ function renderedMarkdown(s: string): string {
   // the fence, and the app records the code itself.
   const fence = s.match(/^\s*(`{3,}|~{3,})[^\n]*\n([\s\S]*?)\n\s*\1\s*$/);
   if (fence) return fence[2];
+  // A block equation, anchored the same way: the app records the TeX.
+  const math = s.match(/^\s*\$\$[ \t]*\n([\s\S]*?)\n\s*\$\$\s*$/);
+  if (math) return math[1];
 
   // Inline code keeps its content verbatim; everything else is prose
   // whose markup is stripped. Split on code spans so the two are handled
@@ -69,10 +72,17 @@ function renderedMarkdown(s: string): string {
   const parts = s.split(/(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/);
   let out = "";
   for (let i = 0; i < parts.length; i += 3) {
-    out += stripInlineMarkup(parts[i] ?? "");
+    out += stripProse(parts[i] ?? "");
     if (i + 2 < parts.length) out += parts[i + 2];
   }
   return decodeHTML(out);
+}
+
+// An inline equation is kept as written, dollars and all, as the app
+// records it: its `_` and `*` are TeX, not emphasis.
+function stripProse(s: string): string {
+  const parts = s.split(/(\$[^\s$](?:[^$]*[^\s$])?\$)/);
+  return parts.map((p, i) => (i % 2 === 1 ? p : stripInlineMarkup(p))).join("");
 }
 
 function stripInlineMarkup(s: string): string {
@@ -81,8 +91,15 @@ function stripInlineMarkup(s: string): string {
       // HTML tags and comments.
       .replace(/<!--[\s\S]*?-->/g, "")
       .replace(/<\/?[A-Za-z][^>]*>/g, "")
-      // Images and links: keep the alt text / link text.
-      .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+      // Images and links: keep the alt text / link text. An image with
+      // no alt text reads as its file name, as the app records it.
+      .replace(/!\[([^\]]*)\]\(\s*<?([^)\s>]*)>?[^)]*\)/g, (_m, alt: string, src: string) =>
+        imageText(alt, src),
+      )
+      // Obsidian wikilinks and embeds: the label, or the target.
+      .replace(/!?\[\[([^\]|\n]+?)(?:\|([^\]\n]*))?\]\]/g, (m, target: string, label?: string) =>
+        m.startsWith("!") ? imageText(label ?? "", target) : (label ?? target),
+      )
       .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
       .replace(/\[([^\]]+)\]\[[^\]]*\]/g, "$1")
       // Strong, strikethrough, and emphasis delimiters. Single `*` / `_`
@@ -92,6 +109,11 @@ function stripInlineMarkup(s: string): string {
       .replace(/(^|[\s(["'])[*_](?=\S)/g, "$1")
       .replace(/(?<=\S)[*_](?=$|[\s)\].,;:!?"'])/g, "")
   );
+}
+
+// What an image reads as: its alt text, or, with none, its file name.
+export function imageText(alt: string, src: string): string {
+  return alt.trim() || ((src.split(/[\\/]/).pop() ?? "").split(/[?#]/)[0] ?? "");
 }
 
 function collapse(s: string): string {

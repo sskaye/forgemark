@@ -1,4 +1,6 @@
 import { Segmented } from "./Segmented";
+import { WidthControl } from "./WidthControl";
+import type { DocumentWidth } from "../state/preferences";
 import "./TitleBar.css";
 
 type Props = {
@@ -11,6 +13,9 @@ type Props = {
   // Phase 11: opens the Settings modal. Until the native macOS menu
   // bar lands, this gear button is the discoverable mouse path.
   onOpenSettings?: () => void;
+  documentWidth?: DocumentWidth;
+  onDocumentWidthChange?: (w: DocumentWidth) => void;
+  documentWidthDisabled?: boolean;
 };
 
 // 44px combined chrome — standard macOS titlebar-with-toolbar shape.
@@ -25,6 +30,9 @@ export function TitleBar({
   sidebarOpen,
   onToggleSidebar,
   onOpenSettings,
+  documentWidth,
+  onDocumentWidthChange,
+  documentWidthDisabled,
 }: Props) {
   return (
     <header className="fm-titlebar" data-tauri-drag-region data-testid="fm-titlebar" role="banner">
@@ -46,6 +54,13 @@ export function TitleBar({
           ]}
           onChange={onViewModeChange}
         />
+        {documentWidth !== undefined && onDocumentWidthChange && (
+          <WidthControl
+            width={documentWidth}
+            onCommit={onDocumentWidthChange}
+            disabled={documentWidthDisabled}
+          />
+        )}
         <SidebarToggle open={sidebarOpen} onClick={onToggleSidebar} />
         {onOpenSettings && <SettingsButton onClick={onOpenSettings} />}
       </div>
