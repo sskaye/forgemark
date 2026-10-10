@@ -53,12 +53,14 @@
       {
         "ext": ["md", "markdown"],
         "name": "Markdown document",
-        "role": "Editor"
+        "role": "Editor",
+        "mimeType": "text/markdown"
       },
       {
         "ext": ["html", "htm"],
         "name": "HTML report",
-        "role": "Editor"
+        "role": "Editor",
+        "mimeType": "text/html"
       }
     ],
     "macOS": {
@@ -70,6 +72,12 @@
     "windows": {
       "wix": {
         "language": ["en-US"]
+      }
+    },
+    "linux": {
+      "deb": {
+        "section": "editors",
+        "desktopTemplate": "linux/forgemark.desktop"
       }
     }
   },

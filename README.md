@@ -13,9 +13,17 @@ It is a review tool, not a shared editor: no accounts, no server, no real-time c
 
 ## Install
 
-Download from the [Releases page](https://github.com/sskaye/forgemark/releases): a signed and notarized `.dmg` for macOS 11 and later, and an `.msi` or `.exe` for Windows 10 and later. On first launch, pick a name and click Open sample to see a reviewed document.
+Download from the [Releases page](https://github.com/sskaye/forgemark/releases): a signed and notarized `.dmg` for macOS 11 and later, an `.msi` or `.exe` for Windows 10 and later, and a `.deb` or `.AppImage` for Ubuntu 24.04 and later (x86_64 and arm64). On first launch, pick a name and click Open sample to see a reviewed document.
 
 **Windows installers are not code-signed.** SmartScreen warns before running one. To install: keep the download if the browser flags it, run the installer, click More info on the "Windows protected your PC" screen, then Run anyway. The UAC prompt shows Publisher: Unknown. macOS builds are signed and open without a prompt.
+
+**On Linux**, install the `.deb` with apt, which also fetches the WebKitGTK it needs and registers Forgemark for Markdown and HTML files:
+
+```bash
+sudo apt install ./Forgemark_<version>_amd64.deb
+```
+
+The AppImage runs without installing: mark it executable and open it. Ubuntu 24.04 does not ship the FUSE 2 library AppImages mount with; install `libfuse2t64`, or run the file with `--appimage-extract-and-run`. Each release carries a `SHA256SUMS-linux-<arch>.txt` to check the downloads against. The Window menu's Move & Resize commands are macOS and Windows only; on Linux, Super+arrow does the same.
 
 To build from source, see [Build](#build).
 
@@ -110,6 +118,7 @@ Requirements:
 - Rust, stable, via [rustup](https://rustup.rs/)
 - macOS: Xcode Command Line Tools
 - Windows: Visual Studio C++ Build Tools
+- Linux (Ubuntu 24.04 or later): `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev`
 
 ```bash
 git clone https://github.com/sskaye/forgemark.git
@@ -147,7 +156,7 @@ tests/              unit, integration, browser, perf, and agent tests
 assets/             the skill package, sample documents, the app icon
 docs/               architecture notes, example files, design reviews and plans
 scripts/            build helpers: CLI bundle, skill packaging, icons, release
-.github/workflows/  CI and the Windows release build
+.github/workflows/  CI and the Windows and Linux release builds
 ```
 
 ## Contributing

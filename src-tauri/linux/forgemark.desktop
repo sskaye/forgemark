@@ -1,0 +1,17 @@
+# Tauri's stock desktop entry with %F added to Exec, so a file opened
+# from the file manager reaches the app as an argument (see file_args in
+# src/lib.rs). Used by both the .deb and the AppImage.
+[Desktop Entry]
+Categories={{categories}}
+{{#if comment}}
+Comment={{comment}}
+{{/if}}
+Exec={{exec}} %F
+StartupWMClass={{exec}}
+Icon={{icon}}
+Name={{name}}
+Terminal=false
+Type=Application
+{{#if mime_type}}
+MimeType={{mime_type}}
+{{/if}}

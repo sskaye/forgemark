@@ -1,0 +1,128 @@
+name: Linux release
+
+# Builds the Linux packages (a .deb for Ubuntu and Debian, and a portable
+# AppImage) for x86_64 and arm64, and attaches them to the matching
+# GitHub release with a checksum file per architecture. Built on Ubuntu
+# 24.04, so they need its glibc and WebKitGTK 4.1 or later: Ubuntu 24.04
+# and newer, and distributions of the same age.
+#
+# Triggers:
+#   - automatically on any `v*` tag push (builds that tag);
+#   - manually via "Run workflow", passing an existing release tag;
+#   - on a pull request that touches the Linux packaging, which builds the
+#     packages and keeps them as workflow artifacts for testing by hand,
+#     without going near a release.
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/linux-release.yml"
+      - "src-tauri/tauri.conf.json"
+      - "src-tauri/linux/**"
+      - "src-tauri/src/main.rs"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach the packages to (e.g. v1.10.0)"
+        required: true
+        type: string
+      ref:
+        description: "Git ref to build (default: the tag itself). Set to 'main' to backfill a release whose tagged code predates a Linux build fix."
+        required: false
+        default: ""
+        type: string
+
+# Required for `gh release create/upload` with the default GITHUB_TOKEN.
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Linux packages (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Tag push → the pushed tag. Manual dispatch → the `ref` input if
+          # given (e.g. main), else the tag input. Pull request → its head.
+          ref: ${{ github.event.inputs.ref || github.event.inputs.tag || github.ref }}
+
+      - name: Linux system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libsoup-3.0-dev libjavascriptcoregtk-4.1-dev librsvg2-dev \
+            libayatana-appindicator3-dev libxdo-dev libssl-dev \
+            build-essential file patchelf
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      # `tauri build` runs `npm run vite:build` (beforeBuildCommand) first.
+      # linuxdeploy, which assembles the AppImage, is itself an AppImage;
+      # the runners have no FUSE 2, so it unpacks itself instead of
+      # mounting.
+      - name: Build Linux bundles
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: npm run tauri -- build --bundles deb,appimage
+
+      - name: Collect packages and checksums
+        id: collect
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp src-tauri/target/release/bundle/deb/*.deb out/
+          cp src-tauri/target/release/bundle/appimage/*.AppImage out/
+          cd out
+          sha256sum *.deb *.AppImage > "SHA256SUMS-linux-${{ matrix.arch }}.txt"
+          cat "SHA256SUMS-linux-${{ matrix.arch }}.txt"
+
+      # Pull requests: keep the packages on the run for testing by hand.
+      - name: Keep packages on the run
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: forgemark-linux-${{ matrix.arch }}
+          path: out/
+          retention-days: 14
+
+      - name: Attach packages to the release
+        if: github.event_name != 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          # Create the release if it doesn't exist yet. The other Linux
+          # job and the Windows workflow may be racing to do the same, so
+          # a failed create is fine as long as the release is there after.
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --verify-tag \
+              --title "Forgemark ${TAG}" \
+              --notes "Automated release. See CHANGELOG.md for details." \
+              || gh release view "$TAG" >/dev/null
+          fi
+          gh release upload "$TAG" out/* --clobber

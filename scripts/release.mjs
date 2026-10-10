@@ -141,9 +141,10 @@ console.log(`  App: ${APP}`);
 console.log(`  DMG: ${DMG}`);
 // One command tags and publishes. `--target main` makes gh create the tag on
 // the remote itself, which both publishes the release and starts
-// windows-release.yml. Creating the tag locally and pushing it first would
-// start that workflow early, and the workflow creates the release when one
-// doesn't exist yet — so you'd race it for ownership of the release.
+// windows-release.yml and linux-release.yml. Creating the tag locally and
+// pushing it first would start those workflows early, and they create the
+// release when one doesn't exist yet — so you'd race them for ownership of
+// the release.
 console.log("\nNext steps (manual):");
 console.log(`  1. Smoke-test the .dmg on a fresh macOS user account.`);
 console.log(`  2. Tag and publish in one step (do NOT push a tag first):`);
@@ -155,4 +156,6 @@ console.log(
 );
 console.log(`  3. Pull the tag gh just created back down:`);
 console.log(`       git fetch origin --tags`);
-console.log(`\n  The Windows installers attach to the release a few minutes later.`);
+console.log(
+  `\n  The Windows installers and Linux packages attach to the release a few minutes later.`,
+);
