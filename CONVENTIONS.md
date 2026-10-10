@@ -38,7 +38,7 @@ npm run format:check    # Prettier
 npm test                # Vitest
 ```
 
-CI runs these plus the Rust checks (`cargo fmt --check`, clippy with warnings as errors, `cargo test`), the browser tests, the macOS app build, and the Windows installer build.
+CI runs these plus the Rust checks (`cargo fmt --check`, clippy with warnings as errors, `cargo test`), the browser tests, the macOS app build, and the Windows and Linux package builds.
 
 ## Layout
 
@@ -50,5 +50,5 @@ tests/              all test code
 assets/             the skill package, sample documents, the app icon
 docs/               architecture notes, example files, design reviews and plans
 scripts/            build helpers
-.github/workflows/  CI and the Windows release build
+.github/workflows/  CI and the Windows and Linux release builds
 ```

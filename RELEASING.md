@@ -1,6 +1,6 @@
 # Releasing Forgemark
 
-Cuts a signed, notarized macOS `.dmg` and a signed Windows `.msi`. Everything outside the bullet labelled **Manual** is reproducible from a clean checkout.
+Cuts a signed, notarized macOS `.dmg`, the Windows installers, and the Linux packages. Everything outside the bullet labelled **Manual** is reproducible from a clean checkout.
 
 ## One-time setup
 
@@ -90,7 +90,7 @@ A Gatekeeper prompt on a fresh account means the staple didn't apply; rerun `xcr
 
 One command does the whole thing. `--target` makes `gh` create the tag on the
 remote itself, which both publishes the release and starts
-`windows-release.yml` — so there is no separate `git push origin <tag>` step,
+`windows-release.yml` and `linux-release.yml` — so there is no separate `git push origin <tag>` step,
 and no race with the workflow over who creates the release.
 
 ```sh
@@ -102,11 +102,12 @@ gh release create v<ver> --target main \
 git fetch origin --tags   # pull the tag gh just created back down
 ```
 
-The Windows installers appear on the release a few minutes later.
+The Windows installers and the Linux packages appear on the release a few
+minutes later.
 
 **Don't** create the tag locally first and push it: `gh release create` refuses
 to run against a tag that exists only locally, and pushing the tag starts the
-Windows workflow, which creates the release itself if one doesn't exist — so
+Windows and Linux workflows, which create the release itself if one doesn't exist — so
 you end up racing it. If you specifically want an _annotated_ tag, push it
 first and then use `gh release edit --notes-file` plus `gh release upload`
 instead of `create`.
@@ -140,6 +141,36 @@ but don't fit headless CI. The legacy `WINDOWS_SIGNING_PFX_PATH` /
 `WINDOWS_SIGNING_PFX_PASSWORD` env-var path only works if you already hold a
 `.pfx` — new OV/EV certs can no longer be issued as downloadable `.pfx` files.
 
+## Linux
+
+Automated via GitHub Actions (`.github/workflows/linux-release.yml`) on
+`ubuntu-24.04` and `ubuntu-24.04-arm` runners. Like the Windows workflow, it
+runs on every `v*` tag push and attaches its packages to that tag's release,
+creating the release if it doesn't exist yet. No Linux machine required.
+
+Output assets, per architecture (`amd64`/`x86_64` and `arm64`/`aarch64`):
+
+- `Forgemark_<ver>_amd64.deb` — the package for Ubuntu and Debian. Its
+  dependencies (WebKitGTK 4.1, GTK 3) are added by the Tauri CLI, and its
+  desktop entry comes from `src-tauri/linux/forgemark.desktop`, which passes
+  opened files to the app and registers it for Markdown and HTML.
+- `Forgemark_<ver>_amd64.AppImage` — portable, no install.
+- `SHA256SUMS-linux-<arch>.txt` — checksums for the two above.
+
+Building on Ubuntu 24.04 sets the floor: the packages need its glibc and
+WebKitGTK 4.1. Linux packages need no code signing.
+
+A pull request that touches the Linux packaging (the workflow, the bundle
+config, `src-tauri/linux/`, or `src-tauri/src/main.rs`) builds the packages
+too, and keeps them on the run as artifacts for testing by hand, without
+touching any release.
+
+To backfill a release, run it manually:
+
+```sh
+gh workflow run linux-release.yml -f tag=v<ver>
+```
+
 ## Auto-update
 
 Auto-update infrastructure is **deferred to v1.1**. Until then, releases are manual: ship the new build to the GitHub release page, users redownload.
@@ -151,5 +182,10 @@ Auto-update infrastructure is **deferred to v1.1**. Until then, releases are man
   `docs/ARCHITECTURE.md`: add a comment, suggest/accept/reject an edit,
   recover a lost anchor, use Settings skill download, run Clean Export, and
   verify external-change conflict handling where practical.
+- The same pass on Ubuntu 24.04 (a Wayland session, the default), from the
+  `.deb`. Also: double-click a `.md` file in Files with the app closed and
+  again with it open; print; open an HTML report from
+  `docs/example_file/testing/` and comment on it; edit the open file in
+  another editor and check the conflict banner appears.
 - Manual end-to-end with **Claude Code**: install the `.skill`, open the production sample, run every prompt from `tests/ai/cases/*.md`. Expected: all PASS.
 - Manual end-to-end with **Codex CLI**: extract the `.zip` to `~/.agents/skills/forgemark/`, same exercise.

@@ -428,7 +428,7 @@ button[data-forgemark="block"] {
   z-index: 2147483000;
   box-sizing: border-box;
   margin: 0;
-  font: 500 11px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font: 500 11px/1.2 -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", "Ubuntu Sans", Ubuntu, Cantarell, sans-serif;
   letter-spacing: 0.02em;
   color: ${tokens.text};
   background: ${tokens.surface};

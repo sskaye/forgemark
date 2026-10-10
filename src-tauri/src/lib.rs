@@ -515,17 +515,43 @@ fn build_menu(app: &tauri::AppHandle, recent: &[String]) -> tauri::Result<Menu<t
         .item(&suggest_edit)
         .build()?;
 
-    // Window menu — matches the macOS native structure so users
-    // can find what they expect, and System Settings → Keyboard →
-    // Shortcuts → App Shortcuts can remap by item name. Item names
-    // reproduce Apple's exactly: "Left", "Right", "Top Left",
-    // "Return to Previous Size", etc.
-    //
-    // Default accelerators are Ctrl+Option+arrow (matches Rectangle
-    // and Magnet defaults). Tauri/Electron can't bind to Fn (Globe),
-    // so we can't reproduce the macOS Sequoia native Fn+Ctrl+arrow
-    // exactly — pick the next-most-conventional set instead.
+    // Help holds the one thing a user may go looking for without
+    // knowing it lives in Settings.
+    let install_skill = MenuItemBuilder::new("Install AI Skill…")
+        .id("install-skill")
+        .build(app)?;
+    let help_submenu = SubmenuBuilder::new(app, "Help")
+        .item(&install_skill)
+        .build()?;
 
+    let menu = MenuBuilder::new(app)
+        .item(&app_submenu)
+        .item(&file_submenu)
+        .item(&edit_submenu)
+        .item(&comment_submenu);
+    #[cfg(not(target_os = "linux"))]
+    let menu = menu.item(&window_submenu(app)?);
+    menu.item(&help_submenu).build()
+}
+
+// Window menu — matches the macOS native structure so users
+// can find what they expect, and System Settings → Keyboard →
+// Shortcuts → App Shortcuts can remap by item name. Item names
+// reproduce Apple's exactly: "Left", "Right", "Top Left",
+// "Return to Previous Size", etc.
+//
+// Default accelerators are Ctrl+Option+arrow (matches Rectangle
+// and Magnet defaults). Tauri/Electron can't bind to Fn (Globe),
+// so we can't reproduce the macOS Sequoia native Fn+Ctrl+arrow
+// exactly — pick the next-most-conventional set instead.
+//
+// Not on Linux. GTK has no Minimize or Zoom item, Wayland (Ubuntu's
+// default session) does not let an app place its own window, so Fill,
+// Center, and Move & Resize could resize but not move it, and GNOME
+// already binds Ctrl+Alt+arrow to switching workspaces. Super+arrow
+// does this natively there.
+#[cfg(not(target_os = "linux"))]
+fn window_submenu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri::Wry>> {
     // Halves
     let mr_h_left = MenuItemBuilder::new("Left")
         .id("window-left-half")
@@ -599,31 +625,13 @@ fn build_menu(app: &tauri::AppHandle, recent: &[String]) -> tauri::Result<Menu<t
     // No tab navigation commands here on purpose: switching tabs is a
     // click on the tab strip, and duplicating that as a menu item plus
     // accelerator earns nothing.
-    let window_submenu = SubmenuBuilder::new(app, "Window")
+    SubmenuBuilder::new(app, "Window")
         .minimize()
         .maximize() // shows as "Zoom" — the Cocoa convention
         .separator()
         .item(&mr_fill)
         .item(&mr_center)
         .item(&move_resize_submenu)
-        .build()?;
-
-    // Help holds the one thing a user may go looking for without
-    // knowing it lives in Settings.
-    let install_skill = MenuItemBuilder::new("Install AI Skill…")
-        .id("install-skill")
-        .build(app)?;
-    let help_submenu = SubmenuBuilder::new(app, "Help")
-        .item(&install_skill)
-        .build()?;
-
-    MenuBuilder::new(app)
-        .item(&app_submenu)
-        .item(&file_submenu)
-        .item(&edit_submenu)
-        .item(&comment_submenu)
-        .item(&window_submenu)
-        .item(&help_submenu)
         .build()
 }
 

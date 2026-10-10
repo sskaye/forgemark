@@ -2,6 +2,16 @@
 
 All notable changes to Forgemark are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Linux. Each release carries a `.deb` and an AppImage for Ubuntu 24.04 and later, on x86_64 and arm64. The `.deb` registers Forgemark for Markdown and HTML files, so a double-click in the file manager opens them. The Window menu is left out on Linux: GTK has no Minimize or Zoom item, Wayland does not let an app move its own window, and Super+arrow already snaps windows there.
+
+### Changed
+
+- The interface font falls back to the system's own on Windows (Segoe UI) and Linux (Ubuntu Sans, Cantarell) instead of Arial, and code to Ubuntu Mono or DejaVu Sans Mono on Linux.
+
 ## [1.9.0] — 2026-09-27
 
 ### Added
