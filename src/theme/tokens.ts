@@ -8,10 +8,11 @@
 // shipped"; we keep only Native in the v1 build.
 
 export const SYSTEM_SANS =
-  '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro", "Helvetica Neue", Arial, sans-serif';
+  '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro", system-ui, "Segoe UI", "Ubuntu Sans", Ubuntu, Cantarell, "Helvetica Neue", Arial, sans-serif';
 export const SYSTEM_DISPLAY =
-  '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro", "Helvetica Neue", Arial, sans-serif';
-export const SYSTEM_MONO = 'ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace';
+  '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro", system-ui, "Segoe UI", "Ubuntu Sans", Ubuntu, Cantarell, "Helvetica Neue", Arial, sans-serif';
+export const SYSTEM_MONO =
+  'ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, "Ubuntu Sans Mono", "Ubuntu Mono", "DejaVu Sans Mono", monospace';
 
 export type TypePairing = {
   label: string;

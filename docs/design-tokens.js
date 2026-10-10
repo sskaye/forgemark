@@ -11,10 +11,11 @@
 
 window.FM_TOKENS = (() => {
   const SYSTEM_SANS =
-    '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro", "Helvetica Neue", Arial, sans-serif';
+    '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro", system-ui, "Segoe UI", "Ubuntu Sans", Ubuntu, Cantarell, "Helvetica Neue", Arial, sans-serif';
   const SYSTEM_DISPLAY =
-    '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro", "Helvetica Neue", Arial, sans-serif';
-  const SYSTEM_MONO = 'ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace';
+    '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro", system-ui, "Segoe UI", "Ubuntu Sans", Ubuntu, Cantarell, "Helvetica Neue", Arial, sans-serif';
+  const SYSTEM_MONO =
+    'ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, "Ubuntu Sans Mono", "Ubuntu Mono", "DejaVu Sans Mono", monospace';
 
   // Charter is shipped with macOS; iowan is on iOS. Fall back gracefully.
   const HUMANIST_SERIF =
