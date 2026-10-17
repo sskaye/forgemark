@@ -20,12 +20,21 @@ describe("CLI bundle", () => {
   });
 
   it("matches a fresh build (run `npm run build:cli` and commit if not)", async () => {
-    const result = await buildCli({ write: false });
-    const fresh = Buffer.from(result.outputFiles![0].contents);
+    const fresh = await buildCli({ write: false });
     const committed = readFileSync(CLI_OUT);
     expect(fresh.equals(committed), "assets/forgemark-skill/scripts/forgemark.mjs is stale").toBe(
       true,
     );
+  });
+
+  it("carries the notices of every bundled package", async () => {
+    const bundle = readFileSync(CLI_OUT, "utf8");
+    const notices = bundle.slice(bundle.lastIndexOf("/*! Third-party notices."));
+    for (const name of ["yaml", "parse5", "entities", "markdown-it"]) {
+      expect(notices).toMatch(new RegExp(`^${name} \\d`, "m"));
+    }
+    expect(notices).toContain("Permission is hereby granted");
+    expect(bundle.trimEnd().endsWith("*/")).toBe(true);
   });
 
   it("runs under plain node and reports the package version", () => {

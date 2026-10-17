@@ -2,7 +2,7 @@ name: Linux release
 
 # Builds the Linux packages (a .deb for Ubuntu and Debian, and a portable
 # AppImage) for x86_64 and arm64, and attaches them to the matching
-# GitHub release with a checksum file per architecture. Built on Ubuntu
+# GitHub draft release with a checksum file per architecture. Built on Ubuntu
 # 24.04, so they need its glibc and WebKitGTK 4.1 or later: Ubuntu 24.04
 # and newer, and distributions of the same age.
 #
@@ -35,7 +35,7 @@ on:
         default: ""
         type: string
 
-# Required for `gh release create/upload` with the default GITHUB_TOKEN.
+# Required for `gh release upload` with the default GITHUB_TOKEN.
 permissions:
   contents: write
 
@@ -116,15 +116,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
-        run: |
-          set -euo pipefail
-          # Create the release if it doesn't exist yet. The other Linux
-          # job and the Windows workflow may be racing to do the same, so
-          # a failed create is fine as long as the release is there after.
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --verify-tag \
-              --title "Forgemark ${TAG}" \
-              --notes "Automated release. See CHANGELOG.md for details." \
-              || gh release view "$TAG" >/dev/null
-          fi
-          gh release upload "$TAG" out/* --clobber
+        # Adds to the draft release; never creates one or replaces an
+        # asset. See scripts/release-attach.sh.
+        run: bash scripts/release-attach.sh "$TAG" out/*

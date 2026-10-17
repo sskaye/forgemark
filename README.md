@@ -93,6 +93,18 @@ forgemark lint report.md
 
 Every write is parsed back before the file is replaced, and the replacement is atomic, so the tool cannot leave a file the app cannot read. `lint` reports what the app would refuse and what a reviewer would want to know about, such as an orphaned comment or a drifted anchor description. The tool works for people too: `npm run cli -- lint file.md` from a checkout, or `node forgemark.mjs` from an installed skill.
 
+To use the tool without the skill, in CI or another project's build, download it from a release at a pinned version and check its checksum:
+
+```bash
+v=1.10.0
+base=https://github.com/sskaye/forgemark/releases/download/v$v
+curl -fsSLO "$base/forgemark-cli-$v.mjs" -O "$base/SHA256SUMS-cli.txt"
+sha256sum -c SHA256SUMS-cli.txt   # macOS: shasum -a 256 -c SHA256SUMS-cli.txt
+node "forgemark-cli-$v.mjs" lint report.html
+```
+
+Releases are immutable, so a version's file never changes. The tool is MIT-licensed, like the app; the licences of the packages it bundles are at the end of the file.
+
 ### Installing by hand
 
 The saved file is a zip holding one `forgemark` folder. Tools that follow the Agent Skills standard read such a folder from the home directory, the same paths on macOS, Windows (`%USERPROFILE%`), and Linux:

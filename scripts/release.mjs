@@ -139,23 +139,21 @@ run(`spctl --assess --type open --context context:primary-signature --verbose=4 
 step("Done");
 console.log(`  App: ${APP}`);
 console.log(`  DMG: ${DMG}`);
-// One command tags and publishes. `--target main` makes gh create the tag on
-// the remote itself, which both publishes the release and starts
-// windows-release.yml and linux-release.yml. Creating the tag locally and
-// pushing it first would start those workflows early, and they create the
-// release when one doesn't exist yet — so you'd race them for ownership of
-// the release.
+// Releases are immutable once published, so the release starts as a
+// draft carrying the .dmg; pushing the tag then starts windows-release.yml,
+// linux-release.yml and cli-release.yml, which add to that draft (and
+// never create one), and `npm run release:publish` publishes it once
+// every asset is there. The draft must exist before the tag is pushed.
 console.log("\nNext steps (manual):");
 console.log(`  1. Smoke-test the .dmg on a fresh macOS user account.`);
-console.log(`  2. Tag and publish in one step (do NOT push a tag first):`);
+console.log(`  2. Create the draft release with the .dmg:`);
 console.log(
-  `       gh release create v${VERSION} --target main \\\n` +
+  `       gh release create v${VERSION} --draft \\\n` +
     `         --title "Forgemark v${VERSION}" \\\n` +
     `         --notes-file CHANGELOG.md \\\n` +
     `         "${DMG}#Forgemark ${VERSION} — universal macOS"`,
 );
-console.log(`  3. Pull the tag gh just created back down:`);
-console.log(`       git fetch origin --tags`);
-console.log(
-  `\n  The Windows installers and Linux packages attach to the release a few minutes later.`,
-);
+console.log(`  3. Tag the commit you built and push the tag (starts the CI builds):`);
+console.log(`       git tag v${VERSION} && git push origin v${VERSION}`);
+console.log(`  4. When the Windows, Linux and CLI workflows have finished, publish:`);
+console.log(`       npm run release:publish`);

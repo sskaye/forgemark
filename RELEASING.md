@@ -1,6 +1,6 @@
 # Releasing Forgemark
 
-Cuts a signed, notarized macOS `.dmg`, the Windows installers, and the Linux packages. Everything outside the bullet labelled **Manual** is reproducible from a clean checkout.
+Cuts a signed, notarized macOS `.dmg`, the Windows installers, the Linux packages, and the command-line tool. Everything outside the bullet labelled **Manual** is reproducible from a clean checkout.
 
 ## One-time setup
 
@@ -28,6 +28,20 @@ Cuts a signed, notarized macOS `.dmg`, the Windows installers, and the Linux pac
 ```sh
 rustup target add x86_64-apple-darwin   # one-time; aarch64 already added by tauri install
 ```
+
+### Immutable releases
+
+The repository has **immutable releases** turned on (Settings → General →
+Releases), so a published release's assets and tag can't be changed or
+added to. Tools that pin a version, such as a CI job downloading
+`forgemark-cli-<ver>.mjs` and checking its checksum, rely on that. To check
+it's still on:
+
+```sh
+gh api repos/sskaye/forgemark/immutable-releases   # {"enabled":true,...}
+```
+
+It is why every release is assembled as a draft and published last, below.
 
 ## Each release
 
@@ -88,38 +102,49 @@ A Gatekeeper prompt on a fresh account means the staple didn't apply; rerun `xcr
 
 ## Tag and publish
 
-One command does the whole thing. `--target` makes `gh` create the tag on the
-remote itself, which both publishes the release and starts
-`windows-release.yml` and `linux-release.yml` — so there is no separate `git push origin <tag>` step,
-and no race with the workflow over who creates the release.
+A published release can't be added to, so the release is assembled as a
+draft and published only when every asset is on it. Four steps, in this
+order:
 
 ```sh
-gh release create v<ver> --target main \
+# 1. The draft, carrying the .dmg. A draft holds no tag yet.
+gh release create v<ver> --draft \
   --title "Forgemark v<ver>" \
   --notes-file CHANGELOG.md \
   "src-tauri/target/universal-apple-darwin/release/bundle/dmg/Forgemark_<ver>_universal.dmg#Forgemark <ver> — universal macOS"
 
-git fetch origin --tags   # pull the tag gh just created back down
+# 2. Tag the commit you built (it should be origin/main) and push the tag.
+#    That starts windows-release.yml, linux-release.yml and cli-release.yml.
+git tag v<ver> && git push origin v<ver>
+
+# 3. Wait for the three workflows to finish.
+gh run list --branch v<ver>
+
+# 4. Publish. Refuses unless the tag is on GitHub and all twelve assets are
+#    on the draft, and checks the CLI asset is the bundle committed at the tag.
+npm run release:publish
 ```
 
-The Windows installers and the Linux packages appear on the release a few
-minutes later.
+**Create the draft before pushing the tag.** The workflows add to the draft
+and never create a release: a draft holds no tag, so two jobs that each
+created one would leave two drafts for one version. A workflow that finds no
+draft fails and says so; create the draft and re-run the failed jobs. The
+upload step lives in `scripts/release-attach.sh`, shared by all three
+workflows. It never replaces an asset, so re-running a job that already
+uploaded fails on the name: delete that asset from the draft first.
 
-**Don't** create the tag locally first and push it: `gh release create` refuses
-to run against a tag that exists only locally, and pushing the tag starts the
-Windows and Linux workflows, which create the release itself if one doesn't exist — so
-you end up racing it. If you specifically want an _annotated_ tag, push it
-first and then use `gh release edit --notes-file` plus `gh release upload`
-instead of `create`.
+If a check in step 4 fails, nothing is published and the draft stays as it
+is. Once published, a mistake can't be patched in place: cut a new version.
 
 ## Windows
 
 Automated via GitHub Actions (`.github/workflows/windows-release.yml`) on a
 `windows-latest` runner. It runs on every `v*` tag push and attaches the
-**unsigned** `.msi` (WiX) and `-setup.exe` (NSIS) to that tag's GitHub release
-(creating the release if it doesn't exist yet). No Windows machine required.
+**unsigned** `.msi` (WiX) and `-setup.exe` (NSIS) to that tag's draft release.
+No Windows machine required.
 
-To backfill a release tagged before the workflow existed, run it manually:
+To backfill a release tagged before the workflow existed (and published
+before releases became immutable), run it manually:
 
 ```sh
 gh workflow run windows-release.yml -f tag=v<ver>
@@ -145,8 +170,8 @@ but don't fit headless CI. The legacy `WINDOWS_SIGNING_PFX_PATH` /
 
 Automated via GitHub Actions (`.github/workflows/linux-release.yml`) on
 `ubuntu-24.04` and `ubuntu-24.04-arm` runners. Like the Windows workflow, it
-runs on every `v*` tag push and attaches its packages to that tag's release,
-creating the release if it doesn't exist yet. No Linux machine required.
+runs on every `v*` tag push and attaches its packages to that tag's draft
+release. No Linux machine required.
 
 Output assets, per architecture (`amd64`/`x86_64` and `arm64`/`aarch64`):
 
@@ -170,6 +195,36 @@ To backfill a release, run it manually:
 ```sh
 gh workflow run linux-release.yml -f tag=v<ver>
 ```
+
+## Command-line tool
+
+Automated via GitHub Actions (`.github/workflows/cli-release.yml`). On every
+`v*` tag push it attaches the CLI bundle committed at the tag, so other
+projects can install a pinned version without the app or the skill. It runs
+the bundle on Node 18, the oldest the bundle supports, and fails if the
+version the bundle reports isn't the tag's.
+
+Output assets:
+
+- `forgemark-cli-<ver>.mjs` — `assets/forgemark-skill/scripts/forgemark.mjs`
+  at the tag, byte for byte. One file, no dependencies, Node 18 or later. The
+  notices of the packages it bundles are at its end (`scripts/build-cli.mjs`
+  writes them).
+- `SHA256SUMS-cli.txt` — its checksum, for `sha256sum -c`.
+- `forgemark-cli-LICENSE.txt` — Forgemark's MIT licence.
+
+A consumer pins a version like this:
+
+```sh
+v=1.10.0
+base=https://github.com/sskaye/forgemark/releases/download/v$v
+curl -fsSLO "$base/forgemark-cli-$v.mjs" -O "$base/SHA256SUMS-cli.txt"
+sha256sum -c SHA256SUMS-cli.txt
+node "forgemark-cli-$v.mjs" --version
+```
+
+The skill has a 512 KB size budget (`scripts/build-skill.mjs`), and the
+bundle, notices included, is most of it. About 5 KB was left at 1.9.1.
 
 ## Auto-update
 

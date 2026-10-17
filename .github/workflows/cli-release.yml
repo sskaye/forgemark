@@ -1,0 +1,72 @@
+name: CLI release
+
+# Attaches the forgemark command-line tool to the matching GitHub release,
+# so it can be installed at a pinned version without the app or the
+# skill: the committed bundle, renamed for its version, a checksum file
+# in `sha256sum -c` form, and the licence. The bundle needs only Node 18
+# and carries the notices of the packages it bundles at its end.
+#
+#   forgemark-cli-<ver>.mjs
+#   SHA256SUMS-cli.txt
+#   forgemark-cli-LICENSE.txt
+#
+# Triggers:
+#   - automatically on any `v*` tag push (attaches that tag's bundle);
+#   - manually via "Run workflow", passing an existing release tag.
+#
+# Like the Windows and Linux workflows, it adds to the draft release the
+# maintainer created and never creates one (see scripts/release-attach.sh).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach the CLI to (e.g. v1.10.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  attach:
+    name: Attach the CLI
+    runs-on: ubuntu-24.04
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      # The oldest Node the bundle promises to run on.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "18"
+
+      - name: Check the bundle runs and is this version
+        run: |
+          set -euo pipefail
+          printed="$(node assets/forgemark-skill/scripts/forgemark.mjs --version)"
+          if [ "v${printed}" != "$TAG" ]; then
+            echo "::error::The committed bundle reports ${printed}, but the tag is ${TAG}. Run npm run build:skill and commit."
+            exit 1
+          fi
+
+      - name: Collect the CLI, its checksum, and the licence
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          mkdir -p out
+          cp assets/forgemark-skill/scripts/forgemark.mjs "out/forgemark-cli-${version}.mjs"
+          cp LICENSE out/forgemark-cli-LICENSE.txt
+          cd out
+          sha256sum "forgemark-cli-${version}.mjs" > SHA256SUMS-cli.txt
+          cat SHA256SUMS-cli.txt
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/release-attach.sh "$TAG" out/*
