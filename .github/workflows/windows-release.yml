@@ -2,13 +2,14 @@ name: Windows release
 
 # Builds the unsigned Windows installers (.msi via WiX, -setup.exe via NSIS)
 # on a windows-latest runner and attaches them to the matching GitHub
-# release. The macOS .dmg is still built + signed + notarized locally
+# draft release. The macOS .dmg is still built + signed + notarized locally
 # (`npm run release`); this only fills in the Windows artifacts.
 #
 # Triggers:
 #   - automatically on any `v*` tag push (builds that tag);
 #   - manually via "Run workflow", passing an existing release tag (used to
-#     backfill a release that was tagged before this workflow existed).
+#     backfill a release that was tagged before this workflow existed, and
+#     published before releases became immutable).
 
 on:
   push:
@@ -25,7 +26,7 @@ on:
         default: ""
         type: string
 
-# Required for `gh release create/upload` with the default GITHUB_TOKEN.
+# Required for `gh release upload` with the default GITHUB_TOKEN.
 permissions:
   contents: write
 
@@ -64,16 +65,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        # Adds to the draft release; never creates one or replaces an
+        # asset. See scripts/release-attach.sh.
         run: |
-          set -euo pipefail
-          # Create the release if it doesn't exist yet (e.g. the Windows
-          # build wins the race against the local macOS publish step).
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --verify-tag \
-              --title "Forgemark ${TAG}" \
-              --notes "Automated release. See CHANGELOG.md for details."
-          fi
-          gh release upload "$TAG" \
+          bash scripts/release-attach.sh "$TAG" \
             src-tauri/target/release/bundle/msi/*.msi \
-            src-tauri/target/release/bundle/nsis/*-setup.exe \
-            --clobber
+            src-tauri/target/release/bundle/nsis/*-setup.exe

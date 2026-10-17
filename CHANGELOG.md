@@ -4,6 +4,14 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 
 ## [Unreleased]
 
+### Added
+
+- The command-line tool on its own. Each release carries `forgemark-cli-<version>.mjs`, the same single file the skill ships, with a `SHA256SUMS-cli.txt` checksum and the licence, so a build or CI job can install a pinned version without the app or the skill. The file now ends with the licence notices of the packages it bundles.
+
+### Changed
+
+- Releases are immutable once published: no asset or tag can be changed afterwards, so a pinned download stays the same file.
+
 ### Fixed
 
 - Making a comment no longer scrolls the report to it a moment later. If you had scrolled away meanwhile, the report was pulled back to the comment you had just made.
