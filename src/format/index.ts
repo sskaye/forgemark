@@ -22,6 +22,7 @@ export {
   type Placement,
   type LocateOptions,
 } from "./locate";
+export { reattachOrphans, type ReattachOutcome, type ReattachAllOptions } from "./reattachAll";
 export { splitFrontmatter, type SplitBody } from "./frontmatter";
 export {
   findMarkers,

@@ -19,12 +19,14 @@ import {
   deleteComment,
   floatComment,
   reattachComment,
+  reattachAll,
   listComments,
   CommandError,
   type Listed,
   type Result,
 } from "./lib";
 import { lintText, type Problem } from "./lint";
+import type { ReattachOutcome } from "../src/format/reattachAll";
 
 const VERSION = typeof __FORGEMARK_VERSION__ === "string" ? __FORGEMARK_VERSION__ : "dev";
 
@@ -47,6 +49,7 @@ Usage:
   forgemark reply <file> <id> --body "…"
   forgemark resolve | unresolve | delete | float <file> <id>
   forgemark reattach <file> <id> --anchor "passage" | --selector "#id"
+  forgemark reattach <file> --all [--dry-run] [--strict] [--json]
   forgemark lint <file>... [--strict] [--json]
 
 Options:
@@ -57,8 +60,12 @@ Options:
                       or add --occurrence N.
   --selector SEL      HTML only: wrap a whole element by id ("#fig-3" or "#fig-3 table").
   --suggest TEXT      Make the comment a suggested edit replacing the anchored text.
+  --all               reattach: put back every orphaned comment that can be placed for certain —
+                      by its element's id, or by its text where that appears once, or where
+                      the recorded surroundings pick one copy. The rest stay orphaned, each
+                      with the reason. --dry-run reports without writing.
   --json              Machine-readable output.
-  --strict            lint: treat warnings as errors.
+  --strict            lint: treat warnings as errors. reattach --all: exit 1 if any stay orphaned.
 
 Every write is parsed back before the file is replaced; nothing is written if it would not
 read back. Exit codes: 0 ok, 1 refused or lint problems, 2 usage, 3 I/O.
@@ -83,6 +90,8 @@ const BOOL_FLAGS = new Set([
   "resolved",
   "orphaned",
   "strict",
+  "all",
+  "dry-run",
   "help",
   "version",
 ]);
@@ -192,10 +201,10 @@ function loadDocument(path: string): Doc {
   }
 }
 
-function saveDocument(doc: Doc, result: Result): void {
+function saveDocument(doc: Doc, file: ParsedFile): void {
   let text: string;
   try {
-    text = serializeForgemarkFile(result.file);
+    text = serializeForgemarkFile(file);
   } catch (err) {
     if (err instanceof ForgemarkSerializeError) throw new CommandError(err.message);
     throw err;
@@ -354,7 +363,7 @@ function run(argv: string[]): number {
         suggest: str(flags, "suggest"),
         now: nowIso(),
       });
-      saveDocument(doc, result);
+      saveDocument(doc, result.file);
       report(result, flags);
       return EXIT_OK;
     }
@@ -364,7 +373,7 @@ function run(argv: string[]): number {
       const body = bodyText(flags);
       if (body === undefined) throw new UsageError("A reply needs --body or --body-file.");
       const result = addReply(doc.file, id, { author: needAuthor(flags), body, now: nowIso() });
-      saveDocument(doc, result);
+      saveDocument(doc, result.file);
       report(result, flags);
       return EXIT_OK;
     }
@@ -372,32 +381,46 @@ function run(argv: string[]): number {
     case "unresolve": {
       const doc = loadDocument(needFile(positional));
       const result = setResolved(doc.file, needId(positional, 1), command === "resolve");
-      saveDocument(doc, result);
+      saveDocument(doc, result.file);
       report(result, flags);
       return EXIT_OK;
     }
     case "delete": {
       const doc = loadDocument(needFile(positional));
       const result = deleteComment(doc.file, needId(positional, 1));
-      saveDocument(doc, result);
+      saveDocument(doc, result.file);
       report(result, flags);
       return EXIT_OK;
     }
     case "float": {
       const doc = loadDocument(needFile(positional));
       const result = floatComment(doc.file, needId(positional, 1));
-      saveDocument(doc, result);
+      saveDocument(doc, result.file);
       report(result, flags);
       return EXIT_OK;
     }
     case "reattach": {
       const doc = loadDocument(needFile(positional));
+      if (flags.all) {
+        if (positional.length > 1) throw new UsageError("--all takes no comment id.");
+        if (str(flags, "anchor") !== undefined || str(flags, "selector") !== undefined) {
+          throw new UsageError("--all places each comment itself; drop --anchor and --selector.");
+        }
+        const result = reattachAll(doc.file, doc.format);
+        const dryRun = flags["dry-run"] === true;
+        const placed = result.outcomes.filter((o) => o.outcome === "attached").length;
+        if (placed > 0 && !dryRun) saveDocument(doc, result.file);
+        printReattachAll(doc, result.outcomes, result.summary, dryRun, flags);
+        const left = result.outcomes.length - placed;
+        return flags.strict && left > 0 ? EXIT_PROBLEM : EXIT_OK;
+      }
+      if (flags["dry-run"]) throw new UsageError("--dry-run applies to reattach --all.");
       const result = reattachComment(doc.file, doc.format, needId(positional, 1), {
         anchor: str(flags, "anchor"),
         selector: str(flags, "selector"),
         occurrence: occurrence(flags),
       });
-      saveDocument(doc, result);
+      saveDocument(doc, result.file);
       report(result, flags);
       return EXIT_OK;
     }
@@ -425,6 +448,46 @@ function run(argv: string[]): number {
     default:
       throw new UsageError(`Unknown command "${command}".`);
   }
+}
+
+function printReattachAll(
+  doc: Doc,
+  outcomes: ReattachOutcome[],
+  summary: string,
+  dryRun: boolean,
+  flags: Flags,
+): void {
+  const attached = outcomes.filter((o) => o.outcome === "attached").length;
+  if (flags.json) {
+    console.log(
+      JSON.stringify(
+        {
+          file: doc.path,
+          format: doc.format,
+          dry_run: dryRun,
+          attached,
+          orphaned: outcomes.length - attached,
+          results: outcomes,
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+  const how = {
+    selector: "by its element's id",
+    text: "by its text",
+    context: "by its surroundings",
+  };
+  for (const o of outcomes) {
+    if (o.outcome === "attached") {
+      console.log(`#${o.id}  attached ${how[o.how]}, line ${o.line}: ${quote(o.anchor_text)}`);
+    } else {
+      console.log(`#${o.id}  left orphaned (${o.reason}): ${o.detail}`);
+    }
+  }
+  console.log(dryRun && attached > 0 ? `${summary} (Dry run: nothing written.)` : summary);
 }
 
 function report(result: Result, flags: Flags): void {

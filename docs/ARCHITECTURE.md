@@ -300,9 +300,17 @@ appears not to move there is the harness, not the code.
 a rebuild orphans every anchor. `format/html/candidates.ts` tries the recorded
 `anchor_selector` first (exact, and survives a renumbered caption), then locates
 an element anchor by its caption widened to the enclosing block, then falls back
-to ranking over rendered text. The lost-anchor banner offers a bulk reattach for
-unambiguous matches only — a passage that appears twice is exactly the case a
-human should look at.
+to ranking over rendered text; the Reattach dialog shows these candidates.
+
+Re-attaching without a person is `format/reattachAll.ts`, shared by the
+lost-anchor banner's bulk action and `forgemark reattach --all`. It is
+stricter than the dialog: an element by its recorded id, or a passage by its
+text where the text appears once, or where several copies appear and exactly
+one copy's surroundings match the recorded `context_before`/`context_after`
+best (`locate.ts`, `near`). A tie, a reworded passage, or an overlap is left
+orphaned with the reason. Placement goes through `locate.ts`, so a
+re-attached marker obeys the same rules as a new one, and the record's anchor
+fields are refreshed from what was found, in rendered text.
 
 ## Core modules
 
@@ -547,8 +555,8 @@ skill, so an agent that has the skill has the tool, and `SKILL.md` tells
 it to use the tool for every read and write. The commands are the things
 an agent does in a review: `list` and `show` to read, `comment` (with
 `--anchor`, `--selector` for an HTML element, `--floating`, or
-`--suggest`), `reply`, `resolve`/`unresolve`, `float`, `reattach`,
-`delete`, and `lint`.
+`--suggest`), `reply`, `resolve`/`unresolve`, `float`, `reattach` (one
+comment, or `--all` after a rebuild), `delete`, and `lint`.
 
 Rules the CLI keeps, all of them tested:
 

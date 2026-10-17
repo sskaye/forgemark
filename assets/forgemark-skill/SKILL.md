@@ -31,6 +31,7 @@ node <skill directory>/scripts/forgemark.mjs --help
 | `forgemark resolve <file> <id>` / `unresolve` | Mark a thread resolved, or reopen it. |
 | `forgemark float <file> <id>` | Turn a comment whose passage is gone into a floating note. |
 | `forgemark reattach <file> <id> --anchor "passage"` | Give an orphaned or floating comment a new anchor. |
+| `forgemark reattach <file> --all [--dry-run] [--json]` | After a rebuild: put back every orphan that can be placed for certain, and say why for the rest. |
 | `forgemark delete <file> <id>` | Remove a comment and its markers. Only when asked. |
 | `forgemark lint <file>… [--strict]` | Check a file the way the app will read it. Run it before handing a file back. |
 
@@ -73,7 +74,7 @@ When you edit the document body, the markers are in your way and you must leave 
 Everything above applies to `.html` files unchanged; the storage format is identical. Two differences:
 
 - Quote passages as rendered — the text a browser shows — even where the source has tags or entities inside them. Use `--selector "#id"` to comment on a figure, chart, or table that has an `id`; that is the only way to comment on something with no text.
-- **Regenerating a reviewed report** drops every marker, since the generator writes a new body. Carry the trailing comments block over verbatim, keep the `id` attributes of sections, figures, and tables stable across builds (a comment made with `--selector` reattaches exactly when its id survives), then run `forgemark lint` — the orphans it lists can be settled with `reattach`, or left for the reviewer, who has a bulk-reattach flow. Never drop the block: that discards the review.
+- **Regenerating a reviewed report** drops every marker, since the generator writes a new body. Carry the trailing comments block over verbatim, keep the `id` attributes of sections, figures, and tables stable across builds (a comment made with `--selector` reattaches exactly when its id survives), then run `forgemark reattach <file> --all`. It places each orphan by its element's `id`, or by its text where that appears once or its recorded surroundings pick one copy, and lists the rest with the reason; settle those with `reattach <id>` or leave them for the reviewer. Never drop the block: that discards the review.
 
 ## Format reference
 

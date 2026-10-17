@@ -10,6 +10,7 @@
 import type { Comment, DocFormat, ParsedFile, Reply } from "../src/format/types";
 import { nextCommentId, removeMarkersFromBody } from "../src/format/compose";
 import { classifyAnchors, type AnchorStatus } from "../src/format/reattach";
+import { reattachOrphans, type ReattachOutcome } from "../src/format/reattachAll";
 import { findMarkers, pairMarkers } from "../src/format/markers";
 import { applyPlacement, locateAnchor, locateElement, AnchorError, type Placement } from "./anchor";
 
@@ -183,6 +184,8 @@ export function reattachComment(
     delete next.floating;
     delete next.anchor_kind;
     delete next.anchor_selector;
+    delete next.context_before;
+    delete next.context_after;
     fillAnchorFields(next, placement);
     return next;
   });
@@ -191,6 +194,24 @@ export function reattachComment(
     summary: `Reattached #${id} to "${truncate(placement.anchor_text)}".`,
     id,
   };
+}
+
+// Put back every orphaned comment that can be placed without a person
+// deciding, and say what happened to each (`src/format/reattachAll.ts`
+// has the rules). Floating notes are left alone.
+export function reattachAll(
+  file: ParsedFile,
+  format: DocFormat,
+): { file: ParsedFile; outcomes: ReattachOutcome[]; summary: string } {
+  const result = reattachOrphans(file, format);
+  const total = result.outcomes.length;
+  const attached = result.outcomes.filter((o) => o.outcome === "attached").length;
+  const summary =
+    total === 0
+      ? "No orphaned comments."
+      : `Reattached ${attached} of ${total} orphaned comment${total === 1 ? "" : "s"}` +
+        (attached < total ? `; ${total - attached} left orphaned.` : ".");
+  return { ...result, summary };
 }
 
 // ── reading ───────────────────────────────────────────────────────────
