@@ -13,6 +13,7 @@ import { classifyAnchors, type AnchorStatus } from "../src/format/reattach";
 import { reattachOrphans, type ReattachOutcome } from "../src/format/reattachAll";
 import { findMarkers, pairMarkers } from "../src/format/markers";
 import { applyPlacement, locateAnchor, locateElement, AnchorError, type Placement } from "./anchor";
+import { scopeOfPlacement } from "../src/format/locate";
 
 export class CommandError extends Error {
   constructor(message: string) {
@@ -68,7 +69,7 @@ export function addComment(file: ParsedFile, format: DocFormat, input: CommentIn
 
   const placement = place(file.body, format, input);
   const newBody = applyPlacement(file.body, placement, id);
-  fillAnchorFields(record, placement);
+  fillAnchorFields(record, placement, scopeOfPlacement(file.body, placement, format));
 
   if (input.suggest !== undefined) {
     const from = file.body.slice(placement.start, placement.end);
@@ -150,6 +151,7 @@ export function floatComment(file: ParsedFile, id: number): Result {
     delete next.anchor_text;
     delete next.anchor_kind;
     delete next.anchor_selector;
+    delete next.anchor_scope;
     delete next.context_before;
     delete next.context_after;
     return next;
@@ -184,9 +186,10 @@ export function reattachComment(
     delete next.floating;
     delete next.anchor_kind;
     delete next.anchor_selector;
+    delete next.anchor_scope;
     delete next.context_before;
     delete next.context_after;
-    fillAnchorFields(next, placement);
+    fillAnchorFields(next, placement, scopeOfPlacement(file.body, placement, format));
     return next;
   });
   return {
@@ -262,10 +265,11 @@ function place(
   }
 }
 
-function fillAnchorFields(record: Comment, placement: Placement): void {
+function fillAnchorFields(record: Comment, placement: Placement, scope?: string): void {
   record.anchor_text = placement.anchor_text;
   if (placement.anchor_kind) record.anchor_kind = placement.anchor_kind;
   if (placement.anchor_selector) record.anchor_selector = placement.anchor_selector;
+  if (scope) record.anchor_scope = scope;
   if (placement.context_before) record.context_before = placement.context_before;
   if (placement.context_after) record.context_after = placement.context_after;
 }

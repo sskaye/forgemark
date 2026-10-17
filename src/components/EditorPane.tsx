@@ -21,6 +21,7 @@ import { ContextMenu } from "./ContextMenu";
 import { commandFor, modalOpen } from "../state/keymap";
 import {
   classifyAnchors,
+  enclosingScope,
   reattachOrphans,
   nextCommentId,
   serializeForgemarkFile,
@@ -443,22 +444,34 @@ export function EditorPane({ docId }: Props) {
     [isHtml, state.body],
   );
 
-  // Anchor metadata common to a new comment and a new suggestion.
+  // Anchor metadata common to a new comment and a new suggestion. A run
+  // of text in a report also records its enclosing element's id, read
+  // from the source before the markers go in (`anchor_scope`).
   const anchorFields = useCallback(
     (c: {
+      from: number;
+      to: number;
+      floating?: boolean;
       selectionText: string;
       contextBefore: string;
       contextAfter: string;
       anchorKind?: "element" | "passage";
       anchorSelector?: string;
-    }) => ({
-      anchor_text: c.selectionText,
-      ...(c.anchorKind ? { anchor_kind: c.anchorKind } : {}),
-      ...(c.anchorSelector ? { anchor_selector: c.anchorSelector } : {}),
-      context_before: c.contextBefore,
-      context_after: c.contextAfter,
-    }),
-    [],
+    }) => {
+      const scope =
+        isHtml && !c.anchorKind && !c.floating
+          ? enclosingScope(state.body, c.from, c.to)
+          : undefined;
+      return {
+        anchor_text: c.selectionText,
+        ...(c.anchorKind ? { anchor_kind: c.anchorKind } : {}),
+        ...(c.anchorSelector ? { anchor_selector: c.anchorSelector } : {}),
+        ...(scope ? { anchor_scope: scope } : {}),
+        context_before: c.contextBefore,
+        context_after: c.contextAfter,
+      };
+    },
+    [isHtml, state.body],
   );
 
   // The same fields, from a placement the locator made in the source.

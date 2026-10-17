@@ -219,6 +219,16 @@ describe("forgemark CLI", () => {
     expect(parsed.body).toContain(
       "Bar intro. <!-- fmc:1 -->Values are in thousands.<!-- /fmc:1 -->",
     );
+    // It records the section it sits in, as a new comment does.
+    expect(parsed.comments[0].anchor_scope).toBe("#a");
+    expect(
+      main(["comment", file, "--anchor", "Bar outro.", "--body", "Hm.", "--author", "Claude"]),
+    ).toBe(0);
+    const withNew = parseForgemarkFile(readFileSync(file, "utf8"), {
+      format: "html",
+      tolerant: true,
+    });
+    expect(withNew.comments.find((c) => c.body === "Hm.\n")?.anchor_scope).toBe("#a");
 
     // Nothing left that it can place: nothing written, exit 0 without --strict.
     const after = readFileSync(file, "utf8");

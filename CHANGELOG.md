@@ -8,6 +8,7 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 
 - The command-line tool on its own. Each release carries `forgemark-cli-<version>.mjs`, the same single file the skill ships, with a `SHA256SUMS-cli.txt` checksum and the licence, so a build or CI job can install a pinned version without the app or the skill. The file now ends with the licence notices of the packages it bundles.
 - `forgemark reattach <file> --all` puts back every orphaned comment that can be placed for certain after a page is regenerated: an element by its recorded id, a passage by its text where it appears once, or where it appears several times and the text recorded around it picks one copy. Each of the rest is left orphaned with the reason — the text is gone (with the closest near match), it is ambiguous, it overlaps another anchor, or the element is gone. `--dry-run` reports without writing, `--json` gives the outcomes as data, and `--strict` exits 1 if any are left.
+- A comment on text in an HTML report records the innermost enclosing element with an id as `anchor_scope`. When the report is rebuilt, a sentence repeated in several sections, even with the same words around it each time, goes back to the section it was in. Older versions keep the field untouched.
 
 ### Changed
 

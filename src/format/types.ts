@@ -39,6 +39,13 @@ export type Comment = {
   // probabilistic into exact. Purely a hint: a stale selector costs
   // nothing because text matching still runs.
   anchor_selector?: string;
+  // HTML only, for a comment on a run of text: the innermost enclosing
+  // element with an id, as `#id`. When the passage appears more than once
+  // and the words around the copies are the same — one sentence in every
+  // tab of a report — reattachment looks inside this element first.
+  // Purely a hint, like `anchor_selector`: if the element is gone, or no
+  // longer holds the passage, the whole document is searched as before.
+  anchor_scope?: string;
   context_before?: string;
   context_after?: string;
   author: string;
@@ -85,6 +92,7 @@ export const COMMENT_KEY_ORDER = [
   "anchor_text",
   "anchor_kind",
   "anchor_selector",
+  "anchor_scope",
   "context_before",
   "context_after",
   "author",

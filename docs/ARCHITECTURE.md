@@ -307,7 +307,11 @@ lost-anchor banner's bulk action and `forgemark reattach --all`. It is
 stricter than the dialog: an element by its recorded id, or a passage by its
 text where the text appears once, or where several copies appear and exactly
 one copy's surroundings match the recorded `context_before`/`context_after`
-best (`locate.ts`, `near`). A tie, a reworded passage, or an overlap is left
+best (`locate.ts`, `near`). In a report, a passage is looked for first inside
+its `anchor_scope`, the innermost enclosing element with an id when it was
+made (`html/elements.ts`, `enclosingScope`): a sentence repeated in every tab
+with the same words around it is told apart by the tab's id. A scope that is
+gone, or no longer holds the passage, falls back to the whole page. A tie, a reworded passage, or an overlap is left
 orphaned with the reason. Placement goes through `locate.ts`, so a
 re-attached marker obeys the same rules as a new one, and the record's anchor
 fields are refreshed from what was found, in rendered text.

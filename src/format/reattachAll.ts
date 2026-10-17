@@ -10,12 +10,15 @@
 //
 //   1. An element or passage comment with an `anchor_selector`: the
 //      element with that id, if the page still has it. Exact.
-//   2. Otherwise the recorded `anchor_text`. Found once: attached. Found
-//      several times: the copy whose surroundings best match the
-//      recorded `context_before` / `context_after` (`locate.ts`, `near`),
-//      if exactly one copy does best. A tie is left for a person — a
-//      sentence repeated in every tab of a report, with the same words
-//      around it each time, is a choice only the reviewer can make.
+//   2. Otherwise the recorded `anchor_text`. In an HTML report, inside
+//      the element the comment recorded as its `anchor_scope` first,
+//      when that element is still there and still holds the text: a
+//      sentence repeated in every tab, with the same words around it
+//      each time, is told apart by the tab's id. Then the whole page.
+//      Found once: attached. Found several times: the copy whose
+//      surroundings best match the recorded `context_before` /
+//      `context_after` (`locate.ts`, `near`), if exactly one copy does
+//      best. A tie is left for a person.
 //   3. Anything else stays orphaned, with the reason: the text is gone
 //      (and the closest near match, if any), it is ambiguous, it overlaps
 //      another anchor, or the element is gone.
@@ -39,18 +42,21 @@ import {
   locateAnchor,
   locateElement,
   locatePassage,
+  scopeOfPlacement,
   type Placement,
 } from "./locate";
+import { findBySelector } from "./html/elements";
 import { findCandidates } from "./reattach";
 
 export type ReattachOutcome =
   | {
       id: number;
       outcome: "attached";
-      // selector: the recorded element id. text: the only copy of the
+      // selector: the recorded element id. scope: the passage, inside
+      // the element it recorded as its scope. text: the only copy of the
       // passage. context: one of several copies, chosen by its
       // surroundings.
-      how: "selector" | "text" | "context";
+      how: "selector" | "scope" | "text" | "context";
       anchor_text: string;
       // Where it went: the 1-based line of the opening marker.
       line: number;
@@ -94,8 +100,10 @@ export function reattachOrphans(
       continue;
     }
     const { placement, how } = result;
+    // Offsets are into the body before the markers go in.
+    const scope = scopeOfPlacement(body, placement, format);
     body = applyPlacement(body, placement, comment.id);
-    updated.set(comment.id, withPlacement(comment, placement));
+    updated.set(comment.id, withPlacement(comment, placement, scope));
     outcomes.push({
       id: comment.id,
       outcome: "attached",
@@ -112,7 +120,7 @@ export function reattachOrphans(
   };
 }
 
-type Placed = { placement: Placement; how: "selector" | "text" | "context" };
+type Placed = { placement: Placement; how: "selector" | "scope" | "text" | "context" };
 
 function placeOrphan(
   body: string,
@@ -140,7 +148,20 @@ function placeOrphan(
         ),
       };
     }
-    const placement = locateAnchor(body, comment.anchor_text ?? "", format, { near });
+    const text = comment.anchor_text ?? "";
+    const scope =
+      format === "html" && comment.anchor_scope ? findBySelector(body, comment.anchor_scope) : null;
+    if (scope) {
+      try {
+        const placement = locateAnchor(body, text, format, { near, within: scope });
+        return { placement, how: "scope" };
+      } catch (err) {
+        // No longer in that element: the page may have been reorganised,
+        // so look everywhere, as for a comment with no scope.
+        if (!(err instanceof AnchorError) || err.code !== "not-found") throw err;
+      }
+    }
+    const placement = locateAnchor(body, text, format, { near });
     return { placement, how: (placement.occurrences ?? 1) > 1 ? "context" : "text" };
   } catch (err) {
     if (err instanceof AnchorError) return { error: err };
@@ -149,12 +170,14 @@ function placeOrphan(
 }
 
 // The record as it should read once attached: its anchor fields describe
-// what the markers now enclose. Stale context is dropped rather than
-// left beside a placement that has none.
-function withPlacement(comment: Comment, placement: Placement): Comment {
+// what the markers now enclose. Stale context and scope are dropped
+// rather than left beside a placement that has none.
+function withPlacement(comment: Comment, placement: Placement, scope?: string): Comment {
   const next: Comment = { ...comment };
   delete next.context_before;
   delete next.context_after;
+  delete next.anchor_scope;
+  if (scope) next.anchor_scope = scope;
   next.anchor_text = placement.anchor_text;
   if (placement.anchor_kind) next.anchor_kind = placement.anchor_kind;
   if (placement.anchor_selector) next.anchor_selector = placement.anchor_selector;

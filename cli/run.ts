@@ -277,6 +277,7 @@ function printShow(doc: Doc, entry: Listed, flags: Flags): void {
     console.log(`Currently between the markers: ${quote(entry.current)}`);
   }
   if (c.anchor_selector) console.log(`Selector: ${c.anchor_selector}`);
+  if (c.anchor_scope) console.log(`Scope: ${c.anchor_scope}`);
   if (c.context_before) console.log(`  before: ${c.context_before}`);
   if (c.context_after) console.log(`  after:  ${c.context_after}`);
   if (c.suggested_edit) {
@@ -477,6 +478,7 @@ function printReattachAll(
   }
   const how = {
     selector: "by its element's id",
+    scope: "inside its recorded element",
     text: "by its text",
     context: "by its surroundings",
   };

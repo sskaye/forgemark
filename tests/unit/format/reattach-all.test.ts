@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { reattachOrphans } from "../../../src/format/reattachAll";
+import { enclosingScope } from "../../../src/format/html/elements";
 import { classifyAnchors } from "../../../src/format/reattach";
 import { parseForgemarkFile } from "../../../src/format/parser";
 import { serializeForgemarkFile } from "../../../src/format/serializer";
@@ -196,6 +197,71 @@ describe("reattachOrphans on a regenerated report", () => {
     const text = serializeForgemarkFile(file);
     const parsed = parseForgemarkFile(text, { format: "html" });
     expect(parsed.comments.map((c) => c.id)).toEqual([1, 2]);
+  });
+});
+
+describe("anchor_scope", () => {
+  it("names the innermost enclosing element with an id", () => {
+    const at = CATALOG.indexOf("Line intro.");
+    expect(enclosingScope(CATALOG, at, at + 5)).toBe("#tab-line");
+    expect(enclosingScope("<p>No ids here.</p>", 3, 6)).toBeUndefined();
+    const nested = '<section id="outer"><div id="1bad"><p id="inner">Text</p></div></section>';
+    const t = nested.indexOf("Text");
+    expect(enclosingScope(nested, t, t + 4)).toBe("#inner");
+    // An id that isn't a valid selector is passed over for the next one out.
+    const bad = '<section id="outer"><div id="1bad">Text</div></section>';
+    expect(enclosingScope(bad, bad.indexOf("Text"), bad.indexOf("Text") + 4)).toBe("#outer");
+  });
+
+  it("tells repeated copies apart by the element they sit in", () => {
+    // The two "Same." tabs have identical surroundings; only the id differs.
+    const c = comment(1, {
+      anchor_text: "Values are shown in thousands.",
+      anchor_scope: "#tab-area",
+      context_before: "Same.",
+      context_after: "Same.",
+    });
+    const { file, outcomes } = reattachOrphans({ body: CATALOG, comments: [c] }, "html");
+    expect(outcomes[0]).toMatchObject({ outcome: "attached", how: "scope", line: 6 });
+    expect(file.body).toContain(
+      '<section id="tab-area"><p>Same. <!-- fmc:1 -->Values are shown in thousands.<!-- /fmc:1 -->',
+    );
+    expect(file.comments[0].anchor_scope).toBe("#tab-area");
+  });
+
+  it("falls back to the whole page when the element is gone or no longer holds the text", () => {
+    const moved = comment(1, {
+      anchor_text: "Bar intro.",
+      anchor_scope: "#tab-line", // the sentence now lives in another tab
+    });
+    const gone = comment(2, {
+      anchor_text: "Values are shown in thousands.",
+      anchor_scope: "#tab-gone",
+      context_before: "Same.",
+      context_after: "Same.",
+    });
+    const { file, outcomes } = reattachOrphans({ body: CATALOG, comments: [moved, gone] }, "html");
+    expect(outcomes[0]).toMatchObject({ outcome: "attached", how: "text" });
+    // Re-recorded where it was actually found.
+    expect(file.comments[0].anchor_scope).toBe("#tab-bar");
+    expect(outcomes[1]).toMatchObject({ outcome: "orphaned", reason: "ambiguous" });
+  });
+
+  it("is recorded on a passage re-attached by its text, and dropped where there is none", () => {
+    const c = comment(1, { anchor_text: "Bar intro.", anchor_scope: "#stale" });
+    const { file } = reattachOrphans({ body: CATALOG, comments: [c] }, "html");
+    expect(file.comments[0].anchor_scope).toBe("#tab-bar");
+    const plain = "<html><body><p>Bar intro.</p></body></html>";
+    const again = reattachOrphans({ body: plain, comments: [c] }, "html");
+    expect(again.file.comments[0].anchor_scope).toBeUndefined();
+  });
+
+  it("round-trips through the file", () => {
+    const c = comment(1, { anchor_text: "Bar intro.", anchor_scope: "#tab-bar" });
+    const { file } = reattachOrphans({ body: CATALOG, comments: [c] }, "html");
+    const parsed = parseForgemarkFile(serializeForgemarkFile(file), { format: "html" });
+    expect(parsed.comments[0].anchor_scope).toBe("#tab-bar");
+    expect(parsed.comments[0].additionalKeys).toBeUndefined();
   });
 });
 

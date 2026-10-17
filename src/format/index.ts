@@ -18,11 +18,13 @@ export {
   locateAnchor,
   locateElement,
   applyPlacement,
+  scopeOfPlacement,
   AnchorError,
   type Placement,
   type LocateOptions,
 } from "./locate";
 export { reattachOrphans, type ReattachOutcome, type ReattachAllOptions } from "./reattachAll";
+export { enclosingScope } from "./html/elements";
 export { splitFrontmatter, type SplitBody } from "./frontmatter";
 export {
   findMarkers,

@@ -18,7 +18,7 @@
 
 import { findMarkers, pairMarkers, type MarkerPair } from "./markers";
 import { buildHtmlTextMap, textRangeToSource } from "./html/textmap";
-import { findBySelector } from "./html/elements";
+import { findBySelector, enclosingScope } from "./html/elements";
 import { openMarker, closeMarker, type DocFormat } from "./types";
 import { normalizeAnchorText } from "./anchor-text";
 import { contextSnippet } from "./compose";
@@ -81,6 +81,9 @@ export type LocateOptions = {
   // reader's selection here, so a repeated phrase still lands where they
   // pointed without asking.
   near?: { before: string; after: string };
+  // HTML only: count only the copies whose source lies inside this range
+  // (an element's span), as though the rest of the page weren't there.
+  within?: { start: number; end: number };
 };
 
 // Find `phrase` in `body` and describe where its markers go.
@@ -167,6 +170,19 @@ export function locatePassage(
     anchor_kind: "passage",
     anchor_selector: selector.trim(),
   };
+}
+
+// The `anchor_scope` a record of this placement should carry: for a run
+// of text in an HTML report, the innermost enclosing element with an id.
+// Computed only when a record is written (it parses the page), not on
+// every locate — the app locates on every selection change.
+export function scopeOfPlacement(
+  body: string,
+  placement: Placement,
+  format: DocFormat,
+): string | undefined {
+  if (format !== "html" || placement.anchor_kind) return undefined;
+  return enclosingScope(body, placement.start, placement.end);
 }
 
 // Splice the markers for `id` at a placement.
@@ -469,7 +485,14 @@ function preview(haystack: string, m: Match): string {
 
 function locateInHtml(body: string, needle: string, opts: LocateOptions): Placement {
   const map = buildHtmlTextMap(body);
-  const matches = findMatches(map.text, needle);
+  let matches = findMatches(map.text, needle);
+  const within = opts.within;
+  if (within) {
+    matches = matches.filter((m) => {
+      const r = textRangeToSource(map, m.start, m.end);
+      return r !== null && r.start >= within.start && r.end <= within.end;
+    });
+  }
   const chosen = pick(matches, needle, opts, map.text, "html");
   const range = textRangeToSource(map, chosen.start, chosen.end, { requireExact: true });
   if (!range) {
