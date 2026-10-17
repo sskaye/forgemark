@@ -60,6 +60,12 @@ export type DocumentState = {
   readOnly: boolean;
   error: string | null;
   focusedCommentId: number | null;
+  // Whether that focus should bring the comment's anchor into view. A
+  // card the reader clicks in the sidebar may point anywhere in the
+  // document; a comment they just made, or a passage they clicked, is
+  // where they already are, and scrolling "to" it only races whatever
+  // they do next.
+  focusReveal: boolean;
   hoveredCommentId: number | null;
   composer: ComposerState | null;
   // Phase 9: which orphaned comment, if any, is being reattached. The
@@ -228,6 +234,7 @@ export const INITIAL_STATE: DocumentState = {
   readOnly: false,
   error: null,
   focusedCommentId: null,
+  focusReveal: true,
   hoveredCommentId: null,
   composer: null,
   reattachTarget: null,
@@ -278,7 +285,9 @@ export type DocumentAction =
   | { type: "commitSource" }
   | { type: "error"; message: string }
   | { type: "dismissError" }
-  | { type: "setFocusedComment"; id: number | null }
+  // `reveal` (default true): scroll the anchor into view. False when the
+  // reader is already looking at the passage.
+  | { type: "setFocusedComment"; id: number | null; reveal?: boolean }
   | { type: "setHoveredComment"; id: number | null }
   | { type: "openComposer"; composer: ComposerState }
   | { type: "closeComposer" }
@@ -495,9 +504,11 @@ function reduce(state: DocumentState, action: DocumentAction): DocumentState {
       return { ...state, error: action.message };
     case "dismissError":
       return { ...state, error: null };
-    case "setFocusedComment":
-      if (state.focusedCommentId === action.id) return state;
-      return { ...state, focusedCommentId: action.id };
+    case "setFocusedComment": {
+      const reveal = action.reveal ?? true;
+      if (state.focusedCommentId === action.id && (state.focusReveal || !reveal)) return state;
+      return { ...state, focusedCommentId: action.id, focusReveal: reveal };
+    }
     case "setHoveredComment":
       if (state.hoveredCommentId === action.id) return state;
       return { ...state, hoveredCommentId: action.id };
@@ -513,6 +524,8 @@ function reduce(state: DocumentState, action: DocumentAction): DocumentState {
         dirty: true,
         composer: null,
         focusedCommentId: action.comment.id,
+        // Made from a selection on screen: nothing to scroll to.
+        focusReveal: false,
         error: null,
       };
     case "addReply": {
@@ -525,6 +538,7 @@ function reduce(state: DocumentState, action: DocumentAction): DocumentState {
         dirty: true,
         composer: null,
         focusedCommentId: action.commentId,
+        focusReveal: true,
         error: null,
       };
     }
@@ -616,6 +630,7 @@ function reduce(state: DocumentState, action: DocumentAction): DocumentState {
         comments: [...state.comments, last.comment].sort((a, b) => a.id - b.id),
         dirty: true,
         focusedCommentId: last.comment.id,
+        focusReveal: true,
         lastDeleted: null,
       };
     }

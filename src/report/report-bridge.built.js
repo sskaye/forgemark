@@ -309,6 +309,13 @@
       el.scrollIntoView({ block, behavior: "smooth" });
     }
   }
+  function inView(el, win) {
+    if (typeof el.getBoundingClientRect !== "function") return false;
+    const r = el.getBoundingClientRect();
+    const h = win.innerHeight;
+    if (!h || r.width === 0 && r.height === 0) return false;
+    return r.top >= 0 && r.top < h && (r.bottom <= h || r.height > h);
+  }
   var ID_RE = /^[A-Za-z][\w-]*$/;
   function installBridge(win, channel) {
     const doc = win.document;
@@ -753,12 +760,11 @@
           lastSelectionKey = "";
           reportSelection();
           break;
-        case "scrollTo":
-          scrollInto(
-            anchorElement(doc, message.id) ?? doc.querySelector(`[data-fm-passage-host~="${message.id}"]`),
-            "center"
-          );
+        case "scrollTo": {
+          const el = anchorElement(doc, message.id) ?? doc.querySelector(`[data-fm-passage-host~="${message.id}"]`);
+          if (el && !inView(el, win)) scrollInto(el, "center");
           break;
+        }
         case "scrollToFragment":
           scrollInto(doc.getElementById(message.id), "start");
           break;

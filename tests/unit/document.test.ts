@@ -21,6 +21,31 @@ describe("document reducer", () => {
     expect(INITIAL_STATE.hoveredCommentId).toBe(null);
   });
 
+  it("reveals a focused comment only when the reader isn't already at it", () => {
+    const comment = {
+      id: 1,
+      author: "Sam",
+      timestamp: "2026-10-01T00:00:00Z",
+      resolved: false,
+      anchor_text: "alpha",
+      body: "x\n",
+    };
+    // Just made: focused, nothing to scroll to.
+    let s = reduceDocument(INITIAL_STATE, {
+      type: "addComment",
+      body: "<!-- fmc:1 -->alpha<!-- /fmc:1 -->",
+      comment,
+    });
+    expect(s.focusedCommentId).toBe(1);
+    expect(s.focusReveal).toBe(false);
+    // The caret lands in the new highlight: still no scroll.
+    expect(reduceDocument(s, { type: "setFocusedComment", id: 1, reveal: false })).toBe(s);
+    // Its card is clicked later, perhaps from far away: reveal it.
+    s = reduceDocument(s, { type: "setFocusedComment", id: 1 });
+    expect(s.focusReveal).toBe(true);
+    expect(reduceDocument(s, { type: "setFocusedComment", id: 1 })).toBe(s);
+  });
+
   it("loads a file and resets dirty/viewMode/focus", () => {
     const next = reduceDocument(
       {

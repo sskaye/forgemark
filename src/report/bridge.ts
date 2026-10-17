@@ -46,6 +46,16 @@ function scrollInto(el: Element | null, block: ScrollLogicalPosition): void {
     el.scrollIntoView({ block, behavior: "smooth" });
   }
 }
+
+// Whether an element is already where the reader can see it: its top on
+// screen, and its bottom too unless it is taller than the screen.
+function inView(el: Element, win: Window): boolean {
+  if (typeof el.getBoundingClientRect !== "function") return false;
+  const r = el.getBoundingClientRect();
+  const h = win.innerHeight;
+  if (!h || (r.width === 0 && r.height === 0)) return false;
+  return r.top >= 0 && r.top < h && (r.bottom <= h || r.height > h);
+}
 const ID_RE = /^[A-Za-z][\w-]*$/;
 
 type Capture = { range?: Range; el?: Element };
@@ -601,13 +611,17 @@ export function installBridge(win: Window, channel: BridgeChannel): () => void {
         lastSelectionKey = "";
         reportSelection();
         break;
-      case "scrollTo":
-        scrollInto(
+      case "scrollTo": {
+        // Only when the anchor is out of sight. A comment the reader has
+        // just made is focused, and its highlight is right where they
+        // are; a smooth scroll to it then is a no-op that still runs,
+        // and drags the report back if they scroll away meanwhile.
+        const el =
           anchorElement(doc, message.id) ??
-            doc.querySelector(`[data-fm-passage-host~="${message.id}"]`),
-          "center",
-        );
+          doc.querySelector(`[data-fm-passage-host~="${message.id}"]`);
+        if (el && !inView(el, win)) scrollInto(el, "center");
         break;
+      }
       case "scrollToFragment":
         scrollInto(doc.getElementById(message.id), "start");
         break;
