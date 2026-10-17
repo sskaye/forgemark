@@ -223,8 +223,9 @@ sha256sum -c SHA256SUMS-cli.txt
 node "forgemark-cli-$v.mjs" --version
 ```
 
-The skill has a 512 KB size budget (`scripts/build-skill.mjs`), and the
-bundle, notices included, is most of it. About 5 KB was left at 1.9.1.
+The skill has a 640 KB size budget (`scripts/build-skill.mjs`), and the
+bundle, notices included, is most of it: about 505 KB of the 525 KB total
+after `reattach --all`.
 
 ## Auto-update
 
