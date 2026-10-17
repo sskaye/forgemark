@@ -38,17 +38,6 @@
   background: var(--fm-prose-faint);
 }
 
-/* An HTML report is a page of its own, not a column of prose: its frame
-   takes the whole pane below the chip and scrolls itself. */
-.fm-document--report {
-  max-width: none;
-  padding: 44px 0 0;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  align-self: stretch;
-}
-
 .fm-document {
   --fm-doc-gutter: 48px;
   position: relative; /* anchor for the column's edge handles */
@@ -62,6 +51,19 @@
   font-size: var(--fm-font-size, 17px);
   line-height: var(--fm-prose-leading);
   letter-spacing: var(--fm-prose-letterspacing);
+}
+
+/* An HTML report is a page of its own, not a column of prose: its frame
+   takes the whole pane below the chip and scrolls itself. This rule has
+   the same specificity as `.fm-document`, so it must come after it, or
+   the frame is squeezed into the 720px prose column. */
+.fm-document--report {
+  max-width: none;
+  padding: 44px 0 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  align-self: stretch;
 }
 
 /* The document width, set from the title bar or the column's edges

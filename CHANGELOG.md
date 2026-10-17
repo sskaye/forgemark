@@ -2,6 +2,13 @@
 
 All notable changes to Forgemark are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Making a comment no longer scrolls the report to it a moment later. If you had scrolled away meanwhile, the report was pulled back to the comment you had just made.
+- An HTML report fills the pane again. Since 1.7.0 it had been squeezed into the 720px prose column, 624px wide, however wide the window.
+
 ## [1.9.1] — 2026-10-10
 
 ### Added

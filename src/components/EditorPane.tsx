@@ -583,7 +583,7 @@ export function EditorPane({ docId }: Props) {
   const replyToOverlap = useCallback(() => {
     const c = state.composer;
     if (!c || c.mode !== "overlapPrompt") return;
-    dispatch({ type: "setFocusedComment", id: c.targetCommentId });
+    dispatch({ type: "setFocusedComment", id: c.targetCommentId, reveal: false });
     dispatch({ type: "openComposer", composer: { mode: "reply", commentId: c.targetCommentId } });
   }, [state.composer, dispatch]);
 
@@ -684,10 +684,11 @@ export function EditorPane({ docId }: Props) {
 
   // Card focus → bring the matching anchor span into view. Smooth
   // scroll with `block: nearest` so we only move when the anchor
-  // is actually off-screen.
+  // is actually off-screen. Not for a focus that needs no reveal: a
+  // comment just made, or a passage just clicked (`focusReveal`).
   useEffect(() => {
     if (state.viewMode !== "rendered") return;
-    if (state.focusedCommentId == null) return;
+    if (state.focusedCommentId == null || !state.focusReveal) return;
     // The anchor lives inside the report's iframe, which the pane can't
     // reach with a querySelector and which can't scroll its own host.
     if (isHtml) {
@@ -699,7 +700,7 @@ export function EditorPane({ docId }: Props) {
     const span = pane.querySelector<HTMLElement>(`[data-anchor-id="${state.focusedCommentId}"]`);
     if (!span || typeof span.scrollIntoView !== "function") return;
     span.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [state.focusedCommentId, state.viewMode, isHtml]);
+  }, [state.focusedCommentId, state.focusReveal, state.viewMode, isHtml]);
 
   // Source mode has its own scrollToMarker handle.
   useEffect(() => {
@@ -912,7 +913,7 @@ export function EditorPane({ docId }: Props) {
               // A click inside the frame never reaches the host window,
               // so the menu's own click-away listener can't see it.
               setContextMenu(null);
-              dispatch({ type: "setFocusedComment", id });
+              dispatch({ type: "setFocusedComment", id, reveal: false });
             }}
             onAnchorHover={(id) => dispatch({ type: "setHoveredComment", id })}
             onRequestElementComment={(capture) => openComposerFor(capture)}
@@ -935,7 +936,7 @@ export function EditorPane({ docId }: Props) {
             readOnly={editorReadOnly}
             focusedCommentId={state.focusedCommentId}
             hoveredCommentId={state.hoveredCommentId}
-            onAnchorClick={(id) => dispatch({ type: "setFocusedComment", id })}
+            onAnchorClick={(id) => dispatch({ type: "setFocusedComment", id, reveal: false })}
             onAnchorHover={(id) => dispatch({ type: "setHoveredComment", id })}
             onExternalLinkError={(message) => dispatch({ type: "error", message })}
             baseDir={dirOf(state.filePath)}
