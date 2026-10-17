@@ -121,6 +121,18 @@ test("the report runs its own script and answers its own controls", async ({ pag
   await expect(frame.locator("#chart-note")).toContainText("7 points");
 });
 
+test("the report frame fills the pane, not the prose column", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await openReport(page);
+  const pane = await page.getByTestId("fm-editor-pane").boundingBox();
+  const view = await page.getByTestId("fm-html-view").boundingBox();
+  expect(pane && view).toBeTruthy();
+  // The prose column is at most 720px; a report must be far wider on a
+  // wide window.
+  expect(view!.width).toBeGreaterThan(720);
+  expect(view!.width).toBeGreaterThan(pane!.width * 0.9);
+});
+
 test("a comment on static text is spliced into the file without a reload", async ({ page }) => {
   const frame = await openReport(page);
   await frame.getByRole("tab", { name: "Sleep" }).click();
@@ -197,7 +209,16 @@ test("a static figure is an element anchor, and a right-click opens the menu", a
   expect(file).toContain('anchor_selector: "#fig-static"');
 
   await selectInFrame(frame, "eliminates the linear block");
-  await frame.locator("#notes p").first().click({ button: "right" });
+  // On the selected words themselves: the menu restores a selection only
+  // when the right-click lands inside it, and where the phrase sits in
+  // the paragraph depends on how wide the frame is.
+  const paragraph = frame.locator("#notes p").first();
+  const position = await paragraph.evaluate((p) => {
+    const rect = p.ownerDocument.getSelection()!.getRangeAt(0).getClientRects()[0];
+    const box = p.getBoundingClientRect();
+    return { x: rect.left - box.left + rect.width / 2, y: rect.top - box.top + rect.height / 2 };
+  });
+  await paragraph.click({ button: "right", position });
   await expect(page.getByTestId("fm-context-menu")).toBeVisible();
 });
 
