@@ -69,7 +69,7 @@ A report renders in a frame of its own, on a separate origin, where its scripts 
 
 A comment on text that a script produced anchors the nearest enclosing element with an `id`, and keeps the passage as its text. Without such an element, it becomes a floating note that quotes the text.
 
-Reports are usually regenerated rather than edited, which drops every anchor. On reload, Forgemark puts back the anchors it is sure about and asks about the rest. A comment on a figure records the figure's `id`, so it reattaches exactly when the id survives a rebuild. The skill tells agents to keep ids stable.
+Reports are usually regenerated rather than edited, which drops every anchor. On reload, Forgemark puts back the anchors it is sure about and asks about the rest: a passage found once, or found several times where the text recorded around it picks one copy. A build can do the same with `forgemark reattach report.html --all`, which also says why it left each of the rest. A comment on a figure records the figure's `id`, so it reattaches exactly when the id survives a rebuild. The skill tells agents to keep ids stable.
 
 ## AI agents
 

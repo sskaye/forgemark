@@ -14,7 +14,7 @@
 //
 // Two contracts the build keeps:
 //   - Both artifacts are byte-identical (sha256 equal).
-//   - Total bundle size is < 512 KB. The prose and examples are ~30 KB;
+//   - Total bundle size is < 640 KB. The prose and examples are ~30 KB;
 //     the rest of the budget is the CLI bundle (scripts/forgemark.mjs,
 //     built by build-cli.mjs), which carries the whole format layer.
 
@@ -34,7 +34,7 @@ const SRC = join(ROOT, "assets", "forgemark-skill");
 const OUT_DIR = join(ROOT, "assets");
 const SKILL_OUT = join(OUT_DIR, "forgemark-skill.skill");
 const ZIP_OUT = join(OUT_DIR, "forgemark-skill.zip");
-const SIZE_BUDGET = 512 * 1024;
+const SIZE_BUDGET = 640 * 1024;
 // The manifest the app reads to tell one build of the skill from
 // another: the app's version and a hash of every other file. Written
 // into the source tree before zipping, so an installed copy carries it.

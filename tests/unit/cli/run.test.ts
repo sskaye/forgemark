@@ -181,6 +181,68 @@ describe("forgemark CLI", () => {
     expect(parsed.body).not.toMatch(/fmc:1\b/);
   });
 
+  it("reattaches every orphan it can with --all, and says why for the rest", () => {
+    // A regenerated report: the comments block carried over, no markers.
+    const file = join(dir, "catalog.html");
+    const block = (id: number, text: string, before: string, after: string) =>
+      `- id: ${id}\n  anchor_text: "${text}"\n  context_before: "${before}"\n  context_after: "${after}"\n` +
+      `  author: Sam\n  timestamp: 2026-10-01T00:00:00Z\n  resolved: false\n  body: |\n    Note ${id}.\n`;
+    const original =
+      `<html><body>\n` +
+      `<section id="a"><p>Bar intro. Values are in thousands. Bar outro.</p></section>\n` +
+      `<section id="b"><p>Same. Values are in thousands. Same.</p></section>\n` +
+      `<section id="c"><p>Same. Values are in thousands. Same.</p></section>\n` +
+      `</body></html>\n<!-- forgemark-comments\n` +
+      block(1, "Values are in thousands.", "Bar intro.", "Bar outro.") +
+      block(2, "Values are in thousands.", "Same.", "Same.") +
+      `-->\n`;
+    writeFileSync(file, original);
+
+    expect(main(["reattach", file, "--all", "--dry-run"])).toBe(0);
+    expect(readFileSync(file, "utf8")).toBe(original);
+    expect(out.join("\n")).toMatch(/#1 {2}attached by its surroundings, line 2/);
+    expect(out.join("\n")).toMatch(/#2 {2}left orphaned \(ambiguous\)/);
+    expect(out.join("\n")).toMatch(/Dry run: nothing written/);
+
+    out.length = 0;
+    expect(main(["reattach", file, "--all", "--json", "--strict"])).toBe(1);
+    const report = JSON.parse(out.join("\n"));
+    expect(report).toMatchObject({ dry_run: false, attached: 1, orphaned: 1 });
+    expect(report.results.map((r: { outcome: string }) => r.outcome)).toEqual([
+      "attached",
+      "orphaned",
+    ]);
+    const parsed = parseForgemarkFile(readFileSync(file, "utf8"), {
+      format: "html",
+      tolerant: true,
+    });
+    expect(parsed.body).toContain(
+      "Bar intro. <!-- fmc:1 -->Values are in thousands.<!-- /fmc:1 -->",
+    );
+    // It records the section it sits in, as a new comment does.
+    expect(parsed.comments[0].anchor_scope).toBe("#a");
+    expect(
+      main(["comment", file, "--anchor", "Bar outro.", "--body", "Hm.", "--author", "Claude"]),
+    ).toBe(0);
+    const withNew = parseForgemarkFile(readFileSync(file, "utf8"), {
+      format: "html",
+      tolerant: true,
+    });
+    expect(withNew.comments.find((c) => c.body === "Hm.\n")?.anchor_scope).toBe("#a");
+
+    // Nothing left that it can place: nothing written, exit 0 without --strict.
+    const after = readFileSync(file, "utf8");
+    expect(main(["reattach", file, "--all"])).toBe(0);
+    expect(readFileSync(file, "utf8")).toBe(after);
+  });
+
+  it("refuses --all with an id, an anchor, or --dry-run without --all", () => {
+    const file = copy("04-orphan-and-floating.md");
+    expect(main(["reattach", file, "1", "--all"])).toBe(2);
+    expect(main(["reattach", file, "--all", "--anchor", "x"])).toBe(2);
+    expect(main(["reattach", file, "1", "--anchor", "x", "--dry-run"])).toBe(2);
+  });
+
   it("lints several files, with exit codes that reflect severity", () => {
     const ok = copy("01-simple.md");
     const warn = copy("04-orphan-and-floating.md");

@@ -21,8 +21,8 @@ import { ContextMenu } from "./ContextMenu";
 import { commandFor, modalOpen } from "../state/keymap";
 import {
   classifyAnchors,
-  contextSnippet,
-  insertMarkersIntoBody,
+  enclosingScope,
+  reattachOrphans,
   nextCommentId,
   serializeForgemarkFile,
   locateAnchor,
@@ -31,11 +31,6 @@ import {
 } from "../format";
 import type { ViewSyncAnchor } from "../services/viewSync";
 import "./EditorPane.css";
-
-// A candidate at or above this score is an exact match — the anchor text
-// found verbatim, or an element resolved by the id the comment recorded.
-// Below it, the ranking is guessing and a human should look.
-const CONFIDENT_SCORE = 0.95;
 
 // Normalise a Markdown capture into the shape the composer path takes.
 // The only real difference is a whole code block, which is still a *text*
@@ -449,22 +444,34 @@ export function EditorPane({ docId }: Props) {
     [isHtml, state.body],
   );
 
-  // Anchor metadata common to a new comment and a new suggestion.
+  // Anchor metadata common to a new comment and a new suggestion. A run
+  // of text in a report also records its enclosing element's id, read
+  // from the source before the markers go in (`anchor_scope`).
   const anchorFields = useCallback(
     (c: {
+      from: number;
+      to: number;
+      floating?: boolean;
       selectionText: string;
       contextBefore: string;
       contextAfter: string;
       anchorKind?: "element" | "passage";
       anchorSelector?: string;
-    }) => ({
-      anchor_text: c.selectionText,
-      ...(c.anchorKind ? { anchor_kind: c.anchorKind } : {}),
-      ...(c.anchorSelector ? { anchor_selector: c.anchorSelector } : {}),
-      context_before: c.contextBefore,
-      context_after: c.contextAfter,
-    }),
-    [],
+    }) => {
+      const scope =
+        isHtml && !c.anchorKind && !c.floating
+          ? enclosingScope(state.body, c.from, c.to)
+          : undefined;
+      return {
+        anchor_text: c.selectionText,
+        ...(c.anchorKind ? { anchor_kind: c.anchorKind } : {}),
+        ...(c.anchorSelector ? { anchor_selector: c.anchorSelector } : {}),
+        ...(scope ? { anchor_scope: scope } : {}),
+        context_before: c.contextBefore,
+        context_after: c.contextAfter,
+      };
+    },
+    [isHtml, state.body],
   );
 
   // The same fields, from a placement the locator made in the source.
@@ -754,55 +761,29 @@ export function EditorPane({ docId }: Props) {
     if (st && st.kind === "orphaned") lostAnchorIds.push(c.id);
   }
 
-  // Orphans whose top candidate is unambiguous. An exact text match, or
-  // an element found by the id the comment recorded, needs no decision
-  // from the reviewer — and after a report is regenerated there may be a
-  // dozen of them at once.
-  const confidentReattachments = useMemo(() => {
-    const out: { commentId: number; from: number; to: number; text: string }[] = [];
-    for (const c of state.comments) {
-      const st = anchorStatuses.get(c.id);
-      if (st?.kind !== "orphaned") continue;
-      const [best, runnerUp] = st.candidates;
-      if (!best || best.score < CONFIDENT_SCORE) continue;
-      // Two equally good matches is exactly the case a human should look
-      // at: the passage appears twice and only they know which one.
-      if (runnerUp && runnerUp.score >= CONFIDENT_SCORE) continue;
-      out.push({ commentId: c.id, from: best.from, to: best.to, text: best.text });
-    }
-    return out;
-  }, [state.comments, anchorStatuses]);
+  // Orphans that can go back without a decision from the reviewer: an
+  // element found by the id it recorded, or a passage whose text appears
+  // once, or several times with one copy's surroundings matching the
+  // record. After a report is regenerated there may be a dozen at once.
+  // The rules live in the format layer, shared with `reattach --all`.
+  const bulkReattach = useMemo(() => {
+    const anyOrphan = state.comments.some((c) => anchorStatuses.get(c.id)?.kind === "orphaned");
+    if (!anyOrphan) return null;
+    const plan = reattachOrphans({ body: state.body, comments: state.comments }, state.format, {
+      explain: false,
+    });
+    const count = plan.outcomes.filter((o) => o.outcome === "attached").length;
+    return count > 0 ? { file: plan.file, count } : null;
+  }, [state.body, state.comments, state.format, anchorStatuses]);
 
   const reattachConfident = useCallback(() => {
-    if (confidentReattachments.length === 0) return;
-    // Splice from the end backwards so each insertion leaves the offsets
-    // of the ones still to come untouched.
-    const ordered = [...confidentReattachments].sort((a, b) => b.from - a.from);
-    let body = state.body;
-    let lastStart = Infinity;
-    const entries: {
-      commentId: number;
-      anchor_text: string;
-      context_before: string;
-      context_after: string;
-    }[] = [];
-    for (const item of ordered) {
-      // Candidates for different comments can overlap; the format can't
-      // represent that, so the later one is left for the modal.
-      if (item.to > lastStart) continue;
-      lastStart = item.from;
-      const before = body.slice(Math.max(0, item.from - 200), item.from);
-      const after = body.slice(item.to, item.to + 200);
-      body = insertMarkersIntoBody(body, item.from, item.to, item.commentId);
-      entries.push({
-        commentId: item.commentId,
-        anchor_text: item.text,
-        context_before: contextSnippet(before, "before"),
-        context_after: contextSnippet(after, "after"),
-      });
-    }
-    dispatch({ type: "reattachComments", body, entries });
-  }, [confidentReattachments, state.body, dispatch]);
+    if (!bulkReattach) return;
+    dispatch({
+      type: "reattachComments",
+      body: bulkReattach.file.body,
+      comments: bulkReattach.file.comments,
+    });
+  }, [bulkReattach, dispatch]);
 
   return (
     <main
@@ -887,7 +868,7 @@ export function EditorPane({ docId }: Props) {
             if (lostAnchorIds.length === 0) return;
             dispatch({ type: "openReattach", commentId: lostAnchorIds[0] });
           }}
-          confidentCount={confidentReattachments.length}
+          confidentCount={bulkReattach?.count ?? 0}
           onReattachConfident={reattachConfident}
         />
         {state.viewMode === "source" && (

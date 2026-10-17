@@ -7,14 +7,18 @@ All notable changes to Forgemark are recorded here. The format follows [Keep a C
 ### Added
 
 - The command-line tool on its own. Each release carries `forgemark-cli-<version>.mjs`, the same single file the skill ships, with a `SHA256SUMS-cli.txt` checksum and the licence, so a build or CI job can install a pinned version without the app or the skill. The file now ends with the licence notices of the packages it bundles.
+- `forgemark reattach <file> --all` puts back every orphaned comment that can be placed for certain after a page is regenerated: an element by its recorded id, a passage by its text where it appears once, or where it appears several times and the text recorded around it picks one copy. Each of the rest is left orphaned with the reason — the text is gone (with the closest near match), it is ambiguous, it overlaps another anchor, or the element is gone. `--dry-run` reports without writing, `--json` gives the outcomes as data, and `--strict` exits 1 if any are left.
+- A comment on text in an HTML report records the innermost enclosing element with an id as `anchor_scope`. When the report is rebuilt, a sentence repeated in several sections, even with the same words around it each time, goes back to the section it was in. Older versions keep the field untouched.
 
 ### Changed
 
+- The app's Reattach all follows the same rules, so a sentence repeated across a report's tabs is put back where its surroundings say, instead of always being left for the reviewer.
 - Releases are immutable once published: no asset or tag can be changed afterwards, so a pinned download stays the same file.
 
 ### Fixed
 
 - Making a comment no longer scrolls the report to it a moment later. If you had scrolled away meanwhile, the report was pulled back to the comment you had just made.
+- Reattach all on an HTML report recorded the surrounding source, tags included, as the comment's context, so it never matched again after the next rebuild; and a comment re-attached by its element's id lost the passage it was about. Both now record what the reader sees.
 - An HTML report fills the pane again. Since 1.7.0 it had been squeezed into the 720px prose column, 624px wide, however wide the window.
 
 ## [1.9.1] — 2026-10-10

@@ -126,7 +126,7 @@ export function lintText(text: string, format: DocFormat): LintReport {
         severity: "warning",
         commentId: c.id,
         line,
-        message: `Comment ${c.id} has no marker pair in the body (orphaned). The reviewer will be asked to reattach it; \`forgemark reattach\` or \`forgemark float\` settles it now.`,
+        message: `Comment ${c.id} has no marker pair in the body (orphaned). The reviewer will be asked to reattach it; \`forgemark reattach\` (or \`reattach --all\` after a rebuild) or \`forgemark float\` settles it now.`,
       });
       continue;
     }

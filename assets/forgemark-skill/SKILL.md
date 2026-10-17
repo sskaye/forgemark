@@ -31,6 +31,7 @@ node <skill directory>/scripts/forgemark.mjs --help
 | `forgemark resolve <file> <id>` / `unresolve` | Mark a thread resolved, or reopen it. |
 | `forgemark float <file> <id>` | Turn a comment whose passage is gone into a floating note. |
 | `forgemark reattach <file> <id> --anchor "passage"` | Give an orphaned or floating comment a new anchor. |
+| `forgemark reattach <file> --all [--dry-run] [--json]` | After a rebuild: put back every orphan that can be placed for certain, and say why for the rest. |
 | `forgemark delete <file> <id>` | Remove a comment and its markers. Only when asked. |
 | `forgemark lint <file>… [--strict]` | Check a file the way the app will read it. Run it before handing a file back. |
 
@@ -73,7 +74,7 @@ When you edit the document body, the markers are in your way and you must leave 
 Everything above applies to `.html` files unchanged; the storage format is identical. Two differences:
 
 - Quote passages as rendered — the text a browser shows — even where the source has tags or entities inside them. Use `--selector "#id"` to comment on a figure, chart, or table that has an `id`; that is the only way to comment on something with no text.
-- **Regenerating a reviewed report** drops every marker, since the generator writes a new body. Carry the trailing comments block over verbatim, keep the `id` attributes of sections, figures, and tables stable across builds (a comment made with `--selector` reattaches exactly when its id survives), then run `forgemark lint` — the orphans it lists can be settled with `reattach`, or left for the reviewer, who has a bulk-reattach flow. Never drop the block: that discards the review.
+- **Regenerating a reviewed report** drops every marker, since the generator writes a new body. Carry the trailing comments block over verbatim, keep the `id` attributes of sections, figures, and tables stable across builds (a comment made with `--selector` reattaches exactly when its id survives, and one on a sentence repeated in several sections reattaches to the right section by the section's id), then run `forgemark reattach <file> --all`. It places each orphan by its element's `id`, or by its text where that appears once or its recorded surroundings pick one copy, and lists the rest with the reason; settle those with `reattach <id>` or leave them for the reviewer. Never drop the block: that discards the review.
 
 ## Format reference
 
@@ -112,6 +113,7 @@ Some prose with <!-- fmc:1 -->an anchored passage<!-- /fmc:1 --> and more prose.
 | `anchor_text` | unless `floating: true` | The passage as rendered: Markdown formatting and HTML tags stripped, whitespace collapsed. Advisory — the markers attach the comment; this is what the sidebar shows and what recovery searches for if the markers are lost. For an element anchor, the caption. |
 | `anchor_kind` | optional | `element`: the markers wrap a whole figure, chart, or table. `passage`: the markers wrap an element the report's own script fills at load, and `anchor_text` is the passage inside it the comment is about — text that has no place of its own in the source. Find it in the rendered report, or in the script that produces it. |
 | `anchor_selector` | optional | `#id` of an anchored element, for exact reattachment after a rebuild. |
+| `anchor_scope` | optional | HTML text comments: `#id` of the innermost enclosing element with an id, so a sentence repeated across tabs reattaches to the right one. |
 | `context_before`, `context_after` | recommended | About a sentence either side, for recovery. |
 | `author` | yes | Free-form name. |
 | `timestamp` | yes | ISO 8601 UTC, `2026-05-07T14:32:00Z`. |

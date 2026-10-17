@@ -18,7 +18,7 @@
 
 import { findMarkers, pairMarkers, type MarkerPair } from "./markers";
 import { buildHtmlTextMap, textRangeToSource } from "./html/textmap";
-import { findBySelector } from "./html/elements";
+import { findBySelector, enclosingScope } from "./html/elements";
 import { openMarker, closeMarker, type DocFormat } from "./types";
 import { normalizeAnchorText } from "./anchor-text";
 import { contextSnippet } from "./compose";
@@ -38,12 +38,37 @@ export type Placement = {
   context_after: string;
   anchor_kind?: "element" | "passage";
   anchor_selector?: string;
+  // For a passage found by its text: how many times the text appears.
+  // More than one means the surroundings (`near`) or `occurrence` chose.
+  occurrences?: number;
 };
 
+// Why a placement was refused, for callers that act on the reason rather
+// than show the message: re-attaching a whole review at once leaves an
+// ambiguous passage for a person, but reports a vanished one as gone.
+export type AnchorErrorCode =
+  | "invalid" // the request itself can't be met (empty text, wrong format)
+  | "not-found" // the passage isn't in the document
+  | "ambiguous" // it is, more than once, and nothing picks one
+  | "no-element" // no element has the selector
+  | "overlap" // it overlaps another comment's anchor
+  | "straddle" // it straddles a code block, equation, or diagram
+  | "unmappable"; // found in the rendered text, but not mappable to source
+
 export class AnchorError extends Error {
-  constructor(message: string) {
+  // For "ambiguous": how many times the passage appears. For "overlap":
+  // the comment whose anchor is in the way.
+  readonly count?: number;
+  readonly otherId?: number;
+  constructor(
+    message: string,
+    readonly code: AnchorErrorCode = "invalid",
+    extra: { count?: number; otherId?: number } = {},
+  ) {
     super(message);
     this.name = "AnchorError";
+    this.count = extra.count;
+    this.otherId = extra.otherId;
   }
 }
 
@@ -56,6 +81,9 @@ export type LocateOptions = {
   // reader's selection here, so a repeated phrase still lands where they
   // pointed without asking.
   near?: { before: string; after: string };
+  // HTML only: count only the copies whose source lies inside this range
+  // (an element's span), as though the rest of the page weren't there.
+  within?: { start: number; end: number };
 };
 
 // Find `phrase` in `body` and describe where its markers go.
@@ -82,6 +110,7 @@ export function locateElement(body: string, selector: string, format: DocFormat)
   if (!span) {
     throw new AnchorError(
       `No element matches "${selector}". Only "#id" and "#id tag" selectors are supported, and the id must exist in the report.`,
+      "no-element",
     );
   }
   rejectOverlap(body, span.start, span.end, format);
@@ -125,6 +154,7 @@ export function locatePassage(
   if (!span) {
     throw new AnchorError(
       `No element matches "${selector}". Only "#id" and "#id tag" selectors are supported, and the id must exist in the report.`,
+      "no-element",
     );
   }
   rejectOverlapUnlessSameElement(body, span.start, span.end, format);
@@ -140,6 +170,19 @@ export function locatePassage(
     anchor_kind: "passage",
     anchor_selector: selector.trim(),
   };
+}
+
+// The `anchor_scope` a record of this placement should carry: for a run
+// of text in an HTML report, the innermost enclosing element with an id.
+// Computed only when a record is written (it parses the page), not on
+// every locate — the app locates on every selection change.
+export function scopeOfPlacement(
+  body: string,
+  placement: Placement,
+  format: DocFormat,
+): string | undefined {
+  if (format !== "html" || placement.anchor_kind) return undefined;
+  return enclosingScope(body, placement.start, placement.end);
 }
 
 // Splice the markers for `id` at a placement.
@@ -196,6 +239,7 @@ function locateInMarkdown(body: string, needle: string, opts: LocateOptions): Pl
       if (start < r.start || end > r.end) {
         throw new AnchorError(
           "The anchor straddles a code block, an equation, or a diagram. Anchor the whole block (a phrase inside it) or prose outside it, not both.",
+          "straddle",
         );
       }
       start = r.start;
@@ -220,6 +264,7 @@ function locateInMarkdown(body: string, needle: string, opts: LocateOptions): Pl
     anchor_text: normalizeAnchorText(source, "markdown"),
     context_before: contextSnippet(normalizeAnchorText(body.slice(0, start), "markdown"), "before"),
     context_after: contextSnippet(normalizeAnchorText(body.slice(end), "markdown"), "after"),
+    occurrences: matches.length,
   };
 }
 
@@ -361,6 +406,7 @@ function pick(
   if (matches.length === 0) {
     throw new AnchorError(
       `"${needle}" was not found. Quote the passage exactly as it appears; line breaks and inline formatting are ignored.`,
+      "not-found",
     );
   }
   if (opts.occurrence !== undefined) {
@@ -382,6 +428,8 @@ function pick(
       .join("\n");
     throw new AnchorError(
       `"${needle}" appears ${matches.length} times. Add --occurrence N to pick one, or quote a longer passage:\n${listing}`,
+      "ambiguous",
+      { count: matches.length },
     );
   }
   return matches[0];
@@ -437,12 +485,20 @@ function preview(haystack: string, m: Match): string {
 
 function locateInHtml(body: string, needle: string, opts: LocateOptions): Placement {
   const map = buildHtmlTextMap(body);
-  const matches = findMatches(map.text, needle);
+  let matches = findMatches(map.text, needle);
+  const within = opts.within;
+  if (within) {
+    matches = matches.filter((m) => {
+      const r = textRangeToSource(map, m.start, m.end);
+      return r !== null && r.start >= within.start && r.end <= within.end;
+    });
+  }
   const chosen = pick(matches, needle, opts, map.text, "html");
   const range = textRangeToSource(map, chosen.start, chosen.end, { requireExact: true });
   if (!range) {
     throw new AnchorError(
       `"${needle}" was found, but its source could not be mapped exactly (an unusual entity nearby). Quote a slightly different span.`,
+      "unmappable",
     );
   }
   rejectOverlap(body, range.start, range.end, "html");
@@ -454,6 +510,7 @@ function locateInHtml(body: string, needle: string, opts: LocateOptions): Placem
     anchor_text: normalizeAnchorText(body.slice(range.start, range.end), "html"),
     context_before: around.before,
     context_after: around.after,
+    occurrences: matches.length,
   };
 }
 
@@ -516,6 +573,8 @@ function rejectOverlap(body: string, start: number, end: number, format: DocForm
   if (hit) {
     throw new AnchorError(
       `That passage overlaps the anchor of comment ${hit.id}. Reply to comment ${hit.id} instead, or anchor a passage that doesn't overlap it.`,
+      "overlap",
+      { otherId: hit.id },
     );
   }
 }
@@ -555,6 +614,8 @@ function rejectOverlapUnlessSameElement(
   if (hit) {
     throw new AnchorError(
       `That passage overlaps the anchor of comment ${hit.id}. Reply to comment ${hit.id} instead, or anchor a passage that doesn't overlap it.`,
+      "overlap",
+      { otherId: hit.id },
     );
   }
 }

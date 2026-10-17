@@ -51,6 +51,39 @@ export function findBySelector(html: string, selector: string): ElementSpan | nu
   return target ? spanOf(html, target) : null;
 }
 
+// The innermost element enclosing a source range that has an id, as the
+// `#id` selector `findBySelector` reads, or undefined if none does. A
+// comment on a passage records it as `anchor_scope`: a report that
+// repeats a sentence in every tab usually gives each tab an id, and the
+// id tells the copies apart when the words around them can't.
+export function enclosingScope(html: string, start: number, end: number): string | undefined {
+  const root = parse(html, { sourceCodeLocationInfo: true }) as unknown as P5Node;
+  return scopeWithin(root, start, end, undefined)?.scope;
+}
+
+// Descend through the elements that contain the range, keeping the last
+// usable id seen. Elements the parser implied (an `<html>` or `<body>`
+// the source never wrote) have no location; they are looked through.
+function scopeWithin(
+  node: P5Node,
+  start: number,
+  end: number,
+  scope: string | undefined,
+): { scope?: string } | null {
+  const children = (node.tagName === "template" ? node.content?.childNodes : node.childNodes) ?? [];
+  for (const child of children) {
+    if (child.tagName === undefined) continue;
+    const loc = child.sourceCodeLocation;
+    if (loc && !(loc.startOffset <= start && loc.endOffset >= end)) continue;
+    const id = attr(child, "id");
+    const here = id && /^[A-Za-z][\w-]*$/.test(id) ? `#${id}` : scope;
+    const inner = scopeWithin(child, start, end, here);
+    if (inner) return inner;
+    if (loc) return { scope: here };
+  }
+  return null;
+}
+
 // Blocks a comment can be anchored to as a unit. Same list the DOM side
 // uses to decide what a hover targets.
 const BLOCK_ANCHORS = new Set(["figure", "table", "svg", "blockquote", "pre", "img", "video"]);

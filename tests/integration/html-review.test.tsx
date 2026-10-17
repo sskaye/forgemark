@@ -16,8 +16,8 @@ const REPORT = `<!doctype html>
 <html><head><meta charset="utf-8"><title>Modelling meals</title>
 <style>p{color:#0b0b0b}</style></head>
 <body>
-<p>Eliminating the linear block analytically is <b>variable projection</b>
-(Golub &amp; Pereyra, 1973).</p>
+<section id="method"><p>Eliminating the linear block analytically is <b>variable projection</b>
+(Golub &amp; Pereyra, 1973).</p></section>
 <figure id="fig-1"><figcaption>Figure 1. Control holds</figcaption><svg viewBox="0 0 10 10"></svg></figure>
 <p>Trailing prose.</p>
 </body></html>
@@ -33,6 +33,7 @@ function Harness() {
       <span data-testid="probe-anchor-text">{state.comments[0]?.anchor_text ?? ""}</span>
       <span data-testid="probe-anchor-kind">{state.comments[0]?.anchor_kind ?? ""}</span>
       <span data-testid="probe-anchor-selector">{state.comments[0]?.anchor_selector ?? ""}</span>
+      <span data-testid="probe-anchor-scope">{state.comments[0]?.anchor_scope ?? ""}</span>
       <button
         data-testid="probe-load"
         onClick={() =>
@@ -135,6 +136,8 @@ describe("reviewing an HTML report", () => {
     const next = body();
     expect(next).toContain("<!-- fmc:1 -->variable projection<!-- /fmc:1 -->");
     expect(screen.getByTestId("probe-anchor-text").textContent).toBe("variable projection");
+    // The section it sits in, for telling repeated passages apart later.
+    expect(screen.getByTestId("probe-anchor-scope").textContent).toBe("#method");
     // Only the two markers were added — everything else is byte-identical.
     expect(next.replace("<!-- fmc:1 -->", "").replace("<!-- /fmc:1 -->", "")).toBe(REPORT);
   });

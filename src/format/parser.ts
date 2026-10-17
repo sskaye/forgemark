@@ -364,6 +364,14 @@ function parseCommentRecord(raw: Record<string, unknown>, index: number): Commen
     );
   }
 
+  const anchorScope = raw["anchor_scope"];
+  if (anchorScope !== undefined && typeof anchorScope !== "string") {
+    throw new ForgemarkParseError(
+      "schema",
+      `Comment id=${idValue}: 'anchor_scope' must be a string if present`,
+    );
+  }
+
   const resolved = raw["resolved"];
   if (resolved !== undefined && typeof resolved !== "boolean") {
     throw new ForgemarkParseError("schema", `Comment id=${idValue}: 'resolved' must be a boolean`);
@@ -427,6 +435,7 @@ function parseCommentRecord(raw: Record<string, unknown>, index: number): Commen
   if (anchorText !== undefined) out.anchor_text = unescapeContent(anchorText);
   if (anchorKind !== undefined) out.anchor_kind = anchorKind;
   if (anchorSelector !== undefined) out.anchor_selector = unescapeContent(anchorSelector);
+  if (anchorScope !== undefined) out.anchor_scope = unescapeContent(anchorScope);
   if (contextBefore !== undefined) out.context_before = unescapeContent(contextBefore);
   if (contextAfter !== undefined) out.context_after = unescapeContent(contextAfter);
   if (editedAt !== undefined) out.edited_at = editedAt;

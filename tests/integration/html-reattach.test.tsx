@@ -54,7 +54,7 @@ const COMMENTS: Comment[] = [
   },
 ];
 
-function Harness() {
+function Harness({ comments = COMMENTS }: { comments?: Comment[] }) {
   const { state, dispatch } = useDocument();
   const statuses = classifyAnchors(state.body, state.comments, state.format);
   return (
@@ -67,6 +67,9 @@ function Harness() {
           .join(",")}
       </span>
       <span data-testid="probe-anchor-2">{state.comments[1]?.anchor_text ?? ""}</span>
+      <span data-testid="probe-contexts">
+        {JSON.stringify(state.comments.map((c) => [c.context_before, c.context_after]))}
+      </span>
       <button
         data-testid="probe-load"
         onClick={() =>
@@ -76,7 +79,7 @@ function Harness() {
             fileName: "report.html",
             text: REBUILT,
             body: REBUILT,
-            comments: COMMENTS,
+            comments,
             readOnly: false,
             format: "html",
           })
@@ -86,11 +89,11 @@ function Harness() {
   );
 }
 
-async function loadRebuilt() {
+async function loadRebuilt(comments?: Comment[]) {
   render(
     <ThemeProvider initialPreference="light">
       <DocumentProvider>
-        <Harness />
+        <Harness comments={comments} />
         <AppShell />
       </DocumentProvider>
     </ThemeProvider>,
@@ -147,5 +150,30 @@ describe("recovering a review after a regeneration", () => {
     expect(screen.queryByTestId("fm-lost-banner-reattach-all")).toBeNull();
     fireEvent.click(screen.getByTestId("fm-lost-banner-recover"));
     await waitFor(() => expect(screen.getByTestId("fm-reattach-modal")).toBeTruthy());
+  });
+
+  it("reattaches a repeated passage when its recorded surroundings pick one copy", async () => {
+    const withContext = COMMENTS.map((c) =>
+      c.id === 3
+        ? { ...c, context_before: "The outer loop is a grid, then a golden-section polish." }
+        : c,
+    );
+    await loadRebuilt(withContext);
+    expect(screen.getByTestId("fm-lost-banner-reattach-all").textContent).toBe("Reattach all 3");
+    fireEvent.click(screen.getByTestId("fm-lost-banner-reattach-all"));
+    await waitFor(() => expect(screen.getByTestId("probe-attached").textContent).toBe("1,2,3"));
+    const body = screen.getByTestId("probe-body").textContent ?? "";
+    expect(body).toContain(
+      "polish.</p>\n<p><!-- fmc:3 -->Ambiguous sentence.<!-- /fmc:3 --></p>\n<p>Ambiguous sentence.</p>",
+    );
+  });
+
+  it("records the surroundings as the reader sees them, not as markup", async () => {
+    await loadRebuilt();
+    fireEvent.click(screen.getByTestId("fm-lost-banner-reattach-all"));
+    await waitFor(() => expect(screen.getByTestId("probe-attached").textContent).toBe("1,2"));
+    const [first] = JSON.parse(screen.getByTestId("probe-contexts").textContent ?? "[]");
+    expect(first[0]).toBe("Eliminating the linear block analytically is");
+    expect(first.join(" ")).not.toMatch(/[<>]/);
   });
 });
