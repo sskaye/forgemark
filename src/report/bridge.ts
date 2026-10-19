@@ -23,6 +23,7 @@ import {
   removeAnchor,
 } from "./decorate";
 import { describeElement, renderedText, textIndexOf, walkTextNodes } from "./dom";
+import { BLOCK_SELECTOR as TEXT_BLOCKS } from "../format/html/blockTags";
 import type {
   BridgeChannel,
   FrameComment,
@@ -37,8 +38,9 @@ import type {
 void _unused;
 
 const BLOCK_SELECTOR = "figure, table, blockquote, pre, img, video, svg, canvas";
-const BLOCKISH =
-  "p, div, section, article, main, aside, header, footer, nav, li, td, th, tr, h1, h2, h3, h4, h5, h6, figcaption, blockquote, pre, dt, dd";
+// What counts as a block when the words around a selection are recorded:
+// the same list the source map breaks the text at (`blockTags.ts`).
+const BLOCKISH = TEXT_BLOCKS;
 
 // A document without a layout engine has no scrollIntoView to call.
 function scrollInto(el: Element | null, block: ScrollLogicalPosition): void {

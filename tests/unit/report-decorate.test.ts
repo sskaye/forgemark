@@ -28,6 +28,15 @@ describe("decorateAnchors", () => {
     expect(spans.map((s) => s.textContent)).toEqual(["a ", "bold", " tail"]);
   });
 
+  it("highlights the words of an anchor across two blocks, not the gap between them", () => {
+    const doc = parse(
+      "<html><body><p>alpha <!-- fmc:5 -->one</p>\n<p>beta<!-- /fmc:5 --> two</p></body></html>",
+    );
+    expect(decorateAnchors(doc)).toEqual([{ id: 5, kind: "inline" }]);
+    const spans = Array.from(doc.querySelectorAll("[data-anchor-id='5']"));
+    expect(spans.map((s) => s.textContent)).toEqual(["one", "beta"]);
+  });
+
   it("marks the element itself for a block anchor", () => {
     // A full document, because that is what a splice produces: the
     // markers land around a figure that is already inside <body>. A bare

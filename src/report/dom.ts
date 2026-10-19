@@ -2,9 +2,11 @@
 //
 // `format/html/textmap.ts` produces the rendered text of the *source*
 // together with a per-character source offset. This module produces the
-// rendered text of the *DOM* and locates positions within it. The two
-// meet on a single shared coordinate: an index into the concatenated
-// rendered text.
+// rendered text of the *DOM* and locates positions within it, for use
+// inside the frame. The two never exchange offsets: the bridge sends the
+// app the selected text and the words around it, and the app finds that
+// text in the source. What they must agree on is what the reader reads,
+// including that a block's edge is a break (`format/html/blockTags.ts`).
 //
 // Going through a character index rather than node identity is what
 // makes this robust. Forgemark rewrites the iframe's DOM at display time
@@ -13,8 +15,8 @@
 // keyed on the nodes themselves. Wrapping changes no characters, so the
 // index is stable across it.
 //
-// The skip set must match `textmap.ts` exactly or every offset after the
-// first skipped element is wrong.
+// The skip set must match `textmap.ts`, or text the app can't find in
+// the source would be offered for comment.
 
 const SKIP_CONTENT = new Set(["SCRIPT", "STYLE", "TITLE", "TEXTAREA", "NOSCRIPT"]);
 

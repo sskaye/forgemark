@@ -16,6 +16,7 @@
 
 import { decodeHTML } from "entities";
 import { DEFAULT_FORMAT, type DocFormat } from "./types";
+import { BLOCK_EDGE_RE } from "./html/blockTags";
 
 const MARKER_RE = /<!--\s*\/?fmc:\d+\s*-->/g;
 
@@ -53,8 +54,15 @@ export function stripMarkdownInline(s: string): string {
     .trim();
 }
 
+// A block's edge reads as a space, as the reader sees it (`blockTags.ts`):
+// `one</td><td>beta` is "one beta", not "onebeta".
 function renderedHtml(s: string): string {
-  return decodeHTML(s.replace(/<!--[\s\S]*?-->/g, "").replace(/<[^>]+>/g, ""));
+  return decodeHTML(
+    s
+      .replace(/<!--[\s\S]*?-->/g, "")
+      .replace(BLOCK_EDGE_RE, " ")
+      .replace(/<[^>]+>/g, ""),
+  );
 }
 
 function renderedMarkdown(s: string): string {

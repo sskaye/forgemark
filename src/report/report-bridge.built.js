@@ -64,6 +64,57 @@
     return flat.length > max ? flat.slice(0, max - 1).trimEnd() + "\u2026" : flat;
   }
 
+  // src/format/html/blockTags.ts
+  var BLOCK_TAGS = /* @__PURE__ */ new Set([
+    "address",
+    "article",
+    "aside",
+    "blockquote",
+    "caption",
+    "dd",
+    "details",
+    "dialog",
+    "div",
+    "dl",
+    "dt",
+    "fieldset",
+    "figcaption",
+    "figure",
+    "footer",
+    "form",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "header",
+    "hgroup",
+    "hr",
+    "legend",
+    "li",
+    "main",
+    "nav",
+    "ol",
+    "p",
+    "pre",
+    "section",
+    "summary",
+    "table",
+    "tbody",
+    "td",
+    "tfoot",
+    "th",
+    "thead",
+    "tr",
+    "ul"
+  ]);
+  var BLOCK_SELECTOR = [...BLOCK_TAGS].join(", ");
+  var BLOCK_EDGE_RE = new RegExp(
+    `<\\/?(?:${[...BLOCK_TAGS].join("|")})(?=[\\s/>])[^>]*>|<br(?=[\\s/>])[^>]*>`,
+    "gi"
+  );
+
   // src/report/decorate.ts
   var OPEN_RE = /^\s*fmc:(\d+)\s*$/;
   var CLOSE_RE = /^\s*\/fmc:(\d+)\s*$/;
@@ -134,7 +185,10 @@
       }
     }
     const texts = between.filter(
-      (n) => n.nodeType === Node.TEXT_NODE && n.data.length > 0 && !SKIP_PARENTS.has(n.parentElement?.tagName ?? "") && n.parentElement?.getAttribute("data-anchor-id") !== String(id) && // An HTML <span> inside an <svg> is in the wrong namespace and
+      (n) => n.nodeType === Node.TEXT_NODE && n.data.length > 0 && // The whitespace between two blocks is layout, not text: an anchor
+      // across two paragraphs or cells highlights their words, not the
+      // gap. A space between inline elements is text, and stays.
+      !betweenBlocks(n) && !SKIP_PARENTS.has(n.parentElement?.tagName ?? "") && n.parentElement?.getAttribute("data-anchor-id") !== String(id) && // An HTML <span> inside an <svg> is in the wrong namespace and
       // would not render. Charts are commented on as elements instead.
       n.parentElement?.namespaceURI !== SVG_NS
     );
@@ -145,6 +199,11 @@
       span.appendChild(text);
     }
     return "inline";
+  }
+  function betweenBlocks(text) {
+    if (text.data.trim().length > 0) return false;
+    const isBlock = (n) => n?.nodeType === Node.ELEMENT_NODE && BLOCK_TAGS.has(n.tagName.toLowerCase());
+    return isBlock(text.previousSibling) || isBlock(text.nextSibling);
   }
   function passageNames(host, text) {
     const wanted = text.replace(/\s+/g, " ").trim();
@@ -302,8 +361,8 @@
   }
 
   // src/report/bridge.ts
-  var BLOCK_SELECTOR = "figure, table, blockquote, pre, img, video, svg, canvas";
-  var BLOCKISH = "p, div, section, article, main, aside, header, footer, nav, li, td, th, tr, h1, h2, h3, h4, h5, h6, figcaption, blockquote, pre, dt, dd";
+  var BLOCK_SELECTOR2 = "figure, table, blockquote, pre, img, video, svg, canvas";
+  var BLOCKISH = BLOCK_SELECTOR;
   function scrollInto(el, block) {
     if (el && typeof el.scrollIntoView === "function") {
       el.scrollIntoView({ block, behavior: "smooth" });
@@ -363,10 +422,10 @@
     const refreshBlocks = () => {
       const body = doc.body;
       if (!body) return;
-      const all = Array.from(doc.querySelectorAll(BLOCK_SELECTOR)).filter(
+      const all = Array.from(doc.querySelectorAll(BLOCK_SELECTOR2)).filter(
         (el) => !el.closest("[data-forgemark]")
       );
-      const outermost = all.filter((el) => !el.parentElement?.closest(BLOCK_SELECTOR));
+      const outermost = all.filter((el) => !el.parentElement?.closest(BLOCK_SELECTOR2));
       const live = /* @__PURE__ */ new Set();
       const base = offsetBase();
       const width = doc.documentElement.clientWidth || win.innerWidth;
