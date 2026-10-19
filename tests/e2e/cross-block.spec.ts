@@ -93,6 +93,45 @@ async function selectAcross(root: Locator, from: string, to: string, nth = 0) {
   );
 }
 
+// Drag with the mouse from the start of `from` to the end of `to`, as a
+// reader does. The editor reads a mouse selection itself; one set
+// through the DOM can race its first content sync.
+async function dragAcross(page: Page, root: Locator, from: string, to: string) {
+  const [start, end] = await root.evaluate(
+    (el, [from, to]) => {
+      const doc = el.ownerDocument;
+      const walker = doc.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      const points: { x: number; y: number }[] = [];
+      while (walker.nextNode()) {
+        const n = walker.currentNode as Text;
+        const want = points.length === 0 ? (from as string) : (to as string);
+        const at = n.data.indexOf(want);
+        if (at < 0) continue;
+        const r = doc.createRange();
+        // The first character of `from`, or the last of `to`.
+        const first = points.length === 0;
+        r.setStart(n, first ? at : at + want.length - 1);
+        r.setEnd(n, first ? at + 1 : at + want.length);
+        const box = r.getBoundingClientRect();
+        points.push(
+          points.length === 0
+            ? { x: box.left + 1, y: box.top + box.height / 2 }
+            : { x: box.right - 1, y: box.top + box.height / 2 },
+        );
+        if (points.length === 2) break;
+      }
+      if (points.length < 2) throw new Error(`not found: ${from}…${to}`);
+      return points;
+    },
+    [from, to] as const,
+  );
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move((start.x + end.x) / 2, (start.y + end.y) / 2, { steps: 4 });
+  await page.mouse.move(end.x, end.y, { steps: 4 });
+  await page.mouse.up();
+}
+
 async function commentOnToolbar(page: Page, text: string) {
   await expect(page.getByTestId("fm-selection-toolbar")).toBeVisible();
   // A passage across blocks takes a comment, never a suggestion.
@@ -117,9 +156,7 @@ test.describe("Markdown", () => {
     const path = fixture("paras.md", "Intro line.\n\nalpha one\n\nbeta two\n");
     await open(page, path);
     await expect(prose(page)).toContainText("beta two");
-    // Focus the editor first, as the reader's drag would.
-    await prose(page).click();
-    await selectAcross(prose(page), "one", "beta");
+    await dragAcross(page, prose(page), "one", "beta");
     await commentOnToolbar(page, "Across paragraphs.");
     const file = await savedFile(page, path);
     expect(file).toContain("alpha <!-- fmc:1 -->one\n\nbeta<!-- /fmc:1 --> two");
@@ -132,9 +169,7 @@ test.describe("Markdown", () => {
     const path = fixture("list.md", "Intro line.\n\n- alpha one\n- beta two\n");
     await open(page, path);
     await expect(prose(page)).toContainText("beta two");
-    // Focus the editor first, as the reader's drag would.
-    await prose(page).click();
-    await selectAcross(prose(page), "one", "beta");
+    await dragAcross(page, prose(page), "one", "beta");
     await commentOnToolbar(page, "Across items.");
     const file = await savedFile(page, path);
     expect(file).toContain("- alpha <!-- fmc:1 -->one\n- beta<!-- /fmc:1 --> two");

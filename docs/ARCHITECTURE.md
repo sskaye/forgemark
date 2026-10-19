@@ -296,6 +296,18 @@ touching `HtmlView`. One trap when doing so: an automated browser tab reports
 `behavior: "smooth"` scroll animation in a hidden tab — a smooth scroll that
 appears not to move there is the harness, not the code.
 
+**Block edges read as breaks.** A reader never sees the text of two blocks
+run together, so neither may the format layer. `format/html/blockTags.ts` is
+the one list of HTML block tags: the source text model (`textmap.ts`) puts a
+zero-width "\n" where a block or `<br>` meets text with no whitespace in the
+source, anchor text (`anchor-text.ts`) reads block edges as spaces, the report
+bridge spaces blocks apart when it records a selection's context, and
+highlighting skips the whitespace between blocks. In Markdown, a line's leading
+list marker, `>` or `#`s reads as the line break before it, and inside a table
+(`inMarkdownTable`) so does an unescaped `|`; the locator's tolerant match
+steps over the same markup. A comment may span blocks; a suggested edit may
+not (`spansBlocks`), since accepting it replaces the span with one run of text.
+
 **Regeneration is the dominant workflow.** Reports are replaced, not edited, so
 a rebuild orphans every anchor. `format/html/candidates.ts` tries the recorded
 `anchor_selector` first (exact, and survives a renumbered caption), then locates
