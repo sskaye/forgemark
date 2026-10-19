@@ -14,6 +14,7 @@ import { reattachOrphans, type ReattachOutcome } from "../src/format/reattachAll
 import { findMarkers, pairMarkers } from "../src/format/markers";
 import { applyPlacement, locateAnchor, locateElement, AnchorError, type Placement } from "./anchor";
 import { scopeOfPlacement } from "../src/format/locate";
+import { spansBlocks } from "../src/format/anchor-text";
 
 export class CommandError extends Error {
   constructor(message: string) {
@@ -81,6 +82,11 @@ export function addComment(file: ParsedFile, format: DocFormat, input: CommentIn
     if (format === "html" && from.includes("<")) {
       throw new CommandError(
         "A suggestion in an HTML report must not span tags: accepting it would replace markup. Anchor a span with no tags inside.",
+      );
+    }
+    if (spansBlocks(file.body, placement.start, placement.end, format)) {
+      throw new CommandError(
+        "A suggestion must stay inside one paragraph, list item, or table cell: accepting it replaces everything between the markers, which would merge the blocks. Comment on the passage instead, or suggest an edit to each part.",
       );
     }
     record.suggested_edit = { from, to: input.suggest };

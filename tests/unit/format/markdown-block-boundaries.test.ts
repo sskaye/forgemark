@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { locateAnchor, applyPlacement } from "../../../src/format/locate";
-import { normalizeAnchorText, inMarkdownTable } from "../../../src/format/anchor-text";
+import { normalizeAnchorText, inMarkdownTable, spansBlocks } from "../../../src/format/anchor-text";
 import { reattachOrphans } from "../../../src/format/reattachAll";
 import { lintText } from "../../../cli/lint";
 import type { Comment } from "../../../src/format/types";
@@ -71,5 +71,32 @@ describe("a Markdown passage across two blocks", () => {
   it("leaves emphasis and a leading minus sign alone", () => {
     expect(normalizeAnchorText("x *emph*\n*more*", "markdown")).toBe("x emph more");
     expect(normalizeAnchorText("x\n-1 below", "markdown")).toBe("x -1 below");
+  });
+});
+
+describe("spansBlocks: whether a suggestion would merge blocks", () => {
+  const spans = (
+    body: string,
+    from: string,
+    to: string,
+    format: "markdown" | "html" = "markdown",
+  ) => spansBlocks(body, body.indexOf(from), body.indexOf(to) + to.length, format);
+
+  it("is true across paragraphs, list items, cells, headings, and a quote's blank line", () => {
+    expect(spans("alpha one\n\nbeta two\n", "one", "beta")).toBe(true);
+    expect(spans("- alpha one\n- beta two\n", "one", "beta")).toBe(true);
+    expect(spans("| a | b |\n|---|---|\n| alpha one | beta two |\n", "one", "beta")).toBe(true);
+    expect(spans("## Alpha one\nbeta two\n", "one", "beta")).toBe(true);
+    expect(spans("Alpha one\n---\nbeta two\n", "one", "beta")).toBe(true);
+    expect(spans("> alpha one\n>\n> beta two\n", "one", "beta")).toBe(true);
+    expect(spans("<p>alpha one</p><p>beta two</p>", "one", "beta", "html")).toBe(true);
+  });
+
+  it("is false inside one block, however it is wrapped", () => {
+    expect(spans("alpha one\nbeta two\n", "one", "beta")).toBe(false);
+    expect(spans("> alpha one\n> beta two\n", "one", "beta")).toBe(false);
+    expect(spans("- alpha one\n  beta two\n", "one", "beta")).toBe(false);
+    expect(spans("pick a | b here\n", "a", "b")).toBe(false);
+    expect(spans("<p>alpha <b>one</b> beta</p>", "one", "beta", "html")).toBe(false);
   });
 });

@@ -48,6 +48,7 @@ function fromMarkdownCapture(c: CapturedSelection): HtmlCapturedSelection {
       c.selectionKind === "reject"
         ? (c.rejectReason ?? "This selection can't be commented on.")
         : undefined,
+    crossesBlocks: c.crossesBlocks,
     overlappingAnchorId: c.overlappingAnchorId,
     rect: c.rect,
     token: "",
@@ -210,6 +211,7 @@ export function EditorPane({ docId }: Props) {
             ? { anchorKind: captured.kind }
             : {}),
           ...(captured.kind === "floating" ? { floating: true } : {}),
+          ...(captured.crossesBlocks ? { crossesBlocks: true } : {}),
           ...(captured.anchorSelector ? { anchorSelector: captured.anchorSelector } : {}),
           x: captured.rect.left,
           y: captured.rect.bottom + 6,
@@ -739,7 +741,11 @@ export function EditorPane({ docId }: Props) {
 
   const suggestion = useMemo((): { allowed: boolean; reason?: string } => {
     const c = state.composer;
-    if (!c || c.mode !== "new" || !isHtml) return { allowed: true };
+    if (!c || c.mode !== "new") return { allowed: true };
+    if (c.crossesBlocks) {
+      return { allowed: false, reason: "Comment only — this spans more than one block" };
+    }
+    if (!isHtml) return { allowed: true };
     if (c.anchorKind === "element") {
       return { allowed: false, reason: "Comment only — this is a figure" };
     }
@@ -941,11 +947,14 @@ export function EditorPane({ docId }: Props) {
           <SelectionToolbar
             x={selectionAffordance.rect.left}
             y={selectionAffordance.rect.top}
-            allowSuggest={canSuggest(
-              selectionAffordance.kind === "inline" ? undefined : selectionAffordance.kind,
-              selectionAffordance.from,
-              selectionAffordance.to,
-            )}
+            allowSuggest={
+              !selectionAffordance.crossesBlocks &&
+              canSuggest(
+                selectionAffordance.kind === "inline" ? undefined : selectionAffordance.kind,
+                selectionAffordance.from,
+                selectionAffordance.to,
+              )
+            }
             onComment={() => openComposerFor(selectionAffordance, "comment")}
             onSuggest={() => openComposerFor(selectionAffordance, "suggest")}
           />

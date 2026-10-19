@@ -102,6 +102,24 @@ describe("Suggested-edit cards", () => {
     expect(screen.getByTestId("probe-dirty").textContent).toBe("dirty");
   });
 
+  it("Accept refuses a suggestion that spans two table cells, and changes nothing", async () => {
+    const body =
+      "| a | b |\n| --- | --- |\n| alpha <!-- fmc:1 -->one | beta<!-- /fmc:1 --> two |\n";
+    renderApp({
+      body,
+      comments: [
+        aSuggestion({ anchor_text: "one beta", suggested_edit: { from: "one | beta", to: "uno" } }),
+      ],
+    });
+    fireEvent.click(await screen.findByTestId("fm-card-1"));
+    fireEvent.click(await screen.findByTestId("fm-card-accept-1"));
+    await waitFor(() =>
+      expect(screen.getByTestId("probe-error").textContent).toMatch(/spans more than one/),
+    );
+    expect(screen.getByTestId("probe-body").textContent).toBe(body);
+    expect(screen.getByTestId("probe-comment-count").textContent).toBe("1");
+  });
+
   it("Reject leaves the anchored text but removes the comment + markers", async () => {
     renderApp({
       body: "x <!-- fmc:1 -->old phrase<!-- /fmc:1 --> y\n",

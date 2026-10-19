@@ -117,6 +117,39 @@ function renderedHtml(s: string): string {
   );
 }
 
+// Whether a source span crosses the edge of a block — two paragraphs,
+// list items, table cells, or a heading and what follows — rather than
+// staying inside one. A suggested edit must not: accepting it replaces
+// everything between the markers, which would merge the blocks or break
+// the table. A hard-wrapped paragraph, quoted or not, is one block.
+export function spansBlocks(
+  body: string,
+  start: number,
+  end: number,
+  format: DocFormat = DEFAULT_FORMAT,
+): boolean {
+  const s = body.slice(start, end).replace(MARKER_RE, "");
+  if (format === "html") return new RegExp(BLOCK_EDGE_RE.source, "i").test(s);
+  return (
+    // A blank line, in a quote or not.
+    /\n[ \t]*(?:>[ \t]?)*[ \t]*(?:\n|$)/.test(s) ||
+    // A new list item or heading, in a quote or not.
+    /\n[ \t]*(?:>[ \t]?)*[ \t]*(?:[-*+][ \t]|\d{1,9}[.)][ \t]|#{1,6}(?:[ \t]|$))/.test(s) ||
+    // Out of the heading the span starts in: an ATX heading is one line.
+    (s.includes("\n") && /^[ \t]*(?:>[ \t]?)*#{1,6}(?:[ \t]|$)/.test(lineStartAt(body, start))) ||
+    // A setext heading's underline.
+    /\n[ \t]*(?:=+|-+)[ \t]*(?:\n|$)/.test(s) ||
+    // A cell edge.
+    (/(?<!\\)\|/.test(s) && inMarkdownTable(body, start))
+  );
+}
+
+// The first few characters of the line `offset` is on.
+function lineStartAt(body: string, offset: number): string {
+  const from = body.lastIndexOf("\n", offset - 1) + 1;
+  return body.slice(from, from + 32);
+}
+
 // What starts a Markdown line without being text: a quote's `>`, a list
 // marker (with its task box), or a heading's `#`s. In a run that crosses
 // lines, each reads as the line break before it.

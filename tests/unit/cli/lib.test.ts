@@ -145,6 +145,22 @@ describe("addComment", () => {
   });
 });
 
+describe("a suggestion across blocks", () => {
+  it("is refused, since accepting it would merge them; a comment there is fine", () => {
+    const file = { body: "Intro.\n\n- alpha one\n- beta two\n", comments: [] };
+    expect(() =>
+      addComment(file, "markdown", { author: "C", anchor: "one beta", suggest: "x", now: NOW }),
+    ).toThrow(/inside one paragraph, list item, or table cell/);
+    const ok = addComment(file, "markdown", {
+      author: "C",
+      anchor: "one beta",
+      body: "b",
+      now: NOW,
+    });
+    expect(ok.file.body).toContain("<!-- fmc:1 -->one\n- beta<!-- /fmc:1 -->");
+  });
+});
+
 describe("addReply", () => {
   it("appends to the existing replies list, in order", () => {
     const file = load("02-with-thread.md");
