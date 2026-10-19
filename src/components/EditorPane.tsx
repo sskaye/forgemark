@@ -749,9 +749,10 @@ export function EditorPane({ docId }: Props) {
     if (c.anchorKind === "element") {
       return { allowed: false, reason: "Comment only — this is a figure" };
     }
-    if (c.anchorKind === "passage" || c.floating) {
+    if (c.anchorKind === "passage") {
       return { allowed: false, reason: "Comment only — this text is produced by the report" };
     }
+    if (c.floating) return { allowed: false, reason: "Comment only — floating note" };
     if (state.body.slice(c.from, c.to).includes("<")) {
       return { allowed: false, reason: "Comment only — this passage spans markup" };
     }
@@ -970,6 +971,11 @@ export function EditorPane({ docId }: Props) {
           initialMode={state.composer.initialMode}
           allowSuggest={suggestion.allowed}
           suggestUnavailableReason={suggestion.reason}
+          notice={
+            state.composer.floating
+              ? "Saved as a floating note: this passage isn't in the file's text (a report's script may write it), so the comment can't be attached to it."
+              : undefined
+          }
         />
       )}
       {state.composer?.mode === "overlapPrompt" && state.viewMode === "rendered" && (

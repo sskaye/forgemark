@@ -186,4 +186,25 @@ test.describe("HTML report", () => {
     const file = await savedFile(page, path);
     expect(file).toContain("<td>x</td><td><!-- fmc:1 -->beta two<!-- /fmc:1 --></td>");
   });
+
+  // The fallback that the touching blocks above used to fall into
+  // silently: text with no place in the source becomes a floating note,
+  // and the composer now says so before the reader submits.
+  test("a passage the report's script wrote says it will be a floating note", async ({ page }) => {
+    const path = fixture(
+      "scripted.html",
+      '<!doctype html><html><body><p>Intro line.</p><div class="out"></div>\n' +
+        "<script>document.querySelector('.out').textContent = 'Written by the script.';</script>\n" +
+        "</body></html>\n",
+    );
+    await open(page, path);
+    const frame = frameOf(page);
+    await expect(frame.locator(".out")).toHaveText("Written by the script.");
+    await selectAcross(frame.locator("body"), "Written", "script");
+    await page.getByTestId("fm-selection-comment").click();
+    await expect(page.getByTestId("fm-composer-notice")).toContainText("floating note");
+    await expect(page.getByTestId("fm-composer-suggest-unavailable")).toHaveText(
+      "Comment only — floating note",
+    );
+  });
 });
