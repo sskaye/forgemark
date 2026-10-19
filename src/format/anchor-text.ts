@@ -20,11 +20,28 @@ import { BLOCK_EDGE_RE } from "./html/blockTags";
 
 const MARKER_RE = /<!--\s*\/?fmc:\d+\s*-->/g;
 
+export type NormalizeOptions = {
+  // Markdown: the run sits in a table, so an unescaped `|` separates
+  // cells and reads as a space (`inMarkdownTable`). In prose a pipe is
+  // text.
+  inTable?: boolean;
+};
+
 // The rendered text of a run of source. Whitespace is collapsed, so a
-// hard-wrapped anchor and its single-line `anchor_text` compare equal.
-export function normalizeAnchorText(source: string, format: DocFormat = DEFAULT_FORMAT): string {
+// hard-wrapped anchor and its single-line `anchor_text` compare equal,
+// and a run across blocks reads as the reader reads it: the edge of an
+// HTML block, or the list marker, `>` or `#` that starts a Markdown
+// line, is a space.
+export function normalizeAnchorText(
+  source: string,
+  format: DocFormat = DEFAULT_FORMAT,
+  opts: NormalizeOptions = {},
+): string {
   const withoutMarkers = source.replace(MARKER_RE, "");
-  const text = format === "html" ? renderedHtml(withoutMarkers) : renderedMarkdown(withoutMarkers);
+  const text =
+    format === "html"
+      ? renderedHtml(withoutMarkers)
+      : renderedMarkdown(withoutMarkers, opts.inTable === true);
   return collapse(text);
 }
 
@@ -36,9 +53,44 @@ export function anchorTextMatches(
   recorded: string,
   source: string,
   format: DocFormat = DEFAULT_FORMAT,
+  opts: NormalizeOptions = {},
 ): boolean {
-  const rendered = normalizeAnchorText(source, format);
-  return collapse(recorded) === rendered || normalizeAnchorText(recorded, format) === rendered;
+  const rendered = normalizeAnchorText(source, format, opts);
+  return (
+    collapse(recorded) === rendered || normalizeAnchorText(recorded, format, opts) === rendered
+  );
+}
+
+// A GFM table's delimiter row: `| --- | :-: |`, `---|---`.
+const DELIMITER_ROW = /^[ \t]*\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/;
+
+// Whether a Markdown source offset lies in a table: the run of
+// non-blank lines around it has a header row with a pipe, followed by a
+// delimiter row. Top-level tables only, which is where a reader meets
+// them in practice.
+export function inMarkdownTable(body: string, offset: number): boolean {
+  const lineAt = (pos: number) => {
+    const start = body.lastIndexOf("\n", pos - 1) + 1;
+    const nl = body.indexOf("\n", pos);
+    return { start, end: nl < 0 ? body.length : nl };
+  };
+  const blank = (l: { start: number; end: number }) => body.slice(l.start, l.end).trim() === "";
+  let first = lineAt(Math.min(offset, body.length));
+  if (blank(first)) return false;
+  while (first.start > 0) {
+    const prev = lineAt(first.start - 1);
+    if (blank(prev)) break;
+    first = prev;
+  }
+  let prevText: string | null = null;
+  for (let l = first; ; ) {
+    const text = body.slice(l.start, l.end);
+    if (text.trim() === "") return false;
+    if (prevText !== null && prevText.includes("|") && DELIMITER_ROW.test(text)) return true;
+    prevText = text;
+    if (l.end >= body.length) return false;
+    l = lineAt(l.end + 1);
+  }
 }
 
 // Inline Markdown markup removed, line structure kept. For showing a
@@ -65,7 +117,23 @@ function renderedHtml(s: string): string {
   );
 }
 
-function renderedMarkdown(s: string): string {
+// What starts a Markdown line without being text: a quote's `>`, a list
+// marker (with its task box), or a heading's `#`s. In a run that crosses
+// lines, each reads as the line break before it.
+const LINE_START_MARKUP =
+  /\n[ \t]*(?:>[ \t]?)*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+(?:\[[ xX]\][ \t]+)?|#{1,6}(?=[ \t\n]|$))?/g;
+
+function blockMarkupAsSpace(s: string, inTable: boolean): string {
+  const out = s.replace(LINE_START_MARKUP, "\n");
+  if (!inTable) return out;
+  return out
+    .split("\n")
+    .filter((line) => !DELIMITER_ROW.test(line) || line.trim() === "")
+    .join("\n")
+    .replace(/(?<!\\)\|/g, " ");
+}
+
+function renderedMarkdown(s: string, inTable = false): string {
   // A whole-code-block anchor: the markers sit on their own lines around
   // the fence, and the app records the code itself.
   const fence = s.match(/^\s*(`{3,}|~{3,})[^\n]*\n([\s\S]*?)\n\s*\1\s*$/);
@@ -73,6 +141,8 @@ function renderedMarkdown(s: string): string {
   // A block equation, anchored the same way: the app records the TeX.
   const math = s.match(/^\s*\$\$[ \t]*\n([\s\S]*?)\n\s*\$\$\s*$/);
   if (math) return math[1];
+
+  s = blockMarkupAsSpace(s, inTable);
 
   // Inline code keeps its content verbatim; everything else is prose
   // whose markup is stripped. Split on code spans so the two are handled
