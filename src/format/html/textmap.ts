@@ -28,6 +28,7 @@
 
 import { parse } from "parse5";
 import { decodeHTML } from "entities";
+import { BLOCK_TAGS } from "./blockTags";
 
 // A contiguous run of rendered text and the source span it came from.
 export type HtmlTextRun = {
@@ -47,7 +48,11 @@ export type HtmlTextRun = {
 export type HtmlTextMap = {
   // Everything a reader sees, concatenated in document order. Script,
   // style, title and textarea content is excluded — it is not prose and
-  // must never be anchored.
+  // must never be anchored. Where a block element (`blockTags.ts`) or a
+  // `<br>` meets text with no whitespace between them in the source, a
+  // "\n" stands for the break the reader sees; it maps to no source
+  // characters (its start and end are the tag's edge) and belongs to no
+  // run.
   text: string;
   // Per code unit of `text`: the source offset it starts at, and the
   // source offset just past it. Entities map every code unit they
@@ -79,8 +84,35 @@ export function buildHtmlTextMap(html: string): HtmlTextMap {
   const ends: number[] = [];
   const runs: HtmlTextRun[] = [];
 
+  // A break the reader sees and the source doesn't spell: at a block's
+  // edges and at a `<br>`. Only between text, and never doubled, so a
+  // source that already has whitespace there is mapped as before.
+  const lastEnd = () => (ends.length > 0 ? ends[ends.length - 1] : 0);
+  // Whether the text so far ends in whitespace, kept as text is added:
+  // reading the last character of a string built by `+=` makes V8
+  // flatten it, which turns a large report quadratic.
+  let endsInSpace = true;
+  const separate = (offset: number) => {
+    if (endsInSpace) return;
+    text += "\n";
+    endsInSpace = true;
+    starts.push(offset);
+    ends.push(offset);
+  };
+
+  // The break is placed lazily, when the next text arrives: a block
+  // with nothing after it adds nothing, and two edges in a row
+  // (`</td><td>`) make one break.
+  let pendingBreak: { at: number } | null = null;
+  const breakAt = (offset: number) => {
+    if (!pendingBreak) pendingBreak = { at: offset };
+  };
+
   const visit = (node: P5Node) => {
     if (node.nodeName === "#text") {
+      // Text that starts with whitespace carries its own break.
+      if (pendingBreak && /^\S/.test(node.value ?? "")) separate(pendingBreak.at);
+      pendingBreak = null;
       const loc = node.sourceCodeLocation;
       const value = node.value ?? "";
       if (!loc || value.length === 0) return;
@@ -88,6 +120,7 @@ export function buildHtmlTextMap(html: string): HtmlTextMap {
       const decoded = decodeRun(raw, loc.startOffset);
       const textStart = text.length;
 
+      endsInSpace = /\s/.test(value[value.length - 1]);
       if (decoded.text === value) {
         text += decoded.text;
         for (let i = 0; i < decoded.starts.length; i++) {
@@ -125,8 +158,12 @@ export function buildHtmlTextMap(html: string): HtmlTextMap {
 
     const tag = (node.tagName ?? "").toLowerCase();
     if (tag && SKIP_CONTENT.has(tag)) return;
+    const loc = node.sourceCodeLocation;
+    const block = BLOCK_TAGS.has(tag) || tag === "br";
+    if (block) breakAt(loc ? loc.startOffset : lastEnd());
     if (node.content) visit(node.content);
     for (const child of node.childNodes ?? []) visit(child);
+    if (block) breakAt(loc ? loc.endOffset : lastEnd());
   };
 
   visit(doc);

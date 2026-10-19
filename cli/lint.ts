@@ -15,7 +15,7 @@
 
 import { parseForgemarkFile, findStrayBlock, ForgemarkParseError } from "../src/format/parser";
 import { findMarkers, pairMarkers } from "../src/format/markers";
-import { anchorTextMatches } from "../src/format/anchor-text";
+import { anchorTextMatches, inMarkdownTable } from "../src/format/anchor-text";
 import { wrapsSameElement } from "../src/format/locate";
 import { BLOCK_OPEN, type DocFormat, type ParsedFile } from "../src/format/types";
 
@@ -137,7 +137,11 @@ export function lintText(text: string, format: DocFormat): LintReport {
     // markers in the source.
     if (c.anchor_kind === "element" || c.anchor_kind === "passage") continue;
     const between = file.body.slice(pair.open.end, pair.close.start);
-    if (c.anchor_text !== undefined && !anchorTextMatches(c.anchor_text, between, format)) {
+    const inTable = format === "markdown" && inMarkdownTable(file.body, pair.open.end);
+    if (
+      c.anchor_text !== undefined &&
+      !anchorTextMatches(c.anchor_text, between, format, { inTable })
+    ) {
       problems.push({
         severity: "warning",
         commentId: c.id,

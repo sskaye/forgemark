@@ -50,6 +50,10 @@ export type CapturedSelection = {
   //               a user-facing message.
   selectionKind: "inline" | "block" | "reject";
   rejectReason?: string;
+  // An inline selection that starts and ends in different text blocks
+  // (two paragraphs, list items, cells): it can be commented on, but a
+  // suggestion would merge the blocks.
+  crossesBlocks: boolean;
   // The id of the existing comment whose anchor this selection overlaps,
   // or null when the selection is free of any anchor. When set, the
   // new-comment flow offers a reply instead of writing an (unrepresentable)
@@ -497,6 +501,8 @@ export function captureFrom(editor: ReturnType<typeof useEditor> | null): Captur
     contextAfter,
     selectionKind: cls.kind,
     rejectReason: cls.kind === "reject" ? cls.reason : undefined,
+    crossesBlocks:
+      cls.kind === "inline" && !state.doc.resolve(from).sameParent(state.doc.resolve(to)),
     overlappingAnchorId,
     rect,
   };

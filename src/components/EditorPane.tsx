@@ -48,6 +48,7 @@ function fromMarkdownCapture(c: CapturedSelection): HtmlCapturedSelection {
       c.selectionKind === "reject"
         ? (c.rejectReason ?? "This selection can't be commented on.")
         : undefined,
+    crossesBlocks: c.crossesBlocks,
     overlappingAnchorId: c.overlappingAnchorId,
     rect: c.rect,
     token: "",
@@ -210,6 +211,7 @@ export function EditorPane({ docId }: Props) {
             ? { anchorKind: captured.kind }
             : {}),
           ...(captured.kind === "floating" ? { floating: true } : {}),
+          ...(captured.crossesBlocks ? { crossesBlocks: true } : {}),
           ...(captured.anchorSelector ? { anchorSelector: captured.anchorSelector } : {}),
           x: captured.rect.left,
           y: captured.rect.bottom + 6,
@@ -739,13 +741,18 @@ export function EditorPane({ docId }: Props) {
 
   const suggestion = useMemo((): { allowed: boolean; reason?: string } => {
     const c = state.composer;
-    if (!c || c.mode !== "new" || !isHtml) return { allowed: true };
+    if (!c || c.mode !== "new") return { allowed: true };
+    if (c.crossesBlocks) {
+      return { allowed: false, reason: "Comment only — this spans more than one block" };
+    }
+    if (!isHtml) return { allowed: true };
     if (c.anchorKind === "element") {
       return { allowed: false, reason: "Comment only — this is a figure" };
     }
-    if (c.anchorKind === "passage" || c.floating) {
+    if (c.anchorKind === "passage") {
       return { allowed: false, reason: "Comment only — this text is produced by the report" };
     }
+    if (c.floating) return { allowed: false, reason: "Comment only — floating note" };
     if (state.body.slice(c.from, c.to).includes("<")) {
       return { allowed: false, reason: "Comment only — this passage spans markup" };
     }
@@ -941,11 +948,14 @@ export function EditorPane({ docId }: Props) {
           <SelectionToolbar
             x={selectionAffordance.rect.left}
             y={selectionAffordance.rect.top}
-            allowSuggest={canSuggest(
-              selectionAffordance.kind === "inline" ? undefined : selectionAffordance.kind,
-              selectionAffordance.from,
-              selectionAffordance.to,
-            )}
+            allowSuggest={
+              !selectionAffordance.crossesBlocks &&
+              canSuggest(
+                selectionAffordance.kind === "inline" ? undefined : selectionAffordance.kind,
+                selectionAffordance.from,
+                selectionAffordance.to,
+              )
+            }
             onComment={() => openComposerFor(selectionAffordance, "comment")}
             onSuggest={() => openComposerFor(selectionAffordance, "suggest")}
           />
@@ -961,6 +971,11 @@ export function EditorPane({ docId }: Props) {
           initialMode={state.composer.initialMode}
           allowSuggest={suggestion.allowed}
           suggestUnavailableReason={suggestion.reason}
+          notice={
+            state.composer.floating
+              ? "Saved as a floating note: this passage isn't in the file's text (a report's script may write it), so the comment can't be attached to it."
+              : undefined
+          }
         />
       )}
       {state.composer?.mode === "overlapPrompt" && state.viewMode === "rendered" && (

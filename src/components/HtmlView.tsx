@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { insertMarkersIntoBody, removeMarkersFromBody } from "../format";
+import { insertMarkersIntoBody, removeMarkersFromBody, spansBlocks } from "../format";
 import { AnchorError, locateAnchor, locateElement, locatePassage } from "../format/locate";
 import { findBySelector, findByText } from "../format/html/elements";
 import type { Comment } from "../format/types";
@@ -53,6 +53,9 @@ export type HtmlCapturedSelection = {
   anchorSelector?: string;
   // Set when the selection can't be anchored, with a user-facing reason.
   rejectReason?: string;
+  // The passage runs across two blocks (paragraphs, list items, cells),
+  // so it can be commented on but not replaced by a suggestion.
+  crossesBlocks?: boolean;
   overlappingAnchorId: number | null;
   // Host-viewport coordinates. `bottom` anchors the composer below the
   // selection; `top` anchors the selection toolbar above it.
@@ -210,7 +213,13 @@ export function HtmlView({
         const p = locateAnchor(body, s.text, "html", {
           near: { before: s.contextBefore, after: s.contextAfter },
         });
-        return { ...base, from: p.start, to: p.end, kind: "inline" };
+        return {
+          ...base,
+          from: p.start,
+          to: p.end,
+          kind: "inline",
+          crossesBlocks: spansBlocks(body, p.start, p.end, "html"),
+        };
       } catch (err) {
         if (!(err instanceof AnchorError)) throw err;
       }

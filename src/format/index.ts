@@ -13,7 +13,13 @@ export {
   ForgemarkSerializeError,
   type SerializeOptions,
 } from "./serializer";
-export { normalizeAnchorText, anchorTextMatches, stripMarkdownInline } from "./anchor-text";
+export {
+  normalizeAnchorText,
+  anchorTextMatches,
+  stripMarkdownInline,
+  spansBlocks,
+  inMarkdownTable,
+} from "./anchor-text";
 export {
   locateAnchor,
   locateElement,

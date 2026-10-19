@@ -38,6 +38,7 @@
 // the document changes.
 
 import { describeElement } from "./dom";
+import { BLOCK_TAGS } from "../format/html/blockTags";
 
 const OPEN_RE = /^\s*fmc:(\d+)\s*$/;
 const CLOSE_RE = /^\s*\/fmc:(\d+)\s*$/;
@@ -148,6 +149,10 @@ function decoratePair(
     (n) =>
       n.nodeType === Node.TEXT_NODE &&
       (n as Text).data.length > 0 &&
+      // The whitespace between two blocks is layout, not text: an anchor
+      // across two paragraphs or cells highlights their words, not the
+      // gap. A space between inline elements is text, and stays.
+      !betweenBlocks(n as Text) &&
       !SKIP_PARENTS.has(n.parentElement?.tagName ?? "") &&
       n.parentElement?.getAttribute("data-anchor-id") !== String(id) &&
       // An HTML <span> inside an <svg> is in the wrong namespace and
@@ -162,6 +167,13 @@ function decoratePair(
     span.appendChild(text);
   }
   return "inline";
+}
+
+function betweenBlocks(text: Text): boolean {
+  if (text.data.trim().length > 0) return false;
+  const isBlock = (n: Node | null) =>
+    n?.nodeType === Node.ELEMENT_NODE && BLOCK_TAGS.has((n as Element).tagName.toLowerCase());
+  return isBlock(text.previousSibling) || isBlock(text.nextSibling);
 }
 
 // Whether `text` names the element a passage anchor wraps: its caption,

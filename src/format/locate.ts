@@ -20,7 +20,7 @@ import { findMarkers, pairMarkers, type MarkerPair } from "./markers";
 import { buildHtmlTextMap, textRangeToSource } from "./html/textmap";
 import { findBySelector, enclosingScope } from "./html/elements";
 import { openMarker, closeMarker, type DocFormat } from "./types";
-import { normalizeAnchorText } from "./anchor-text";
+import { normalizeAnchorText, inMarkdownTable } from "./anchor-text";
 import { contextSnippet } from "./compose";
 import { wholeBlockLines } from "./blocks";
 
@@ -256,14 +256,21 @@ function locateInMarkdown(body: string, needle: string, opts: LocateOptions): Pl
   rejectOverlap(body, start, end, "markdown");
 
   const source = body.slice(start, end);
+  const inTable = inMarkdownTable(body, start);
   return {
     start,
     end,
     block: block !== null,
     ...(block?.indent ? { indent: block.indent } : {}),
-    anchor_text: normalizeAnchorText(source, "markdown"),
-    context_before: contextSnippet(normalizeAnchorText(body.slice(0, start), "markdown"), "before"),
-    context_after: contextSnippet(normalizeAnchorText(body.slice(end), "markdown"), "after"),
+    anchor_text: normalizeAnchorText(source, "markdown", { inTable }),
+    context_before: contextSnippet(
+      normalizeAnchorText(body.slice(0, start), "markdown", { inTable }),
+      "before",
+    ),
+    context_after: contextSnippet(
+      normalizeAnchorText(body.slice(end), "markdown", { inTable }),
+      "after",
+    ),
     occurrences: matches.length,
   };
 }
@@ -355,9 +362,14 @@ function inlineCodeSpans(line: string): { start: number; end: number }[] {
 
 // A regex for the phrase where any whitespace in the phrase matches any
 // run of whitespace in the source, and, for Markdown, inline markup may
-// sit between words — so "twice the rate" finds "twice the **rate**".
+// sit between words — so "twice the rate" finds "twice the **rate**" —
+// and so may the markup that starts a line or splits a table row, so a
+// passage a reader selected across two list items, quotes, headings or
+// cells ("one beta") finds "one\n- beta" and "one | beta".
+const BETWEEN_WORDS =
+  "(?:[\\s*_~`|]|<[^>]+>|\\n[ \\t]*(?:>[ \\t]?)*(?:[-*+][ \\t]+|\\d{1,9}[.)][ \\t]+|#{1,6}[ \\t]+)?(?:\\[[ xX]\\][ \\t]+)?)+";
 function markdownTolerant(needle: string): RegExp {
-  return phraseRegex(needle, "(?:[\\s*_~`]|<[^>]+>)+", "gi");
+  return phraseRegex(needle, BETWEEN_WORDS, "gi");
 }
 
 function phraseRegex(needle: string, separator: string, flags = "g"): RegExp {
@@ -448,8 +460,13 @@ function nearest(
   const wantBefore = normalizeAnchorText(near.before, format);
   const wantAfter = normalizeAnchorText(near.after, format);
   const scored = matches.map((m) => {
-    const before = normalizeAnchorText(haystack.slice(Math.max(0, m.start - 200), m.start), format);
-    const after = normalizeAnchorText(haystack.slice(m.end, m.end + 200), format);
+    const opts = { inTable: format === "markdown" && inMarkdownTable(haystack, m.start) };
+    const before = normalizeAnchorText(
+      haystack.slice(Math.max(0, m.start - 200), m.start),
+      format,
+      opts,
+    );
+    const after = normalizeAnchorText(haystack.slice(m.end, m.end + 200), format, opts);
     return { m, score: commonSuffix(before, wantBefore) + commonPrefix(after, wantAfter) };
   });
   scored.sort((a, b) => b.score - a.score);

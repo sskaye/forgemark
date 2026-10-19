@@ -52,7 +52,7 @@ Exit codes: 0 done; 1 refused (the file has problems, the passage is ambiguous, 
 
 **Leave a comment.** `forgemark comment <file> --author NAME --anchor "…" --body "…"`. Pick the exact passage the comment is about; a shorter, distinctive phrase beats a whole paragraph. To comment on something already commented on, reply to that thread instead — anchors may not overlap, and the tool will tell you which comment is in the way. To comment on a code block, quote a line inside it; the tool anchors the whole block.
 
-**Suggest an edit.** `forgemark comment <file> --author NAME --anchor "old words" --suggest "new words"`. Accepting replaces exactly the anchored text, so anchor precisely what should change.
+**Suggest an edit.** `forgemark comment <file> --author NAME --anchor "old words" --suggest "new words"`. Accepting replaces exactly the anchored text, so anchor precisely what should change, within one paragraph, list item, or table cell: a suggestion across two is refused, since accepting it would merge them. Suggest an edit to each part, or comment on the whole.
 
 **Hand the file back.** `forgemark lint <file>`. It reports what the app would refuse (errors) and what the reviewer would rather not meet (warnings: an orphaned comment, an anchor description that no longer matches). Fix errors; settle orphans with `reattach` or `float`.
 

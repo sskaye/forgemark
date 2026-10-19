@@ -29,6 +29,9 @@ type Props = {
   allowSuggest?: boolean;
   // Why suggesting is unavailable, shown in place of the toggle.
   suggestUnavailableReason?: string;
+  // Something the reader should know before submitting, shown under
+  // the selection: that the comment will not be attached to it.
+  notice?: string;
 };
 
 // New-comment composer (Phase 5 + Phase 7).
@@ -54,6 +57,7 @@ export function NewCommentComposer({
   initialMode = "comment",
   allowSuggest = true,
   suggestUnavailableReason,
+  notice,
 }: Props) {
   const [author] = useAuthorName();
   const [body, setBody] = useState("");
@@ -159,6 +163,11 @@ export function NewCommentComposer({
       {selectionPreview && !suggesting && (
         <div className="fm-composer-selection" title={selectionPreview}>
           “{truncate(selectionPreview, 80)}”
+        </div>
+      )}
+      {notice && (
+        <div className="fm-composer-notice" role="note" data-testid="fm-composer-notice">
+          {notice}
         </div>
       )}
       {suggesting ? (

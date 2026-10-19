@@ -4,7 +4,14 @@ import { SidebarResizeHandle } from "./SidebarResizeHandle";
 import { useDocument } from "../state/DocumentProvider";
 import { useAuthorName, useSidebarWidth } from "../state/preferences";
 import { FMCard } from "./FMCard";
-import { replaceAnchoredText, stripAnchoredMarkers, type AnchorStatus } from "../format";
+import {
+  findMarkers,
+  pairMarkers,
+  replaceAnchoredText,
+  spansBlocks,
+  stripAnchoredMarkers,
+  type AnchorStatus,
+} from "../format";
 import type { Comment, Reply } from "../format/types";
 import type { FilterMode, SortMode } from "../state/document";
 import "./Sidebar.css";
@@ -212,6 +219,20 @@ export function Sidebar({ anchorStatuses }: SidebarProps) {
           }}
           onAcceptSuggestion={() => {
             if (!c.suggested_edit) return;
+            // A suggestion across two blocks (one written by hand, or by
+            // an older version) would merge them, or break a table, if
+            // accepted: the replacement is one run of text.
+            const pair = pairMarkers(findMarkers(state.body, state.format)).pairs.find(
+              (p) => p.id === c.id,
+            );
+            if (pair && spansBlocks(state.body, pair.open.end, pair.close.start, state.format)) {
+              dispatch({
+                type: "error",
+                message:
+                  "This suggestion spans more than one paragraph, list item, or cell, and accepting it would merge them. Make the edit by hand, then resolve the comment.",
+              });
+              return;
+            }
             const result = replaceAnchoredText(state.body, c.id, c.suggested_edit.to, state.format);
             if (!result) {
               dispatch({

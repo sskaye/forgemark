@@ -2,6 +2,19 @@
 
 All notable changes to Forgemark are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- In an HTML report whose blocks touch in the source, as generated reports often do (`<td>x</td><td>beta two</td>`), their text ran together. A passage at a block's edge could not be commented on or re-attached from the command line, a passage no reader sees ("xbeta") could, and a passage repeated in two cells could be taken for one: `comment --anchor` attached to the second copy without asking, and the app put a comment on the first copy onto the second. A selection across two such blocks silently became a floating note. A block's edge now reads as a break everywhere: finding a passage, recording it, lint, and re-attachment. Reported by ForgeGraph.
+- A comment across two Markdown list items, table cells, quote lines, or a heading and its paragraph drifted on its first lint and could not be found again once its markers were lost, because the list marker, pipe, `>` or `#` between the words counted as text. They now read as spaces, as the reader sees them.
+- A suggested edit across two blocks merged them when accepted, and across table cells broke the table. Suggestions now stay inside one paragraph, list item, or cell: the app offers a comment there instead and says why, `comment --suggest` refuses, and Accept refuses such a suggestion from an older file.
+- The highlight of a comment across two blocks in a report no longer covers the gap between them.
+
+### Changed
+
+- When a selection can't be found in the file's text and the comment will be a floating note, the composer says so before you submit.
+
 ## [1.10.0] — 2026-10-17
 
 ### Added
