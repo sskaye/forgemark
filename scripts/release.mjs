@@ -179,15 +179,21 @@ step("Packing and signing the update");
 run(`tar -czf "${UPDATE}" -C "${MACOS_BUNDLE_DIR}" Forgemark.app`, {
   env: { ...process.env, COPYFILE_DISABLE: "1" },
 });
-// The key and password go in the environment, not on the command line,
-// where any process listing would show them.
-run(`npx tauri signer sign "${UPDATE}"`, {
-  env: {
-    ...process.env,
-    TAURI_SIGNING_PRIVATE_KEY: updaterKey,
-    TAURI_SIGNING_PRIVATE_KEY_PASSWORD: updaterPassword,
-  },
-});
+// The password, and the key when it was given as its contents, go in the
+// environment, not on the command line, where any process listing would
+// show them. A key file goes by path: `signer sign` reads
+// TAURI_SIGNING_PRIVATE_KEY as the key itself, unlike `tauri build`,
+// which also takes a path there.
+const keyIsFile = existsSync(updaterKey);
+const signEnv = { ...process.env, TAURI_SIGNING_PRIVATE_KEY_PASSWORD: updaterPassword };
+if (keyIsFile) delete signEnv.TAURI_SIGNING_PRIVATE_KEY;
+else signEnv.TAURI_SIGNING_PRIVATE_KEY = updaterKey;
+run(
+  keyIsFile
+    ? `npx tauri signer sign --private-key-path "${updaterKey}" "${UPDATE}"`
+    : `npx tauri signer sign "${UPDATE}"`,
+  { env: signEnv },
+);
 if (!existsSync(`${UPDATE}.sig`)) bail(`Signing produced no ${UPDATE}.sig.`);
 
 step("Done");
