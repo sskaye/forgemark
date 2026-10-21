@@ -5,7 +5,9 @@ import { buildHtmlTextMap } from "../../src/format/html/textmap";
 // can be a 20,000-row table written with no whitespace between cells,
 // which puts a block break at every cell; a break check that reads the
 // end of the growing string makes V8 flatten it each time and the build
-// quadratic (2 s here, against 0.14 s). Generous bound, for slow CI.
+// quadratic (2 s here, against 0.14 s). The bound is asserted only
+// under PERF=1 (`npm run test:perf`), as CONVENTIONS.md has it: a shared
+// CI runner took 1.1 s once. The structural check runs every time.
 
 describe("HTML text model performance", () => {
   it("maps a 1 MB table with touching cells in well under a second", () => {
@@ -18,6 +20,6 @@ describe("HTML text model performance", () => {
     const map = buildHtmlTextMap(html);
     const elapsed = performance.now() - t0;
     expect(map.text).toContain("param19999\nvalue 19999\nnote.");
-    expect(elapsed).toBeLessThan(1000);
+    if (process.env.PERF) expect(elapsed).toBeLessThan(1000);
   });
 });
