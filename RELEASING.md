@@ -43,6 +43,37 @@ gh api repos/sskaye/forgemark/immutable-releases   # {"enabled":true,...}
 
 It is why every release is assembled as a draft and published last, below.
 
+### Updater signing key
+
+The app updates itself (README, "Updates"): it downloads a newer release and
+installs it only if its signature checks out against the public key built into
+the app (`plugins.updater.pubkey` in `src-tauri/tauri.conf.json`). The private
+key signs every update file. It is separate from Apple's certificate, and
+**losing it, or its password, means installed copies can never update
+themselves again**: everyone would have to download by hand once, onto a build
+with a new key.
+
+1. Generate it, choosing a password when asked:
+   ```sh
+   npx tauri signer generate -w ~/.tauri/forgemark-updater.key
+   ```
+2. Put the public key (`~/.tauri/forgemark-updater.key.pub`) in
+   `plugins.updater.pubkey` and commit it. It isn't secret.
+3. Store the password in the Keychain, where `npm run release` reads it:
+   ```sh
+   security add-generic-password -a forgemark -s forgemark-updater-key-password -w
+   ```
+4. Give the Windows and Linux release workflows the key and password:
+   ```sh
+   gh secret set TAURI_SIGNING_PRIVATE_KEY --repo sskaye/forgemark < ~/.tauri/forgemark-updater.key
+   gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --repo sskaye/forgemark
+   ```
+5. Back up the key file and the password, e.g. in a password manager.
+
+`npm run release` stops before building if it can't find the key or the
+password. `TAURI_SIGNING_PRIVATE_KEY` (a path or the key itself) and
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` override the defaults.
+
 ## Each release
 
 The `npm run release` script captures every step of the macOS build/sign/notarize flow. Run it from a clean working tree.
@@ -69,6 +100,7 @@ The script:
 4. Submits the resulting `.dmg` to Apple's notary service via `notarytool` and waits.
 5. Staples the notarization ticket onto the `.dmg`.
 6. Verifies signatures, Gatekeeper assessment, and staple validity for both the `.app` and the `.dmg`.
+7. Packs the stapled `.app` as the in-app update, `Forgemark_<ver>_universal.app.tar.gz`, and signs it with the updater key (`.sig` beside it).
 
 Final artifact lands at:
 
@@ -107,11 +139,14 @@ draft and published only when every asset is on it. Four steps, in this
 order:
 
 ```sh
-# 1. The draft, carrying the .dmg. A draft holds no tag yet.
+# 1. The draft, carrying the .dmg and the macOS update. A draft holds no
+#    tag yet. (`npm run release` prints this with the paths filled in.)
 gh release create v<ver> --draft \
   --title "Forgemark v<ver>" \
   --notes-file CHANGELOG.md \
-  "src-tauri/target/universal-apple-darwin/release/bundle/dmg/Forgemark_<ver>_universal.dmg#Forgemark <ver> — universal macOS"
+  "src-tauri/target/universal-apple-darwin/release/bundle/dmg/Forgemark_<ver>_universal.dmg#Forgemark <ver> — universal macOS" \
+  src-tauri/target/universal-apple-darwin/release/bundle/macos/Forgemark_<ver>_universal.app.tar.gz \
+  src-tauri/target/universal-apple-darwin/release/bundle/macos/Forgemark_<ver>_universal.app.tar.gz.sig
 
 # 2. Tag the commit you built (it should be origin/main) and push the tag.
 #    That starts windows-release.yml, linux-release.yml and cli-release.yml.
@@ -120,8 +155,11 @@ git tag v<ver> && git push origin v<ver>
 # 3. Wait for the three workflows to finish.
 gh run list --branch v<ver>
 
-# 4. Publish. Refuses unless the tag is on GitHub and all twelve assets are
-#    on the draft, and checks the CLI asset is the bundle committed at the tag.
+# 4. Publish. Writes latest.json, the updater's manifest, from the update
+#    files' signatures and attaches it; then refuses unless the tag is on
+#    GitHub and all nineteen assets are on the draft, latest.json points
+#    only at files the release has, and the CLI asset is the bundle
+#    committed at the tag.
 npm run release:publish
 ```
 
@@ -227,9 +265,27 @@ The skill has a 640 KB size budget (`scripts/build-skill.mjs`), and the
 bundle, notices included, is most of it: about 505 KB of the 525 KB total
 after `reattach --all`.
 
-## Auto-update
+## In-app updates
 
-Auto-update infrastructure is **deferred to v1.1**. Until then, releases are manual: ship the new build to the GitHub release page, users redownload.
+Every release carries what the app's updater needs: each platform's update
+file, its signature, and `latest.json`, which lists them by platform. The app
+reads `latest.json` from the latest published release
+(`releases/latest/download/latest.json`), so publishing a release is what
+offers it to installed copies.
+
+| Platform | Update file                                                 | Signed by             |
+| -------- | ----------------------------------------------------------- | --------------------- |
+| macOS    | `Forgemark_<ver>_universal.app.tar.gz` (both architectures) | `npm run release`     |
+| Windows  | the NSIS `-setup.exe`, or the `.msi` for an MSI install     | `windows-release.yml` |
+| Linux    | each architecture's `.AppImage`                             | `linux-release.yml`   |
+
+A `.deb` is a system package the updater can't replace; the app offers its
+download instead. Release builds turn the update files on through
+`src-tauri/tauri.release.conf.json`; a pull request's Linux build doesn't use
+it and needs no secrets.
+
+A release that ships a broken update can't be fixed in place, being
+immutable: publish a fixed version, which installed copies then find.
 
 ## Manual
 

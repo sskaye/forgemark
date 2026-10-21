@@ -55,10 +55,17 @@ jobs:
       - run: npm ci
 
       # `tauri build` runs `npm run vite:build` (beforeBuildCommand) first,
-      # then bundles the .msi and the NSIS -setup.exe. Unsigned: no signing
-      # env vars are set, so the installers carry no Authenticode signature.
+      # then bundles the .msi and the NSIS -setup.exe. They carry no
+      # Authenticode signature (no Windows code-signing certificate is set).
+      # tauri.release.conf.json turns on the update artifacts: a `.sig`
+      # beside each installer, made with the updater key, which the app
+      # checks every update against. The secrets are the key and its
+      # password (RELEASING.md, "Updater signing key").
       - name: Build Windows bundles
-        run: npm run build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npm run tauri -- build --config src-tauri/tauri.release.conf.json
 
       - name: Attach installers to the release
         shell: bash
@@ -70,4 +77,6 @@ jobs:
         run: |
           bash scripts/release-attach.sh "$TAG" \
             src-tauri/target/release/bundle/msi/*.msi \
-            src-tauri/target/release/bundle/nsis/*-setup.exe
+            src-tauri/target/release/bundle/msi/*.msi.sig \
+            src-tauri/target/release/bundle/nsis/*-setup.exe \
+            src-tauri/target/release/bundle/nsis/*-setup.exe.sig

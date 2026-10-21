@@ -5,6 +5,7 @@ import { TabBar } from "./TabBar";
 import { Sidebar } from "./Sidebar";
 import { EditorPane } from "./EditorPane";
 import { ErrorBanner } from "./ErrorBanner";
+import { UpdateBanner } from "./UpdateBanner";
 import { commandFor, modalOpen } from "../state/keymap";
 import { useRecentFilesMenu } from "../state/recentFilesMenu";
 import { UndoDeleteBanner } from "./UndoDeleteBanner";
@@ -255,6 +256,7 @@ export function AppShell() {
         documentWidthDisabled={state.format === "html" && state.viewMode === "rendered"}
       />
       <TabBar />
+      <UpdateBanner />
       <ErrorBanner />
       <UndoDeleteBanner />
       {/* Phase 10 — file-conflict surfaces. The banner shows when the

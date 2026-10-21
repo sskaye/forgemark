@@ -277,3 +277,9 @@
 [data-theme="dark"] .fm-settings-footer {
   background: rgba(255, 255, 255, 0.02);
 }
+
+.fm-settings-update-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}

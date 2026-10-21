@@ -14,6 +14,7 @@ const KEY_DOCUMENT_WIDTH = PREFIX + "documentWidth";
 const KEY_SIDEBAR_WIDTH = PREFIX + "sidebarWidth";
 const KEY_RECENT_FILES = PREFIX + "recentFiles";
 const KEY_FIRST_RUN_DONE = PREFIX + "firstRunDone";
+const KEY_CHECK_FOR_UPDATES = PREFIX + "checkForUpdates";
 
 const DEFAULT_AUTHOR = "You";
 const DEFAULT_THEME: ThemePreference = "system";
@@ -44,6 +45,25 @@ export type RecentFile = {
   // Most recent open time in ms since epoch — drives ordering.
   lastOpenedMs: number;
 };
+
+// ── Updates ───────────────────────────────────────────────────────────
+
+// Whether the app looks for a newer release on its own: at launch and
+// once a day. On by default; it is the app's only request to the
+// internet, and Settings can turn it off. Checking by hand works either
+// way.
+export function useCheckForUpdates(): [boolean, (next: boolean) => void] {
+  const [stored, set] = useEnumPref<"on" | "off">(
+    KEY_CHECK_FOR_UPDATES,
+    "on",
+    (v): v is "on" | "off" => v === "on" || v === "off",
+  );
+  return [stored === "on", (next: boolean) => set(next ? "on" : "off")];
+}
+
+export function checkForUpdatesEnabled(): boolean {
+  return readString(KEY_CHECK_FOR_UPDATES) !== "off";
+}
 
 // ── Author name ───────────────────────────────────────────────────────
 

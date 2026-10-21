@@ -21,6 +21,7 @@ import {
 import { useRecentFiles, useDefaultView } from "./preferences";
 import { commandFor, modalOpen } from "./keymap";
 import { claimQueuedOpenPaths } from "./menuBridge";
+import { QUIT_EVENT, finishRestart, quitThenOf, requestQuit, type QuitThen } from "./quit";
 
 type Logger = (msg: string, err: unknown) => void;
 
@@ -340,33 +341,44 @@ export function DocumentBindings({
   // its own. So the quit walks the tabs: find the first document with
   // unsaved work, hand focus to it so its instance takes over, and let
   // that instance re-enter here once it's dealt with. When nothing is
-  // dirty anywhere, tell Rust it may exit.
-  const runQuit = useCallback(async () => {
-    const ws = workspaceRef.current;
-    const dirtyId = ws.order.find((docId) => ws.docs[docId].dirty);
+  // dirty anywhere, tell Rust it may exit — or, restarting into an
+  // update, install it and relaunch.
+  const runQuit = useCallback(
+    async (then: QuitThen = "exit") => {
+      const ws = workspaceRef.current;
+      const dirtyId = ws.order.find((docId) => ws.docs[docId].dirty);
 
-    if (!dirtyId) {
-      try {
-        await invoke("approve_exit");
-      } catch (err) {
-        logger("approve exit failed", err);
+      if (!dirtyId) {
+        if (then === "restart") {
+          try {
+            await finishRestart();
+          } catch (err) {
+            logger("restart into update failed", err);
+            dispatch({ type: "error", message: errorMessage("Update failed", err) });
+          }
+          return;
+        }
+        try {
+          await invoke("approve_exit");
+        } catch (err) {
+          logger("approve exit failed", err);
+        }
+        return;
       }
-      return;
-    }
 
-    if (dirtyId !== ws.activeId) {
-      // Bring the unsaved document forward — prompting about a document
-      // the user can't see would be baffling — then re-emit so the newly
-      // active instance picks the quit up.
-      workspaceDispatchRef.current({ type: "activateTab", docId: dirtyId });
-      window.setTimeout(() => {
-        window.dispatchEvent(new CustomEvent("forgemark:close-requested"));
-      }, 0);
-      return;
-    }
+      if (dirtyId !== ws.activeId) {
+        // Bring the unsaved document forward — prompting about a document
+        // the user can't see would be baffling — then re-emit so the newly
+        // active instance picks the quit up.
+        workspaceDispatchRef.current({ type: "activateTab", docId: dirtyId });
+        window.setTimeout(() => requestQuit(then), 0);
+        return;
+      }
 
-    await guardDiscardRef.current({ kind: "quit" });
-  }, [logger]);
+      await guardDiscardRef.current({ kind: "quit", then });
+    },
+    [dispatch, logger],
+  );
 
   // Carry out an intent once nothing is standing in its way.
   const executeIntent = useCallback(
@@ -376,7 +388,7 @@ export function DocumentBindings({
         return;
       }
       // Quit: loop back so the next unsaved document gets its turn.
-      await runQuit();
+      await runQuit(intent.then ?? "exit");
     },
     [runQuit],
   );
@@ -386,9 +398,9 @@ export function DocumentBindings({
   // beforeunload, which Tauri doesn't reliably honour.
   useEffect(() => {
     if (!isActive) return;
-    const onCloseRequested = () => void runQuitRef.current();
-    window.addEventListener("forgemark:close-requested", onCloseRequested);
-    return () => window.removeEventListener("forgemark:close-requested", onCloseRequested);
+    const onCloseRequested = (event: Event) => void runQuitRef.current(quitThenOf(event));
+    window.addEventListener(QUIT_EVENT, onCloseRequested);
+    return () => window.removeEventListener(QUIT_EVENT, onCloseRequested);
   }, [isActive]);
   const runQuitRef = useRef(runQuit);
   runQuitRef.current = runQuit;
@@ -443,9 +455,8 @@ export function DocumentBindings({
         if (!cancelled) dispatch({ type: "clearIntent" });
         // Re-enter once the workspace has settled, rather than reading
         // stale state synchronously.
-        window.setTimeout(() => {
-          window.dispatchEvent(new CustomEvent("forgemark:close-requested"));
-        }, 0);
+        const then = intent.then ?? "exit";
+        window.setTimeout(() => requestQuit(then), 0);
         return;
       }
       if (cancelled) return;

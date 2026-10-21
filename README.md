@@ -15,6 +15,8 @@ It is a review tool, not a shared editor: no accounts, no server, no real-time c
 
 Download from the [Releases page](https://github.com/sskaye/forgemark/releases): a signed and notarized `.dmg` for macOS 11 and later, an `.msi` or `.exe` for Windows 10 and later, and a `.deb` or `.AppImage` for Ubuntu 24.04 and later (x86_64 and arm64). On first launch, pick a name and click Open sample to see a reviewed document.
 
+**Updates.** Forgemark checks for a newer release at launch and once a day, and shows a banner when there is one: Update downloads it and Restart installs it, after asking about any unsaved work. On a `.deb` install, or if an update can't install itself, the banner's Download button fetches the right file for your system. This check is the app's only request to the internet; Settings → Updates turns it off, and Check now works either way. Versions before 1.11.0 don't update themselves: download 1.11.0 once by hand.
+
 **Windows installers are not code-signed.** SmartScreen warns before running one. To install: keep the download if the browser flags it, run the installer, click More info on the "Windows protected your PC" screen, then Run anyway. The UAC prompt shows Publisher: Unknown. macOS builds are signed and open without a prompt.
 
 **On Linux**, install the `.deb` with apt, which also fetches the WebKitGTK it needs and registers Forgemark for Markdown and HTML files:

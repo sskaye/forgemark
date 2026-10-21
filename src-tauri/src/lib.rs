@@ -220,6 +220,29 @@ fn approve_exit(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+// Restart into an installed update. The frontend calls this once the
+// unsaved-work guard is satisfied and the update is installed; like
+// `approve_exit`, it marks the exit approved first, so the guard in
+// `app.run` lets the restart through.
+#[tauri::command]
+fn restart_app(app: tauri::AppHandle) {
+    app.state::<ExitApproved>().0.store(true, Ordering::SeqCst);
+    app.restart();
+}
+
+// What this build is and how it was installed, so the frontend can pick
+// the right download when an update can't install itself: a Linux .deb
+// is a system package the updater can't replace, unlike an AppImage,
+// which Linux runs with $APPIMAGE set to the file's path.
+#[tauri::command]
+fn update_target() -> serde_json::Value {
+    serde_json::json!({
+        "os": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+        "appimage": std::env::var_os("APPIMAGE").is_some(),
+    })
+}
+
 // The document paths among a launch's arguments. Windows and Linux hand
 // a double-clicked file to the app this way (macOS uses RunEvent::Opened
 // instead); anything that isn't a file we open is left alone.
@@ -256,6 +279,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(PendingFiles::default())
         .manage(ExitApproved::default())
         .manage(RecentFiles::default())
@@ -274,6 +298,8 @@ pub fn run() {
             take_pending_files,
             print_current_webview,
             approve_exit,
+            restart_app,
+            update_target,
             set_recent_files,
             set_report,
             clear_report
