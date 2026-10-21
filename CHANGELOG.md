@@ -2,6 +2,12 @@
 
 All notable changes to Forgemark are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Forgemark updates itself. At launch and once a day it checks for a newer release and shows a banner: Update downloads it, checked against a signature only this project can make, and Restart installs it and relaunches, after the same unsaved-work prompt as quitting. A Linux `.deb` install, which can't be replaced in place, and any update that fails to install get a Download button that fetches this system's file straight from the release. Settings → Updates turns the daily check off, checks now, and shows the version. This is the app's only request to the internet. Versions before this one don't update themselves: download it once by hand.
+
 ## [1.10.2] — 2026-10-21
 
 ### Fixed
