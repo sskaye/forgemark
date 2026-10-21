@@ -176,4 +176,24 @@ describe("recovering a review after a regeneration", () => {
     expect(first[0]).toBe("Eliminating the linear block analytically is");
     expect(first.join(" ")).not.toMatch(/[<>]/);
   });
+
+  it("doesn't offer a comment whose element is still there without its text", async () => {
+    // Made on a passage inside the figure; the rebuilt figure doesn't
+    // have it, though the same words are elsewhere on the page.
+    const elsewhere: Comment = {
+      id: 4,
+      anchor_text: "golden-section polish",
+      anchor_scope: "#fig-3",
+      context_before: "then a",
+      author: "Sam",
+      timestamp: "2026-08-16T09:07:00Z",
+      resolved: false,
+      body: "Which polish?",
+    };
+    await loadRebuilt([...COMMENTS, elsewhere]);
+    expect(screen.getByTestId("fm-lost-banner-reattach-all").textContent).toBe("Reattach 2 of 4");
+    fireEvent.click(screen.getByTestId("fm-lost-banner-reattach-all"));
+    await waitFor(() => expect(screen.getByTestId("probe-attached").textContent).toBe("1,2"));
+    expect(screen.getByTestId("probe-body").textContent).not.toContain("fmc:4");
+  });
 });

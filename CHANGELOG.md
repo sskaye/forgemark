@@ -2,6 +2,12 @@
 
 All notable changes to Forgemark are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `reattach --all`, and the app's Reattach all, moved a comment to another copy of its text even when the words around it disagreed, reported it as a success, and overwrote what the comment had recorded, so the move couldn't be noticed. A comment asking for its own value to change, once the change was made, landed on another row that happened to have the old value. Now a copy is taken only if the words recorded around the passage still agree on at least one side, and in a report a comment whose row or section is still on the page without its text stays orphaned, whatever is elsewhere. Each is reported with the reason and where the text was seen, and the record is left as it was. A record with no surroundings to check still attaches by its text, and the outcome says so. Reported by ForgeGraph.
+
 ## [1.10.1] — 2026-10-18
 
 ### Fixed
