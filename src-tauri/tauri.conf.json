@@ -84,6 +84,13 @@
   "plugins": {
     "fs": {
       "requireLiteralLeadingDot": false
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc1OThDMEJEODFGRDREMjcKUldRblRmMkJ2Y0NZZGFncmJtN094VnowTVpPRmxOOFZ1QWNqS0RRZUdWNFoybktpbmdUT3dBdmUK",
+      "endpoints": ["https://github.com/sskaye/forgemark/releases/latest/download/latest.json"],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

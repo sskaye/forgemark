@@ -85,10 +85,23 @@ jobs:
       # linuxdeploy, which assembles the AppImage, is itself an AppImage;
       # the runners have no FUSE 2, so it unpacks itself instead of
       # mounting.
+      # A release build also signs the AppImage for the in-app updater
+      # (tauri.release.conf.json, with the updater key from the secrets);
+      # a pull request has no secrets and builds the packages alone. The
+      # .deb is a system package the updater can't replace, so it gets no
+      # signature: the app offers its download instead.
       - name: Build Linux bundles
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
-        run: npm run tauri -- build --bundles deb,appimage
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            npm run tauri -- build --bundles deb,appimage
+          else
+            npm run tauri -- build --bundles deb,appimage --config src-tauri/tauri.release.conf.json
+          fi
 
       - name: Collect packages and checksums
         id: collect
@@ -97,6 +110,9 @@ jobs:
           mkdir -p out
           cp src-tauri/target/release/bundle/deb/*.deb out/
           cp src-tauri/target/release/bundle/appimage/*.AppImage out/
+          if ls src-tauri/target/release/bundle/appimage/*.AppImage.sig >/dev/null 2>&1; then
+            cp src-tauri/target/release/bundle/appimage/*.AppImage.sig out/
+          fi
           cd out
           sha256sum *.deb *.AppImage > "SHA256SUMS-linux-${{ matrix.arch }}.txt"
           cat "SHA256SUMS-linux-${{ matrix.arch }}.txt"

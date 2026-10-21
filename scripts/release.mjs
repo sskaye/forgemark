@@ -7,6 +7,15 @@
 //   3. Notarize the .dmg (Tauri only notarizes the inner .app)
 //   4. Staple the .dmg ticket
 //   5. Verify codesign + Gatekeeper + staple on both .app and .dmg
+//   6. Pack the stapled .app as the in-app update and sign it with the
+//      updater key (`Forgemark_<ver>_universal.app.tar.gz` + `.sig`)
+//
+// The updater key is separate from Apple's: the app checks every update
+// against the public half in tauri.conf.json. Its private half is read
+// from TAURI_SIGNING_PRIVATE_KEY (a path or the key itself), else
+// ~/.tauri/forgemark-updater.key; its password from
+// TAURI_SIGNING_PRIVATE_KEY_PASSWORD, else the Keychain item
+// "forgemark-updater-key-password" (RELEASING.md, one-time setup).
 //
 // Usage:
 //
@@ -27,8 +36,9 @@
 // The script writes nothing outside src-tauri/target. After it
 // finishes, the artifacts are ready to attach to a GitHub Release.
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -47,6 +57,9 @@ const DMG = join(
   "src-tauri/target/universal-apple-darwin/release/bundle/dmg",
   `Forgemark_${VERSION}_universal.dmg`,
 );
+
+const MACOS_BUNDLE_DIR = dirname(APP);
+const UPDATE = join(MACOS_BUNDLE_DIR, `Forgemark_${VERSION}_universal.app.tar.gz`);
 
 // `display` is what gets logged when the command carries a secret.
 function run(cmd, opts = {}) {
@@ -75,6 +88,30 @@ if (!process.env.APPLE_SIGNING_IDENTITY) {
       "list the certs in your Keychain.",
     3,
   );
+}
+
+// The updater key, found before the long build so a missing one fails
+// now rather than after notarization. Never printed.
+const updaterKey =
+  process.env.TAURI_SIGNING_PRIVATE_KEY ?? join(homedir(), ".tauri", "forgemark-updater.key");
+if (!process.env.TAURI_SIGNING_PRIVATE_KEY && !existsSync(updaterKey)) {
+  bail(`No updater signing key at ${updaterKey}. See RELEASING.md, "Updater signing key".`, 5);
+}
+let updaterPassword = process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD;
+if (updaterPassword === undefined) {
+  try {
+    updaterPassword = execFileSync(
+      "security",
+      ["find-generic-password", "-a", "forgemark", "-s", "forgemark-updater-key-password", "-w"],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    ).replace(/\n$/, "");
+  } catch {
+    bail(
+      "No password for the updater key: set TAURI_SIGNING_PRIVATE_KEY_PASSWORD, or store it in the\n" +
+        'Keychain as "forgemark-updater-key-password" (RELEASING.md, "Updater signing key").',
+      5,
+    );
+  }
 }
 
 step("Pre-flight checks");
@@ -136,9 +173,27 @@ run(`xcrun stapler validate "${APP}"`);
 run(`xcrun stapler validate "${DMG}"`);
 run(`spctl --assess --type open --context context:primary-signature --verbose=4 "${DMG}"`);
 
+step("Packing and signing the update");
+// The stapled .app, as the updater installs it. COPYFILE_DISABLE keeps
+// macOS tar from adding AppleDouble "._" files for extended attributes.
+run(`tar -czf "${UPDATE}" -C "${MACOS_BUNDLE_DIR}" Forgemark.app`, {
+  env: { ...process.env, COPYFILE_DISABLE: "1" },
+});
+// The key and password go in the environment, not on the command line,
+// where any process listing would show them.
+run(`npx tauri signer sign "${UPDATE}"`, {
+  env: {
+    ...process.env,
+    TAURI_SIGNING_PRIVATE_KEY: updaterKey,
+    TAURI_SIGNING_PRIVATE_KEY_PASSWORD: updaterPassword,
+  },
+});
+if (!existsSync(`${UPDATE}.sig`)) bail(`Signing produced no ${UPDATE}.sig.`);
+
 step("Done");
 console.log(`  App: ${APP}`);
 console.log(`  DMG: ${DMG}`);
+console.log(`  Update: ${UPDATE} (+ .sig)`);
 // Releases are immutable once published, so the release starts as a
 // draft carrying the .dmg; pushing the tag then starts windows-release.yml,
 // linux-release.yml and cli-release.yml, which add to that draft (and
@@ -146,12 +201,13 @@ console.log(`  DMG: ${DMG}`);
 // every asset is there. The draft must exist before the tag is pushed.
 console.log("\nNext steps (manual):");
 console.log(`  1. Smoke-test the .dmg on a fresh macOS user account.`);
-console.log(`  2. Create the draft release with the .dmg:`);
+console.log(`  2. Create the draft release with the .dmg and the update:`);
 console.log(
   `       gh release create v${VERSION} --draft \\\n` +
     `         --title "Forgemark v${VERSION}" \\\n` +
     `         --notes-file CHANGELOG.md \\\n` +
-    `         "${DMG}#Forgemark ${VERSION} — universal macOS"`,
+    `         "${DMG}#Forgemark ${VERSION} — universal macOS" \\\n` +
+    `         "${UPDATE}" "${UPDATE}.sig"`,
 );
 console.log(`  3. Tag the commit you built and push the tag (starts the CI builds):`);
 console.log(`       git tag v${VERSION} && git push origin v${VERSION}`);

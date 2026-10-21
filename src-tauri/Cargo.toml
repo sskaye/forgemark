@@ -22,6 +22,9 @@ tauri-plugin-dialog = "2"
 tauri-plugin-fs = { version = "2", features = ["watch"] }
 tauri-plugin-opener = "2"
 tauri-plugin-single-instance = "2"
+# Checks the latest GitHub release's latest.json, downloads the update,
+# verifies it against the public key in tauri.conf.json, and installs it.
+tauri-plugin-updater = "2"
 # The fs plugin's config block in tauri.conf.json is embedded by
 # generate_context!, which needs serde_json in this crate.
 serde_json = "1"

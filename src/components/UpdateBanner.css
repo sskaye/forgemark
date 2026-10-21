@@ -1,0 +1,24 @@
+.fm-update-banner {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  background: var(--fm-card-bg);
+  border-bottom: 0.5px solid var(--fm-divider-strong);
+  color: var(--fm-prose-ink);
+  font-family: var(--fm-ui);
+  font-size: 12.5px;
+}
+
+.fm-update-banner-text {
+  font-weight: 500;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fm-update-banner-spacer {
+  flex: 1;
+}

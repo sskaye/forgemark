@@ -118,9 +118,10 @@ export type DocumentState = {
 export type PendingIntent =
   // Closing a tab drops that document.
   | { kind: "closeTab"; docId: string }
-  // Window close or ⌘Q. Rust has blocked the exit and is waiting to be
-  // told it may proceed.
-  | { kind: "quit" };
+  // Window close or ⌘Q — Rust has blocked the exit and is waiting to be
+  // told it may proceed — or, with `then: "restart"`, restarting into a
+  // downloaded update (`state/quit.ts`).
+  | { kind: "quit"; then?: "exit" | "restart" };
 
 // Phase 10: the disk content that conflicts with the in-memory state.
 // Held verbatim so "Reload from disk" can replace the state, and parsed

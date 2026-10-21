@@ -1,7 +1,8 @@
 import { Modal } from "./Modal";
 import { Segmented } from "./Segmented";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  useCheckForUpdates,
   useAuthorName,
   useFontSize,
   useDefaultView,
@@ -10,6 +11,13 @@ import {
 } from "../state/preferences";
 import { useTheme } from "../theme/ThemeProvider";
 import { SkillInstallRows } from "./SkillInstallRows";
+import {
+  checkForUpdate,
+  downloadUpdate,
+  openDownload,
+  restartToUpdate,
+  useAppUpdate,
+} from "../services/appUpdate";
 import "./SettingsModal.css";
 
 type Props = {
@@ -109,6 +117,10 @@ export function SettingsModal({ onClose }: Props) {
           <SkillInstallRows />
         </Section>
 
+        <Section title="Updates">
+          <UpdatesFields />
+        </Section>
+
         <Section title="About">
           <p className="fm-settings-about">
             Forgemark — collaborative review of markdown documents. Built with Tauri.
@@ -126,6 +138,112 @@ export function SettingsModal({ onClose }: Props) {
         </button>
       </footer>
     </Modal>
+  );
+}
+
+// Check automatically, and check now. The banner offers what an
+// automatic check finds; here the reader also hears "up to date" and why
+// a check failed.
+function UpdatesFields() {
+  const [autoCheck, setAutoCheck] = useCheckForUpdates();
+  const update = useAppUpdate();
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    import("@tauri-apps/api/app")
+      .then(({ getVersion }) => getVersion())
+      .then((v) => !cancelled && setVersion(v))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  let status: React.ReactNode = null;
+  switch (update.kind) {
+    case "checking":
+      status = "Checking…";
+      break;
+    case "current":
+      status = `Forgemark ${update.version} is the latest version.`;
+      break;
+    case "available":
+      status = (
+        <>
+          Forgemark {update.version} is available.{" "}
+          <button
+            type="button"
+            className="fm-btn fm-btn-sm fm-btn-primary"
+            data-testid="fm-settings-update-action"
+            onClick={() =>
+              void (update.automatic ? downloadUpdate() : openDownload(update.version))
+            }
+          >
+            {update.automatic ? "Update" : "Download"}
+          </button>
+        </>
+      );
+      break;
+    case "downloading":
+      status = `Downloading Forgemark ${update.version}…`;
+      break;
+    case "ready":
+      status = (
+        <>
+          Forgemark {update.version} is ready.{" "}
+          <button
+            type="button"
+            className="fm-btn fm-btn-sm fm-btn-primary"
+            onClick={restartToUpdate}
+          >
+            Restart
+          </button>
+        </>
+      );
+      break;
+    case "failed":
+      status = update.version
+        ? `Forgemark ${update.version} couldn't be installed: ${update.message}`
+        : `Couldn't check for updates: ${update.message}`;
+      break;
+  }
+
+  return (
+    <>
+      <Field
+        label="Check automatically"
+        hint="At launch and once a day, Forgemark asks GitHub for its latest release. Nothing is downloaded without a click."
+      >
+        <Segmented
+          testid="fm-settings-check-updates"
+          value={autoCheck ? "on" : "off"}
+          options={[
+            { value: "on", label: "On" },
+            { value: "off", label: "Off" },
+          ]}
+          onChange={(v) => setAutoCheck(v === "on")}
+        />
+      </Field>
+      <Field label="Version">
+        <div className="fm-settings-update-row">
+          {version && <span data-testid="fm-settings-version">{version}</span>}
+          <button
+            type="button"
+            className="fm-btn fm-btn-sm"
+            data-testid="fm-settings-check-now"
+            disabled={update.kind === "checking" || update.kind === "downloading"}
+            onClick={() => void checkForUpdate({ manual: true })}
+          >
+            Check now
+          </button>
+        </div>
+        {status && (
+          <span className="fm-settings-field-hint" data-testid="fm-settings-update-status">
+            {status}
+          </span>
+        )}
+      </Field>
+    </>
   );
 }
 
