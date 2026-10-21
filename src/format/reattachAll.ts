@@ -10,18 +10,26 @@
 //
 //   1. An element or passage comment with an `anchor_selector`: the
 //      element with that id, if the page still has it. Exact.
-//   2. Otherwise the recorded `anchor_text`. In an HTML report, inside
-//      the element the comment recorded as its `anchor_scope` first,
-//      when that element is still there and still holds the text: a
-//      sentence repeated in every tab, with the same words around it
-//      each time, is told apart by the tab's id. Then the whole page.
-//      Found once: attached. Found several times: the copy whose
-//      surroundings best match the recorded `context_before` /
-//      `context_after` (`locate.ts`, `near`), if exactly one copy does
-//      best. A tie is left for a person.
-//   3. Anything else stays orphaned, with the reason: the text is gone
-//      (and the closest near match, if any), it is ambiguous, it overlaps
-//      another anchor, or the element is gone.
+//   2. Otherwise the recorded `anchor_text`. In an HTML report with an
+//      `anchor_scope` — the id of the element the passage sat in — that
+//      element decides while it is still on the page: the passage is
+//      looked for inside it, and if it is no longer there the comment
+//      stays orphaned, even when the same text is elsewhere. A review
+//      usually asks for its own text to change; once it has, the old
+//      text turning up in another row is a coincidence, not the passage.
+//      Only a scope that is gone falls back to the whole page.
+//   3. On the page, a copy is taken only if the words recorded around
+//      the passage (`context_before`, `context_after`) agree with the
+//      words around it now, on at least one side (`surroundings`).
+//      Several copies: the one whose surroundings match best (`locate`,
+//      `near`), and it must agree too; a tie is left for a person. A
+//      record with no surroundings has nothing to check, and attaches by
+//      its text alone, which the outcome says.
+//   4. Anything else stays orphaned, with the reason: the text is gone
+//      (and the closest near match, if any), it is no longer in its
+//      element, its surroundings differ, it is ambiguous, it overlaps
+//      another anchor, or the element is gone. The record is left as it
+//      was, so the next attempt sees what was recorded, not a guess.
 //
 // Near matches are never attached here. A reworded passage may be the
 // same passage or a different one, and the Reattach dialog shows both.
@@ -54,9 +62,10 @@ export type ReattachOutcome =
       outcome: "attached";
       // selector: the recorded element id. scope: the passage, inside
       // the element it recorded as its scope. text: the only copy of the
-      // passage. context: one of several copies, chosen by its
-      // surroundings.
-      how: "selector" | "scope" | "text" | "context";
+      // passage, its surroundings agreeing. context: one of several
+      // copies, chosen by its surroundings. unchecked: the only copy, for
+      // a record with no surroundings to check it against.
+      how: "selector" | "scope" | "text" | "context" | "unchecked";
       anchor_text: string;
       // Where it went: the 1-based line of the opening marker.
       line: number;
@@ -64,7 +73,14 @@ export type ReattachOutcome =
   | {
       id: number;
       outcome: "orphaned";
-      reason: "not-found" | "ambiguous" | "overlap" | "no-element" | "unplaceable";
+      reason:
+        | "not-found"
+        | "not-in-scope"
+        | "surroundings-differ"
+        | "ambiguous"
+        | "overlap"
+        | "no-element"
+        | "unplaceable";
       detail: string;
     };
 
@@ -99,6 +115,10 @@ export function reattachOrphans(
       outcomes.push(orphaned(comment, result.error, body, format, explain));
       continue;
     }
+    if ("refused" in result) {
+      outcomes.push({ id: comment.id, outcome: "orphaned", ...result.refused });
+      continue;
+    }
     const { placement, how } = result;
     // Offsets are into the body before the markers go in.
     const scope = scopeOfPlacement(body, placement, format);
@@ -120,13 +140,18 @@ export function reattachOrphans(
   };
 }
 
-type Placed = { placement: Placement; how: "selector" | "scope" | "text" | "context" };
+type Placed = {
+  placement: Placement;
+  how: "selector" | "scope" | "text" | "context" | "unchecked";
+};
+// Found, but not taken: the evidence says it is not the passage.
+type Refused = { refused: { reason: "not-in-scope" | "surroundings-differ"; detail: string } };
 
 function placeOrphan(
   body: string,
   comment: Comment,
   format: DocFormat,
-): Placed | { error: AnchorError } {
+): Placed | Refused | { error: AnchorError } {
   const near = { before: comment.context_before ?? "", after: comment.context_after ?? "" };
   try {
     if (format === "html" && comment.anchor_selector) {
@@ -156,18 +181,110 @@ function placeOrphan(
         const placement = locateAnchor(body, text, format, { near, within: scope });
         return { placement, how: "scope" };
       } catch (err) {
-        // No longer in that element: the page may have been reorganised,
-        // so look everywhere, as for a comment with no scope.
         if (!(err instanceof AnchorError) || err.code !== "not-found") throw err;
+        // The element is still here and no longer holds the passage:
+        // the text was changed. A copy elsewhere is another passage.
+        return { refused: notInScope(body, text, comment.anchor_scope!, format) };
       }
     }
     const placement = locateAnchor(body, text, format, { near });
-    return { placement, how: (placement.occurrences ?? 1) > 1 ? "context" : "text" };
+    const several = (placement.occurrences ?? 1) > 1;
+    const agreement = surroundings(comment, placement);
+    if (agreement === "differ") {
+      return { refused: surroundingsDiffer(body, text, comment, placement, several) };
+    }
+    if (agreement === "unknown") return { placement, how: "unchecked" };
+    return { placement, how: several ? "context" : "text" };
   } catch (err) {
     if (err instanceof AnchorError) return { error: err };
     throw err;
   }
 }
+
+// Whether the words recorded either side of the passage agree with the
+// words either side of a copy of it, compared outward from the passage.
+// A side agrees when its nearest two recorded words (its only one, if it
+// recorded one) are there; a side with nothing recorded tells nothing.
+// One agreeing side is enough — an edit next to the passage leaves the
+// other — and a copy whose every recorded side differs is refused.
+function surroundings(comment: Comment, placement: Placement): "agree" | "differ" | "unknown" {
+  const sides = [
+    side(comment.context_before, placement.context_before, "before"),
+    side(comment.context_after, placement.context_after, "after"),
+  ];
+  if (sides.includes("agrees")) return "agree";
+  if (sides.includes("differs")) return "differ";
+  return "unknown";
+}
+
+function side(
+  recorded: string | undefined,
+  there: string,
+  which: "before" | "after",
+): "agrees" | "differs" | "unknown" {
+  const want = words(recorded ?? "");
+  if (want.length === 0) return "unknown";
+  const have = words(there);
+  if (which === "before") {
+    want.reverse();
+    have.reverse();
+  }
+  const need = Math.min(2, want.length);
+  for (let i = 0; i < need; i++) if (want[i] !== have[i]) return "differs";
+  return "agrees";
+}
+
+function words(s: string): string[] {
+  return s
+    .toLowerCase()
+    .split(/\s+/)
+    .map((w) => w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ""))
+    .filter((w) => w.length > 0);
+}
+
+function notInScope(
+  body: string,
+  text: string,
+  scope: string,
+  format: DocFormat,
+): Refused["refused"] {
+  let elsewhere = "and nowhere else in the page";
+  try {
+    const p = locateAnchor(body, text, format);
+    elsewhere = `though it appears once elsewhere, at line ${lineOf(body, p.start)}`;
+  } catch (err) {
+    if (err instanceof AnchorError && err.code === "ambiguous") {
+      elsewhere = `though it appears ${err.count} times elsewhere`;
+    } else if (!(err instanceof AnchorError)) throw err;
+  }
+  return {
+    reason: "not-in-scope",
+    detail: `${quote(text)} is no longer in ${scope}, ${elsewhere}. Its text has probably changed; re-anchor it by hand if it moved.`,
+  };
+}
+
+function surroundingsDiffer(
+  body: string,
+  text: string,
+  comment: Comment,
+  placement: Placement,
+  several: boolean,
+): Refused["refused"] {
+  const line = lineOf(body, placement.start);
+  const where = several
+    ? `${quote(text)} appears ${placement.occurrences} times; the closest copy, at line ${line},`
+    : `${quote(text)} is in the page once, at line ${line}, but it`;
+  const recorded = comment.context_before?.trim()
+    ? `before it "…${tail(comment.context_before)}", there "…${tail(placement.context_before)}"`
+    : `after it "${head(comment.context_after ?? "")}…", there "${head(placement.context_after)}…"`;
+  return {
+    reason: "surroundings-differ",
+    detail: `${where} doesn't have the words recorded around it: ${recorded}.`,
+  };
+}
+
+const tail = (s: string) => s.trim().split(/\s+/).slice(-4).join(" ");
+const head = (s: string) => s.trim().split(/\s+/).slice(0, 4).join(" ");
 
 // The record as it should read once attached: its anchor fields describe
 // what the markers now enclose. Stale context and scope are dropped

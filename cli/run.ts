@@ -479,8 +479,9 @@ function printReattachAll(
   const how = {
     selector: "by its element's id",
     scope: "inside its recorded element",
-    text: "by its text",
+    text: "by its text and surroundings",
     context: "by its surroundings",
+    unchecked: "by its text, with no recorded surroundings to check",
   };
   for (const o of outcomes) {
     if (o.outcome === "attached") {

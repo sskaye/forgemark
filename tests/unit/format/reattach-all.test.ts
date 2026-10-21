@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { reattachOrphans } from "../../../src/format/reattachAll";
 import { enclosingScope } from "../../../src/format/html/elements";
+import { locateAnchor, scopeOfPlacement } from "../../../src/format/locate";
 import { classifyAnchors } from "../../../src/format/reattach";
 import { parseForgemarkFile } from "../../../src/format/parser";
 import { serializeForgemarkFile } from "../../../src/format/serializer";
@@ -162,7 +163,8 @@ describe("reattachOrphans on a regenerated report", () => {
       },
       "html",
     );
-    expect(outcomes[0]).toMatchObject({ outcome: "attached", how: "text" });
+    // No surroundings recorded on either: by text alone, and said so.
+    expect(outcomes[0]).toMatchObject({ outcome: "attached", how: "unchecked" });
     expect(outcomes[1]).toMatchObject({ outcome: "orphaned", reason: "overlap" });
     expect(outcomes[1].outcome === "orphaned" && outcomes[1].detail).toMatch(/comment 1/);
     expect(file.comments[1]).toEqual(
@@ -229,27 +231,35 @@ describe("anchor_scope", () => {
     expect(file.comments[0].anchor_scope).toBe("#tab-area");
   });
 
-  it("falls back to the whole page when the element is gone or no longer holds the text", () => {
-    const moved = comment(1, {
-      anchor_text: "Bar intro.",
-      anchor_scope: "#tab-line", // the sentence now lives in another tab
-    });
+  it("keeps a comment orphaned when its element is still there without the text", () => {
+    // The sentence's tab is still on the page; it no longer holds it.
+    // The copy in another tab is another passage.
+    const moved = comment(1, { anchor_text: "Bar intro.", anchor_scope: "#tab-line" });
+    const { file, outcomes } = reattachOrphans({ body: CATALOG, comments: [moved] }, "html");
+    expect(outcomes[0]).toMatchObject({ outcome: "orphaned", reason: "not-in-scope" });
+    expect(outcomes[0].outcome === "orphaned" && outcomes[0].detail).toMatch(
+      /no longer in #tab-line, though it appears once elsewhere, at line 3/,
+    );
+    // The record is left as it was.
+    expect(file.comments[0]).toEqual(moved);
+  });
+
+  it("falls back to the whole page only when the element is gone", () => {
     const gone = comment(2, {
       anchor_text: "Values are shown in thousands.",
       anchor_scope: "#tab-gone",
       context_before: "Same.",
       context_after: "Same.",
     });
-    const { file, outcomes } = reattachOrphans({ body: CATALOG, comments: [moved, gone] }, "html");
-    expect(outcomes[0]).toMatchObject({ outcome: "attached", how: "text" });
-    // Re-recorded where it was actually found.
-    expect(file.comments[0].anchor_scope).toBe("#tab-bar");
-    expect(outcomes[1]).toMatchObject({ outcome: "orphaned", reason: "ambiguous" });
+    const { outcomes } = reattachOrphans({ body: CATALOG, comments: [gone] }, "html");
+    expect(outcomes[0]).toMatchObject({ outcome: "orphaned", reason: "ambiguous" });
   });
 
   it("is recorded on a passage re-attached by its text, and dropped where there is none", () => {
     const c = comment(1, { anchor_text: "Bar intro.", anchor_scope: "#stale" });
-    const { file } = reattachOrphans({ body: CATALOG, comments: [c] }, "html");
+    const { file, outcomes } = reattachOrphans({ body: CATALOG, comments: [c] }, "html");
+    // No surroundings recorded: attached by its text alone, and said so.
+    expect(outcomes[0]).toMatchObject({ outcome: "attached", how: "unchecked" });
     expect(file.comments[0].anchor_scope).toBe("#tab-bar");
     const plain = "<html><body><p>Bar intro.</p></body></html>";
     const again = reattachOrphans({ body: plain, comments: [c] }, "html");
@@ -287,10 +297,117 @@ The rate doubled. Treat this with care.
   });
 
   it("attaches a passage found once, refreshing its context", () => {
-    const c = comment(1, { anchor_text: "We report the median here.", context_after: "old" });
+    // The words before still agree; the stale words after are replaced.
+    const c = comment(1, {
+      anchor_text: "We report the median here.",
+      context_before: "The rate doubled.",
+      context_after: "old",
+    });
     const { file, outcomes } = reattachOrphans({ body: DOC, comments: [c] }, "markdown");
     expect(outcomes[0]).toMatchObject({ outcome: "attached", how: "text", line: 3 });
     expect(file.comments[0].context_before).toMatch(/The rate doubled\.$/);
     expect(file.comments[0].context_after).not.toBe("old");
+  });
+});
+
+// ForgeGraph's report against 1.10.1: a comment asking for its own value
+// to change, after the change, found the old value on another row and
+// moved there, reporting success and overwriting what it had recorded.
+describe("a passage whose text turns up somewhere else", () => {
+  const page = (rows: string) =>
+    `<!doctype html><html><body>\n<table>\n${rows}</table>\n</body></html>\n`;
+  const row = (id: string | null, label: string, value: string) =>
+    `<tr${id ? ` id="${id}"` : ""}><td>${label}</td><td>${value}</td></tr>\n`;
+
+  // The comment as `comment --anchor "0.06"` records it on the second row.
+  function made(ids: boolean): Comment {
+    const original = page(
+      row(ids ? "r1" : null, "frame width", "0.15") + row(ids ? "r2" : null, "edge width", "0.06"),
+    );
+    const p = locateAnchor(original, "0.06", "html");
+    const scope = scopeOfPlacement(original, p, "html");
+    return comment(1, {
+      anchor_text: "0.06",
+      ...(p.context_before ? { context_before: p.context_before } : {}),
+      ...(p.context_after ? { context_after: p.context_after } : {}),
+      ...(scope ? { anchor_scope: scope } : {}),
+    });
+  }
+
+  for (const ids of [true, false]) {
+    const I = (id: string) => (ids ? id : null);
+    const label = ids ? "with row ids" : "without ids";
+
+    it(`stays orphaned when the value moved to another row, ${label}`, () => {
+      const c = made(ids);
+      expect(c.context_before).toMatch(/edge width$/);
+      const rebuilt = page(
+        row(I("r1"), "frame width", "0.06") + row(I("r2"), "edge width", "0.05"),
+      );
+      const { file, outcomes } = reattachOrphans({ body: rebuilt, comments: [c] }, "html");
+      expect(outcomes[0]).toMatchObject({
+        outcome: "orphaned",
+        reason: ids ? "not-in-scope" : "surroundings-differ",
+      });
+      expect(outcomes[0].outcome === "orphaned" && outcomes[0].detail).toMatch(/line 3/);
+      expect(file.body).toBe(rebuilt);
+      expect(file.comments[0]).toEqual(c);
+    });
+
+    it(`still re-attaches when a row is inserted above it, ${label}`, () => {
+      const rebuilt = page(
+        row(I("r1"), "frame width", "0.15") +
+          row(I("r9"), "corner radius", "0.3") +
+          row(I("r2"), "edge width", "0.06"),
+      );
+      const { file, outcomes } = reattachOrphans({ body: rebuilt, comments: [made(ids)] }, "html");
+      expect(outcomes[0]).toMatchObject({
+        outcome: "attached",
+        how: ids ? "scope" : "text",
+        line: 5,
+      });
+      expect(file.body).toContain("<td>edge width</td><td><!-- fmc:1 -->0.06<!-- /fmc:1 -->");
+    });
+  }
+
+  it("follows the row's id when only its label changed", () => {
+    const rebuilt = page(row("r1", "frame width", "0.15") + row("r2", "outline width", "0.06"));
+    const { outcomes } = reattachOrphans({ body: rebuilt, comments: [made(true)] }, "html");
+    expect(outcomes[0]).toMatchObject({ outcome: "attached", how: "scope" });
+  });
+
+  it("attaches prose when one side of the passage was edited", () => {
+    const before = "<p>We set the margin to 0.06 for every chart in the set.</p>";
+    const p = locateAnchor(before, "0.06", "html");
+    const c = comment(1, {
+      anchor_text: "0.06",
+      context_before: p.context_before,
+      context_after: p.context_after,
+    });
+    const after = "<p>We now set the gap to 0.06 for every chart in the set.</p>";
+    const { outcomes } = reattachOrphans({ body: after, comments: [c] }, "html");
+    expect(outcomes[0]).toMatchObject({ outcome: "attached", how: "text" });
+  });
+
+  it("refuses the closest of several copies when its surroundings still differ", () => {
+    const body = "<p>Gamma width 0.06 here.</p><p>Delta width 0.06 there.</p>";
+    const c = comment(1, {
+      anchor_text: "0.06",
+      context_before: "Beta width",
+      context_after: "here.",
+    });
+    // "here." agrees with the first copy's after side: taken.
+    expect(reattachOrphans({ body, comments: [c] }, "html").outcomes[0]).toMatchObject({
+      outcome: "attached",
+      how: "context",
+    });
+    // Nothing on either side agrees with any copy: refused.
+    const stranger = comment(1, {
+      anchor_text: "0.06",
+      context_before: "Beta width",
+      context_after: "elsewhere.",
+    });
+    const { outcomes } = reattachOrphans({ body, comments: [stranger] }, "html");
+    expect(outcomes[0].outcome).toBe("orphaned");
   });
 });

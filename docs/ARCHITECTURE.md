@@ -316,15 +316,19 @@ to ranking over rendered text; the Reattach dialog shows these candidates.
 
 Re-attaching without a person is `format/reattachAll.ts`, shared by the
 lost-anchor banner's bulk action and `forgemark reattach --all`. It is
-stricter than the dialog: an element by its recorded id, or a passage by its
-text where the text appears once, or where several copies appear and exactly
-one copy's surroundings match the recorded `context_before`/`context_after`
-best (`locate.ts`, `near`). In a report, a passage is looked for first inside
-its `anchor_scope`, the innermost enclosing element with an id when it was
-made (`html/elements.ts`, `enclosingScope`): a sentence repeated in every tab
-with the same words around it is told apart by the tab's id. A scope that is
-gone, or no longer holds the passage, falls back to the whole page. A tie, a reworded passage, or an overlap is left
-orphaned with the reason. Placement goes through `locate.ts`, so a
+stricter than the dialog. An element goes back by its recorded id. A passage
+in a report with an `anchor_scope` (the innermost enclosing element with an id
+when it was made, `html/elements.ts`, `enclosingScope`) is looked for inside
+that element while it is still on the page, and stays orphaned if the element
+no longer holds it: a review usually asks for its own text to change, and the
+old text turning up in another row afterwards is a coincidence. Only a scope
+that is gone falls back to the whole page. There, a copy is taken only if the
+words recorded either side of the passage agree with the words around it now,
+on at least one side (the nearest two words); among several copies, the one
+whose surroundings match best (`locate.ts`, `near`), which must agree too. A
+record with no surroundings attaches by its text alone, and the outcome says
+so. A tie, a reworded passage, differing surroundings, or an overlap is left
+orphaned with the reason, and its record untouched. Placement goes through `locate.ts`, so a
 re-attached marker obeys the same rules as a new one, and the record's anchor
 fields are refreshed from what was found, in rendered text.
 

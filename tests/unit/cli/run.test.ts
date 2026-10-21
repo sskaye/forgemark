@@ -236,6 +236,42 @@ describe("forgemark CLI", () => {
     expect(readFileSync(file, "utf8")).toBe(after);
   });
 
+  it("leaves a comment orphaned when its value turns up on another row (ForgeGraph's report)", () => {
+    const file = join(dir, "t.html");
+    const table = (first: string, second: string) =>
+      `<!doctype html><html><body>\n<table>\n` +
+      `<tr id="r1"><td>frame width</td><td>${first}</td></tr>\n` +
+      `<tr id="r2"><td>edge width</td><td>${second}</td></tr>\n` +
+      `</table>\n</body></html>\n`;
+    writeFileSync(file, table("0.15", "0.06"));
+    expect(
+      main(["comment", file, "--anchor", "0.06", "--body", "set to 0.05", "--author", "Rev"]),
+    ).toBe(0);
+    // Regenerate the body, keeping the comments block: the values move.
+    const written = readFileSync(file, "utf8");
+    const block = written.slice(written.indexOf("<!-- forgemark-comments"));
+    writeFileSync(file, table("0.06", "0.05") + block);
+    const before = readFileSync(file, "utf8");
+
+    out.length = 0;
+    expect(main(["reattach", file, "--all", "--dry-run"])).toBe(0);
+    expect(out.join("\n")).toMatch(
+      /#1 {2}left orphaned \(not-in-scope\): "0\.06" is no longer in #r2/,
+    );
+    expect(out.join("\n")).toMatch(/Reattached 0 of 1 orphaned comment; 1 left orphaned\./);
+
+    out.length = 0;
+    expect(main(["reattach", file, "--all", "--json", "--strict"])).toBe(1);
+    const report = JSON.parse(out.join("\n"));
+    expect(report).toMatchObject({ attached: 0, orphaned: 1 });
+    expect(report.results[0]).toMatchObject({ outcome: "orphaned", reason: "not-in-scope" });
+    // Nothing written, and the record still says where it was.
+    expect(readFileSync(file, "utf8")).toBe(before);
+    const parsed = parseForgemarkFile(before, { format: "html", tolerant: true });
+    expect(parsed.comments[0].context_before).toMatch(/edge width$/);
+    expect(parsed.comments[0].anchor_scope).toBe("#r2");
+  });
+
   it("refuses --all with an id, an anchor, or --dry-run without --all", () => {
     const file = copy("04-orphan-and-floating.md");
     expect(main(["reattach", file, "1", "--all"])).toBe(2);
