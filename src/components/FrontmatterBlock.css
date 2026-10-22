@@ -1,0 +1,46 @@
+.fm-frontmatter {
+  margin: 0 0 18px;
+  border: 0.5px solid var(--fm-divider-strong);
+  border-radius: 6px;
+  background: var(--fm-code-bg, var(--fm-card-bg));
+  overflow: hidden;
+}
+
+.fm-frontmatter-label {
+  padding: 4px 10px;
+  border-bottom: 0.5px solid var(--fm-divider-strong);
+  font-family: var(--fm-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fm-chrome-muted);
+}
+
+.fm-frontmatter-yaml {
+  margin: 0;
+  padding: 10px 12px;
+  font-family: var(--fm-mono, ui-monospace, monospace);
+  font-size: 0.85em;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--fm-prose-ink);
+}
+
+.fm-frontmatter-anchor {
+  background: var(--fm-anchor-bg);
+  border-bottom: 1.5px solid var(--fm-anchor-underline, transparent);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.fm-frontmatter-anchor.is-hovered,
+.fm-frontmatter-anchor.is-focused {
+  background: var(--fm-anchor-bg-strong, var(--fm-anchor-bg));
+  outline: 1px solid var(--fm-anchor-underline, var(--fm-divider-strong));
+}
+
+.fm-frontmatter-anchor.is-resolved {
+  background: transparent;
+}

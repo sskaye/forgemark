@@ -12,6 +12,7 @@ import {
   stripAnchoredMarkers,
   type AnchorStatus,
 } from "../format";
+import { isFrontmatterComment } from "../format/frontmatterAnchor";
 import type { Comment, Reply } from "../format/types";
 import type { FilterMode, SortMode } from "../state/document";
 import "./Sidebar.css";
@@ -42,10 +43,16 @@ export function Sidebar({ anchorStatuses }: SidebarProps) {
 
   // Phase 9: split into three groups, preserving sort within each.
   const orphans = visibleComments.filter((c) => anchorStatuses.get(c.id)?.kind === "orphaned");
+  // A comment on the front matter is stored as a floating note, having
+  // no markers, but it is on a passage: it goes with the attached
+  // comments, first, as the front matter comes first in the document.
   const floatingNotes = visibleComments.filter(
-    (c) => anchorStatuses.get(c.id)?.kind === "floating",
+    (c) => anchorStatuses.get(c.id)?.kind === "floating" && !isFrontmatterComment(c),
   );
-  const attached = visibleComments.filter((c) => anchorStatuses.get(c.id)?.kind === "attached");
+  const attached = [
+    ...visibleComments.filter(isFrontmatterComment),
+    ...visibleComments.filter((c) => anchorStatuses.get(c.id)?.kind === "attached"),
+  ];
 
   const open = comments.filter((c) => !c.resolved).length;
 

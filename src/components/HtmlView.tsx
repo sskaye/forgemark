@@ -56,6 +56,9 @@ export type HtmlCapturedSelection = {
   // The passage runs across two blocks (paragraphs, list items, cells),
   // so it can be commented on but not replaced by a suggestion.
   crossesBlocks?: boolean;
+  // A passage in a Markdown file's front matter (`FrontmatterBlock`): a
+  // comment there carries no markers.
+  frontmatter?: boolean;
   overlappingAnchorId: number | null;
   // Host-viewport coordinates. `bottom` anchors the composer below the
   // selection; `top` anchors the selection toolbar above it.

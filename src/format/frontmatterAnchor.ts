@@ -96,6 +96,29 @@ export function locateInFrontmatter(
   };
 }
 
+// A placement from source offsets inside the front matter: what the app
+// records for a passage the reader selected there.
+export function frontmatterPlacementAt(
+  body: string,
+  start: number,
+  end: number,
+): FrontmatterPlacement | null {
+  const fm = frontmatterText(body);
+  if (!fm || start < fm.offset || end > fm.offset + fm.text.length || end <= start) return null;
+  const flat = (t: string) => t.replace(/\s+/g, " ");
+  const a = start - fm.offset;
+  const b = end - fm.offset;
+  const anchor = flat(fm.text.slice(a, b)).trim();
+  if (!anchor) return null;
+  return {
+    start,
+    end,
+    anchor_text: anchor,
+    context_before: contextSnippet(flat(fm.text.slice(0, a)), "before"),
+    context_after: contextSnippet(flat(fm.text.slice(b)), "after"),
+  };
+}
+
 // The record for a comment on the front matter.
 export function frontmatterFields(p: FrontmatterPlacement): Partial<Comment> {
   return {
