@@ -15,6 +15,13 @@ import { findMarkers, pairMarkers } from "../src/format/markers";
 import { applyPlacement, locateAnchor, locateElement, AnchorError, type Placement } from "./anchor";
 import { scopeOfPlacement } from "../src/format/locate";
 import { spansBlocks } from "../src/format/anchor-text";
+import {
+  findFrontmatterPassage,
+  frontmatterFields,
+  isFrontmatterComment,
+  locateInFrontmatter,
+  type FrontmatterPlacement,
+} from "../src/format/frontmatterAnchor";
 
 export class CommandError extends Error {
   constructor(message: string) {
@@ -66,6 +73,24 @@ export function addComment(file: ParsedFile, format: DocFormat, input: CommentIn
     record.floating = true;
     const comments = [...file.comments, record];
     return { file: { body: file.body, comments }, summary: `Added floating note #${id}.`, id };
+  }
+
+  // A passage in the front matter takes a comment without markers
+  // (`src/format/frontmatterAnchor.ts`): markers would change its YAML.
+  const onFront =
+    format === "markdown" && input.anchor !== undefined && frontmatterTarget(file.body, input);
+  if (onFront) {
+    if (input.suggest !== undefined) {
+      throw new CommandError(
+        "A suggestion can't change the front matter: accepting it would edit YAML other programs read. Comment on it instead.",
+      );
+    }
+    Object.assign(record, frontmatterFields(onFront));
+    return {
+      file: { body: file.body, comments: [...file.comments, record] },
+      summary: `Added comment #${id} on the front matter: "${truncate(onFront.anchor_text)}".`,
+      id,
+    };
   }
 
   const placement = place(file.body, format, input);
@@ -227,7 +252,8 @@ export function reattachAll(
 
 export type Listed = {
   comment: Comment;
-  status: AnchorStatus["kind"];
+  // "frontmatter": a comment on the front matter, which has no markers.
+  status: AnchorStatus["kind"] | "frontmatter";
   // What currently sits between the markers, for attached comments.
   current?: string;
 };
@@ -236,6 +262,14 @@ export function listComments(file: ParsedFile, format: DocFormat): Listed[] {
   const status = classifyAnchors(file.body, file.comments, format);
   return file.comments.map((comment) => {
     const st = status.get(comment.id) ?? { kind: "floating" as const };
+    if (isFrontmatterComment(comment)) {
+      const at = findFrontmatterPassage(file.body, comment);
+      return {
+        comment,
+        status: "frontmatter",
+        ...(at ? { current: file.body.slice(at.start, at.end) } : {}),
+      };
+    }
     const entry: Listed = { comment, status: st.kind };
     if (st.kind === "attached") {
       const { pairs } = pairMarkers(findMarkers(file.body, format));
@@ -244,6 +278,26 @@ export function listComments(file: ParsedFile, format: DocFormat): Listed[] {
     }
     return entry;
   });
+}
+
+// The front matter's copy of a quoted passage, when the passage is only
+// there; null when it is in the body, or nowhere.
+function frontmatterTarget(
+  body: string,
+  input: { anchor?: string; occurrence?: number },
+): FrontmatterPlacement | null {
+  try {
+    locateAnchor(body, input.anchor ?? "", "markdown", { occurrence: input.occurrence });
+    return null;
+  } catch (err) {
+    if (!(err instanceof AnchorError) || err.code !== "in-frontmatter") return null;
+  }
+  try {
+    return locateInFrontmatter(body, input.anchor ?? "", { occurrence: input.occurrence });
+  } catch (err) {
+    if (err instanceof AnchorError) throw new CommandError(err.message);
+    throw err;
+  }
 }
 
 // ── helpers ───────────────────────────────────────────────────────────

@@ -16,6 +16,7 @@
 import { parseForgemarkFile, findStrayBlock, ForgemarkParseError } from "../src/format/parser";
 import { findMarkers, pairMarkers } from "../src/format/markers";
 import { anchorTextMatches, inMarkdownTable } from "../src/format/anchor-text";
+import { findFrontmatterPassage, frontmatterLength } from "../src/format/frontmatterAnchor";
 import { wrapsSameElement } from "../src/format/locate";
 import { BLOCK_OPEN, type DocFormat, type ParsedFile } from "../src/format/types";
 
@@ -90,6 +91,22 @@ export function lintText(text: string, format: DocFormat): LintReport {
     }
   }
 
+  // Markers an older version put inside the front matter change its YAML
+  // for every program that reads it (`frontmatterAnchor.ts`).
+  if (format === "markdown") {
+    const front = frontmatterLength(file.body);
+    for (const p of pairs) {
+      if (p.open.start < front) {
+        problems.push({
+          severity: "warning",
+          commentId: p.id,
+          line: recordLine(text, p.id),
+          message: `Comment ${p.id}'s markers are inside the front matter, so every program that reads its YAML sees them in the value. Delete the comment and add it again with \`forgemark comment --anchor\`, which puts it on the front matter without markers.`,
+        });
+      }
+    }
+  }
+
   const pairById = new Map(pairs.map((p) => [p.id, p]));
   counts.comments = file.comments.length;
   for (const c of file.comments) {
@@ -105,6 +122,23 @@ export function lintText(text: string, format: DocFormat): LintReport {
         line,
         message: `Comment ${c.id}: timestamp "${c.timestamp}" is not ISO 8601 UTC (e.g. 2026-05-07T14:32:00Z).`,
       });
+    }
+
+    if (c.floating && c.anchor_frontmatter) {
+      // A comment on the front matter has no markers; its passage must
+      // still be there to be shown on it.
+      if (findFrontmatterPassage(file.body, c)) {
+        counts.attached++;
+      } else {
+        counts.orphaned++;
+        problems.push({
+          severity: "warning",
+          commentId: c.id,
+          line,
+          message: `Comment ${c.id} is on the front matter, but ${JSON.stringify(c.anchor_text ?? "")} is no longer there. The reviewer will see it as a floating note.`,
+        });
+      }
+      continue;
     }
 
     if (c.floating) {

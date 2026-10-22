@@ -23,6 +23,7 @@ import { openMarker, closeMarker, type DocFormat } from "./types";
 import { normalizeAnchorText, inMarkdownTable } from "./anchor-text";
 import { contextSnippet } from "./compose";
 import { wholeBlockLines } from "./blocks";
+import { splitFrontmatter } from "./frontmatter";
 
 export type Placement = {
   // Source offsets the markers wrap. For a block placement the markers
@@ -53,7 +54,8 @@ export type AnchorErrorCode =
   | "no-element" // no element has the selector
   | "overlap" // it overlaps another comment's anchor
   | "straddle" // it straddles a code block, equation, or diagram
-  | "unmappable"; // found in the rendered text, but not mappable to source
+  | "unmappable" // found in the rendered text, but not mappable to source
+  | "in-frontmatter"; // only in the Markdown front matter, where markers can't go
 
 export class AnchorError extends Error {
   // For "ambiguous": how many times the passage appears. For "overlap":
@@ -220,7 +222,17 @@ type Region = { start: number; end: number; kind: "block" | "atom"; indent?: str
 
 function locateInMarkdown(body: string, needle: string, opts: LocateOptions): Placement {
   const regions = protectedRegions(body);
-  const matches = findMatches(body, needle, markdownTolerant(needle));
+  // Never in the front matter: markers there would change its YAML for
+  // every program that reads it (`frontmatterAnchor.ts`).
+  const front = splitFrontmatter(body).front.length;
+  const everywhere = findMatches(body, needle, markdownTolerant(needle));
+  const matches = everywhere.filter((m) => m.start >= front);
+  if (matches.length === 0 && everywhere.length > 0) {
+    throw new AnchorError(
+      `"${needle}" is in the front matter, where markers can't go.`,
+      "in-frontmatter",
+    );
+  }
   const chosen = pick(matches, needle, opts, body);
   let { start, end } = chosen;
 
