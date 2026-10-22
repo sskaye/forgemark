@@ -408,7 +408,11 @@ to narrow what an edited block loses: `linkify` and `autolink` off, a
 Code mark that doesn't exclude the anchor and bold marks,
 `CodeBlockAnchor` sizing its fence to the content. Front matter is split
 off before the body reaches the editor and put back on every edit
-(`src/format/frontmatter.ts`). `markers-display.ts` only rewrites
+(`src/format/frontmatter.ts`); `FrontmatterBlock` shows it read-only above
+the document. A comment on it carries no markers, which would change its YAML:
+it is a floating note with `anchor_frontmatter`, highlighted on the passage it
+quotes (`src/format/frontmatterAnchor.ts`), and the locator never matches
+inside the front matter. `markers-display.ts` only rewrites
 markers the scanner recognises, so a marker quoted in a code fence is
 left alone.
 

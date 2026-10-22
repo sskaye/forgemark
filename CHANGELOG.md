@@ -2,6 +2,19 @@
 
 All notable changes to Forgemark are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- A Markdown file's front matter is shown above the document, as its YAML, and takes comments like any passage. They are kept without markers, which would change the YAML that other programs read — an agent skill's `description`, a site's `title` — so the file's text stays byte for byte as it was. A suggestion there is refused. An older version shows such a comment as a floating note quoting its passage.
+- A suggested edit can be replied to, not only accepted or rejected: Reply sits beside Accept and Reject, ⌘R opens it, and the suggestion stays open.
+
+### Fixed
+
+- `forgemark comment --anchor` on text in the front matter put its markers inside the YAML, changing the value for every program that reads it. It now makes a comment on the front matter instead, and lint warns about markers an older version left there.
+- A quoted passage didn't match across inline markup next to punctuation: "use default." missed ``use `default`.``, and "bold words." missed `**bold words**.`. Link and image syntax is skipped the same way, so "See the docs." finds `See [the docs](url).`.
+- `reattach --all` and the app's Reattach all could move a comment to another row of a Markdown table when the cell next to it repeated down the column ("float > 0"), so a comment asking for a row's status to change landed, once it had, on a row still showing the old one. A copy's surroundings now have to match across its whole row, paragraph or list item.
+
 ## [1.11.0] — 2026-10-21
 
 ### Added
