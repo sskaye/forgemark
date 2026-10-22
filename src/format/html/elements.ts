@@ -18,6 +18,7 @@
 // match here silently points a comment at the wrong chart.
 
 import { parse } from "parse5";
+import { BLOCK_TAGS } from "./blockTags";
 
 export type ElementSpan = { start: number; end: number; text: string };
 
@@ -80,6 +81,45 @@ function scopeWithin(
     const inner = scopeWithin(child, start, end, here);
     if (inner) return inner;
     if (loc) return { scope: here };
+  }
+  return null;
+}
+
+// The innermost block element (`blockTags.ts`) enclosing a source range:
+// what a reader takes as the passage's paragraph, list item or heading.
+// In a table, the row: neighbouring cells of a row belong together, and a
+// cell alone is usually just the passage.
+export function enclosingBlockSpan(
+  html: string,
+  start: number,
+  end: number,
+): { start: number; end: number } | undefined {
+  const root = parse(html, { sourceCodeLocationInfo: true }) as unknown as P5Node;
+  return blockWithin(root, start, end, undefined)?.block;
+}
+
+// Like `scopeWithin`: down through the elements that contain the range,
+// keeping the innermost block seen, looking through elements the parser
+// implied (no location) without stopping at one that leads elsewhere.
+function blockWithin(
+  node: P5Node,
+  start: number,
+  end: number,
+  block: { start: number; end: number } | undefined,
+): { block?: { start: number; end: number } } | null {
+  const children = (node.tagName === "template" ? node.content?.childNodes : node.childNodes) ?? [];
+  for (const child of children) {
+    if (child.tagName === undefined) continue;
+    const loc = child.sourceCodeLocation;
+    if (loc && !(loc.startOffset <= start && loc.endOffset >= end)) continue;
+    const tag = child.tagName.toLowerCase();
+    const here =
+      loc && BLOCK_TAGS.has(tag) && tag !== "td" && tag !== "th"
+        ? { start: loc.startOffset, end: loc.endOffset }
+        : block;
+    const inner = blockWithin(child, start, end, here);
+    if (inner) return inner;
+    if (loc) return { block: here };
   }
   return null;
 }
