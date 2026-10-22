@@ -81,8 +81,6 @@ export function Sidebar({ anchorStatuses }: SidebarProps) {
       switch (cmd) {
         case "reply":
           e.preventDefault();
-          // No replies on suggestion cards.
-          if (c.suggested_edit) return;
           dispatch({ type: "openComposer", composer: { mode: "reply", commentId: c.id } });
           return;
         case "toggle-resolved":

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, act, waitFor, within } from "@testing-library/react";
 import { useRef } from "react";
 import { ThemeProvider } from "../../src/theme/ThemeProvider";
 import { DocumentProvider, useDocument } from "../../src/state/DocumentProvider";
@@ -71,7 +71,7 @@ describe("Suggested-edit cards", () => {
     expect(screen.getByTestId("fm-card-suggestion")).toBeInTheDocument();
   });
 
-  it("focused suggestion card shows Accept and Reject (not Reply / Resolve)", async () => {
+  it("focused suggestion card shows Accept, Reject and Reply (not Resolve)", async () => {
     renderApp({
       body: "x <!-- fmc:1 -->old phrase<!-- /fmc:1 --> y\n",
       comments: [aSuggestion()],
@@ -82,8 +82,8 @@ describe("Suggested-edit cards", () => {
       expect(screen.getByTestId("fm-card-accept-1")).toBeInTheDocument();
     });
     expect(screen.getByTestId("fm-card-reject-1")).toBeInTheDocument();
-    // Reply and Resolve are hidden on suggestion cards.
-    expect(screen.queryByTestId("fm-card-reply-1")).not.toBeInTheDocument();
+    expect(screen.getByTestId("fm-card-reply-1")).toBeInTheDocument();
+    // A suggestion is settled by Accept or Reject, not by resolving it.
     expect(screen.queryByTestId("fm-card-resolve-1")).not.toBeInTheDocument();
   });
 
@@ -154,18 +154,42 @@ describe("Suggested-edit cards", () => {
     expect(screen.getByTestId("probe-comment-count").textContent).toBe("1");
   });
 
-  it("⌘R on a focused suggestion is a no-op", async () => {
+  it("⌘R on a focused suggestion opens the reply composer", async () => {
     renderApp({
       body: "x <!-- fmc:1 -->old phrase<!-- /fmc:1 --> y\n",
       comments: [aSuggestion()],
     });
     const card = await screen.findByTestId("fm-card-1");
     fireEvent.click(card);
+    // Shortcuts act on the card that has keyboard focus.
+    act(() => card.focus());
     act(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "r", metaKey: true }));
     });
-    // No reply composer appears.
-    expect(screen.queryByTestId("fm-inline-composer")).not.toBeInTheDocument();
+    expect(await screen.findByTestId("fm-inline-composer")).toBeInTheDocument();
+  });
+
+  it("a reply to a suggestion is saved and leaves it open to accept or reject", async () => {
+    renderApp({
+      body: "x <!-- fmc:1 -->old phrase<!-- /fmc:1 --> y\n",
+      comments: [aSuggestion()],
+    });
+    fireEvent.click(await screen.findByTestId("fm-card-1"));
+    fireEvent.click(screen.getByTestId("fm-card-reply-1"));
+    const box = within(screen.getByTestId("fm-inline-composer")).getByRole("textbox");
+    fireEvent.change(box, { target: { value: "Could it say 'newer phrase'?" } });
+    fireEvent.keyDown(box, { key: "Enter", metaKey: true });
+    await waitFor(() =>
+      expect(screen.getByTestId("fm-card-replies").textContent).toContain(
+        "Could it say 'newer phrase'?",
+      ),
+    );
+    // Still a suggestion, still in the document, still decidable.
+    expect(screen.getByTestId("probe-comment-count").textContent).toBe("1");
+    fireEvent.click(screen.getByTestId("fm-card-1"));
+    expect(screen.getByTestId("fm-card-accept-1")).toBeInTheDocument();
+    expect(screen.getByTestId("fm-card-reject-1")).toBeInTheDocument();
+    expect(screen.getByTestId("fm-card-suggestion")).toBeInTheDocument();
   });
 
   it("a suggestion with body=undefined renders without the body div", async () => {
@@ -181,12 +205,10 @@ describe("Suggested-edit cards", () => {
     expect(screen.getByTestId("fm-card-suggestion")).toBeInTheDocument();
   });
 
-  it("a suggestion with replies parses + serializes; UI hides Reply but the field round-trips", async () => {
-    // We don't directly check serialization here (covered by round-trip
-    // tests). What we verify: the UI doesn't surface Reply, and the
-    // existing replies array on the suggestion is preserved through
-    // load. (Actual round-trip parity for fixtures with this shape is
-    // covered by the format-layer tests.)
+  it("a suggestion with replies shows them, and offers Reply beside Accept and Reject", async () => {
+    // Serialization is covered by the round-trip tests. What we verify:
+    // the existing replies on a suggestion are preserved through load and
+    // shown, and the card offers Reply.
     const c = aSuggestion({
       replies: [
         {
@@ -202,8 +224,7 @@ describe("Suggested-edit cards", () => {
     });
     const card = await screen.findByTestId("fm-card-1");
     fireEvent.click(card);
-    expect(screen.queryByTestId("fm-card-reply-1")).not.toBeInTheDocument();
-    // Replies inline are still rendered (so users can read what was said).
+    expect(screen.getByTestId("fm-card-reply-1")).toBeInTheDocument();
     expect(screen.getByTestId("fm-card-replies")).toBeInTheDocument();
   });
 });

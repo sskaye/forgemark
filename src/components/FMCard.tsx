@@ -256,6 +256,19 @@ export function FMCard({
               >
                 Reject
               </button>
+              {/* A reply discusses the proposal and leaves it open:
+                  Accept and Reject stay available. */}
+              <button
+                type="button"
+                className="fm-btn fm-btn-sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onReply();
+                }}
+                data-testid={`fm-card-reply-${comment.id}`}
+              >
+                Reply
+              </button>
               {isOwn && (
                 <button
                   type="button"
