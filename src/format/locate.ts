@@ -368,8 +368,30 @@ function inlineCodeSpans(line: string): { start: number; end: number }[] {
 // cells ("one beta") finds "one\n- beta" and "one | beta".
 const BETWEEN_WORDS =
   "(?:[\\s*_~`|]|<[^>]+>|\\n[ \\t]*(?:>[ \\t]?)*(?:[-*+][ \\t]+|\\d{1,9}[.)][ \\t]+|#{1,6}[ \\t]+)?(?:\\[[ xX]\\][ \\t]+)?)+";
+// Inline markup a reader doesn't see, which may sit at the edge of a
+// word or between a word and its punctuation: emphasis and code
+// delimiters, and link syntax around link text. So "use default." finds
+// "use `default`.", "bold words." finds "**bold words**.", and "See the
+// docs." finds "See [the docs](url).".
+const MARKUP = "(?:[*_~`]|!?\\[|\\]\\([^)\\n]*\\)|\\]\\[[^\\]\\n]*\\])*";
+
 function markdownTolerant(needle: string): RegExp {
-  return phraseRegex(needle, BETWEEN_WORDS, "gi");
+  const words = needle.split(" ").map((word) => {
+    const chars = Array.from(word);
+    let out = MARKUP;
+    chars.forEach((ch, i) => {
+      if (i > 0 && isWordChar(chars[i - 1]) !== isWordChar(ch)) out += MARKUP;
+      out += escapeRegex(ch);
+    });
+    return out + MARKUP;
+  });
+  const lead = /\w/.test(needle[0]) ? "(?<!\\w)" : "";
+  const tail = /\w/.test(needle[needle.length - 1]) ? "(?!\\w)" : "";
+  return new RegExp(lead + words.join(BETWEEN_WORDS) + tail, "giu");
+}
+
+function isWordChar(ch: string): boolean {
+  return /[\p{L}\p{N}]/u.test(ch);
 }
 
 function phraseRegex(needle: string, separator: string, flags = "g"): RegExp {
