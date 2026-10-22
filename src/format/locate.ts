@@ -23,6 +23,7 @@ import { openMarker, closeMarker, type DocFormat } from "./types";
 import { normalizeAnchorText, inMarkdownTable } from "./anchor-text";
 import { contextSnippet } from "./compose";
 import { wholeBlockLines } from "./blocks";
+import { splitFrontmatter } from "./frontmatter";
 
 export type Placement = {
   // Source offsets the markers wrap. For a block placement the markers
@@ -53,7 +54,8 @@ export type AnchorErrorCode =
   | "no-element" // no element has the selector
   | "overlap" // it overlaps another comment's anchor
   | "straddle" // it straddles a code block, equation, or diagram
-  | "unmappable"; // found in the rendered text, but not mappable to source
+  | "unmappable" // found in the rendered text, but not mappable to source
+  | "in-frontmatter"; // only in the Markdown front matter, where markers can't go
 
 export class AnchorError extends Error {
   // For "ambiguous": how many times the passage appears. For "overlap":
@@ -220,7 +222,17 @@ type Region = { start: number; end: number; kind: "block" | "atom"; indent?: str
 
 function locateInMarkdown(body: string, needle: string, opts: LocateOptions): Placement {
   const regions = protectedRegions(body);
-  const matches = findMatches(body, needle, markdownTolerant(needle));
+  // Never in the front matter: markers there would change its YAML for
+  // every program that reads it (`frontmatterAnchor.ts`).
+  const front = splitFrontmatter(body).front.length;
+  const everywhere = findMatches(body, needle, markdownTolerant(needle));
+  const matches = everywhere.filter((m) => m.start >= front);
+  if (matches.length === 0 && everywhere.length > 0) {
+    throw new AnchorError(
+      `"${needle}" is in the front matter, where markers can't go.`,
+      "in-frontmatter",
+    );
+  }
   const chosen = pick(matches, needle, opts, body);
   let { start, end } = chosen;
 
@@ -368,8 +380,30 @@ function inlineCodeSpans(line: string): { start: number; end: number }[] {
 // cells ("one beta") finds "one\n- beta" and "one | beta".
 const BETWEEN_WORDS =
   "(?:[\\s*_~`|]|<[^>]+>|\\n[ \\t]*(?:>[ \\t]?)*(?:[-*+][ \\t]+|\\d{1,9}[.)][ \\t]+|#{1,6}[ \\t]+)?(?:\\[[ xX]\\][ \\t]+)?)+";
+// Inline markup a reader doesn't see, which may sit at the edge of a
+// word or between a word and its punctuation: emphasis and code
+// delimiters, and link syntax around link text. So "use default." finds
+// "use `default`.", "bold words." finds "**bold words**.", and "See the
+// docs." finds "See [the docs](url).".
+const MARKUP = "(?:[*_~`]|!?\\[|\\]\\([^)\\n]*\\)|\\]\\[[^\\]\\n]*\\])*";
+
 function markdownTolerant(needle: string): RegExp {
-  return phraseRegex(needle, BETWEEN_WORDS, "gi");
+  const words = needle.split(" ").map((word) => {
+    const chars = Array.from(word);
+    let out = MARKUP;
+    chars.forEach((ch, i) => {
+      if (i > 0 && isWordChar(chars[i - 1]) !== isWordChar(ch)) out += MARKUP;
+      out += escapeRegex(ch);
+    });
+    return out + MARKUP;
+  });
+  const lead = /\w/.test(needle[0]) ? "(?<!\\w)" : "";
+  const tail = /\w/.test(needle[needle.length - 1]) ? "(?!\\w)" : "";
+  return new RegExp(lead + words.join(BETWEEN_WORDS) + tail, "giu");
+}
+
+function isWordChar(ch: string): boolean {
+  return /[\p{L}\p{N}]/u.test(ch);
 }
 
 function phraseRegex(needle: string, separator: string, flags = "g"): RegExp {

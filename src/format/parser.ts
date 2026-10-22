@@ -364,6 +364,13 @@ function parseCommentRecord(raw: Record<string, unknown>, index: number): Commen
     );
   }
 
+  const anchorFrontmatter = raw["anchor_frontmatter"];
+  if (anchorFrontmatter !== undefined && typeof anchorFrontmatter !== "boolean") {
+    throw new ForgemarkParseError(
+      "schema",
+      `Comment id=${idValue}: 'anchor_frontmatter' must be a boolean if present`,
+    );
+  }
   const anchorScope = raw["anchor_scope"];
   if (anchorScope !== undefined && typeof anchorScope !== "string") {
     throw new ForgemarkParseError(
@@ -432,6 +439,7 @@ function parseCommentRecord(raw: Record<string, unknown>, index: number): Commen
     resolved: resolved === true,
   };
   if (floating === true) out.floating = true;
+  if (anchorFrontmatter === true) out.anchor_frontmatter = true;
   if (anchorText !== undefined) out.anchor_text = unescapeContent(anchorText);
   if (anchorKind !== undefined) out.anchor_kind = anchorKind;
   if (anchorSelector !== undefined) out.anchor_selector = unescapeContent(anchorSelector);

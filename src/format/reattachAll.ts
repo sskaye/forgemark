@@ -53,7 +53,8 @@ import {
   scopeOfPlacement,
   type Placement,
 } from "./locate";
-import { findBySelector } from "./html/elements";
+import { enclosingBlockSpan, findBySelector } from "./html/elements";
+import { inMarkdownTable, markdownBlockAround, normalizeAnchorText } from "./anchor-text";
 import { findCandidates } from "./reattach";
 
 export type ReattachOutcome =
@@ -189,9 +190,9 @@ function placeOrphan(
     }
     const placement = locateAnchor(body, text, format, { near });
     const several = (placement.occurrences ?? 1) > 1;
-    const agreement = surroundings(comment, placement);
+    const agreement = surroundings(body, format, comment, placement);
     if (agreement === "differ") {
-      return { refused: surroundingsDiffer(body, text, comment, placement, several) };
+      return { refused: surroundingsDiffer(body, format, text, comment, placement, several) };
     }
     if (agreement === "unknown") return { placement, how: "unchecked" };
     return { placement, how: several ? "context" : "text" };
@@ -203,33 +204,81 @@ function placeOrphan(
 
 // Whether the words recorded either side of the passage agree with the
 // words either side of a copy of it, compared outward from the passage.
-// A side agrees when its nearest two recorded words (its only one, if it
-// recorded one) are there; a side with nothing recorded tells nothing.
-// One agreeing side is enough — an edit next to the passage leaves the
-// other — and a copy whose every recorded side differs is refused.
-function surroundings(comment: Comment, placement: Placement): "agree" | "differ" | "unknown" {
-  const sides = [
-    side(comment.context_before, placement.context_before, "before"),
-    side(comment.context_after, placement.context_after, "after"),
-  ];
+//
+// What counts is the copy's own block: its table row, paragraph, list
+// item or heading (`blockAround`). Every word between the passage and the
+// edge of that block must be the recorded one, as far as the recording
+// goes. Two words were not enough: in a table the neighbouring cell is
+// often the same on many rows ("float > 0"), so a comment moved to
+// whichever row shared it. A side with nothing in the block, or nothing
+// recorded, tells nothing. One agreeing side is enough — an edit next to
+// the passage leaves the other — and a copy whose every telling side
+// differs is refused.
+//
+// When the passage fills its block (a whole code block; a paragraph that
+// is only the passage), the block says nothing, and the nearest two words
+// outside it decide, as they did before.
+function surroundings(
+  body: string,
+  format: DocFormat,
+  comment: Comment,
+  placement: Placement,
+): "agree" | "differ" | "unknown" {
+  const around = inBlock(body, format, placement);
+  const sides =
+    around.before.length === 0 && around.after.length === 0
+      ? [
+          side(comment.context_before, placement.context_before, "before", 2),
+          side(comment.context_after, placement.context_after, "after", 2),
+        ]
+      : [
+          side(comment.context_before, around.before, "before"),
+          side(comment.context_after, around.after, "after"),
+        ];
   if (sides.includes("agrees")) return "agree";
   if (sides.includes("differs")) return "differ";
   return "unknown";
 }
 
+// The text either side of a placement, within its block.
+function inBlock(
+  body: string,
+  format: DocFormat,
+  placement: Placement,
+): { before: string; after: string } {
+  const { start, end } = placement;
+  if (format === "html") {
+    const block = enclosingBlockSpan(body, start, end);
+    if (!block) return { before: "", after: "" };
+    return {
+      before: normalizeAnchorText(body.slice(block.start, start), "html"),
+      after: normalizeAnchorText(body.slice(end, block.end), "html"),
+    };
+  }
+  const block = markdownBlockAround(body, start, end);
+  const opts = { inTable: inMarkdownTable(body, start) };
+  return {
+    before: normalizeAnchorText(body.slice(block.start, start), "markdown", opts),
+    after: normalizeAnchorText(body.slice(end, block.end), "markdown", opts),
+  };
+}
+
+// `limit`: how many words outward must match; by default, all the words
+// there are on the copy's side, up to what was recorded.
 function side(
   recorded: string | undefined,
   there: string,
   which: "before" | "after",
+  limit = Infinity,
 ): "agrees" | "differs" | "unknown" {
   const want = words(recorded ?? "");
-  if (want.length === 0) return "unknown";
   const have = words(there);
+  if (want.length === 0 || have.length === 0) return "unknown";
   if (which === "before") {
     want.reverse();
     have.reverse();
   }
-  const need = Math.min(2, want.length);
+  const need = Math.min(limit, want.length, have.length);
   for (let i = 0; i < need; i++) if (want[i] !== have[i]) return "differs";
   return "agrees";
 }
@@ -265,18 +314,26 @@ function notInScope(
 
 function surroundingsDiffer(
   body: string,
+  format: DocFormat,
   text: string,
   comment: Comment,
   placement: Placement,
   several: boolean,
 ): Refused["refused"] {
   const line = lineOf(body, placement.start);
+  // Quote what was compared: the copy's own block, unless the passage
+  // fills it and the words outside decided.
+  const block = inBlock(body, format, placement);
+  const there =
+    block.before.length === 0 && block.after.length === 0
+      ? { before: placement.context_before, after: placement.context_after }
+      : block;
   const where = several
     ? `${quote(text)} appears ${placement.occurrences} times; the closest copy, at line ${line},`
     : `${quote(text)} is in the page once, at line ${line}, but it`;
   const recorded = comment.context_before?.trim()
-    ? `before it "…${tail(comment.context_before)}", there "…${tail(placement.context_before)}"`
-    : `after it "${head(comment.context_after ?? "")}…", there "${head(placement.context_after)}…"`;
+    ? `before it "…${tail(comment.context_before)}", there "…${tail(there.before)}"`
+    : `after it "${head(comment.context_after ?? "")}…", there "${head(there.after)}…"`;
   return {
     reason: "surroundings-differ",
     detail: `${where} doesn't have the words recorded around it: ${recorded}.`,

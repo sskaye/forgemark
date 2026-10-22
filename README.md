@@ -50,7 +50,7 @@ the strongest predictor of week-two retention was completing a real piece of wor
 -->
 ```
 
-Records carry the id, the anchored text, the author, the body, replies, suggested edits, and floating notes. The parser reads a file back to the same bytes it wrote. The full reference is in [`assets/forgemark-skill/SKILL.md`](assets/forgemark-skill/SKILL.md).
+Records carry the id, the anchored text, the author, the body, replies, suggested edits, and floating notes. A Markdown file's front matter is shown above the document and takes comments too; those are kept without markers, so the YAML other programs read stays as it was. The parser reads a file back to the same bytes it wrote. The full reference is in [`assets/forgemark-skill/SKILL.md`](assets/forgemark-skill/SKILL.md).
 
 Beyond CommonMark, the rendered view shows what GitHub shows: tables, task lists, footnotes, alerts, math, Mermaid diagrams, syntax-highlighted code, and inline HTML. It also shows Obsidian callouts, wikilinks, and image embeds. Editing a paragraph rewrites only that paragraph in the file, and keeps the syntax it was written in.
 

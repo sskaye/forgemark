@@ -56,6 +56,10 @@ export type Comment = {
   replies?: Reply[];
   suggested_edit?: SuggestedEdit;
   floating?: boolean;
+  // A comment on the Markdown front matter (`frontmatterAnchor.ts`): a
+  // floating note, since markers can't go in the YAML, that this version
+  // shows on the passage `anchor_text` quotes.
+  anchor_frontmatter?: boolean;
   // Forward-compat: unknown top-level fields preserved across round-trip.
   additionalKeys?: Record<string, unknown>;
 };
@@ -89,6 +93,7 @@ export function detectFormat(pathOrName: string | null | undefined): DocFormat {
 export const COMMENT_KEY_ORDER = [
   "id",
   "floating",
+  "anchor_frontmatter",
   "anchor_text",
   "anchor_kind",
   "anchor_selector",

@@ -174,6 +174,9 @@ export type NewComposerState = {
   // The passage runs across two blocks; it takes a comment, not a
   // suggestion, which would merge them.
   crossesBlocks?: boolean;
+  // The passage is in the front matter: `from`/`to` are source offsets
+  // there, and the comment is kept without markers.
+  frontmatter?: boolean;
   // A stable CSS selector for an element anchor, when the report gave
   // the element an id. Used as an exact reattachment hint after the
   // report is regenerated.

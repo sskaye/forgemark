@@ -23,7 +23,7 @@ node <skill directory>/scripts/forgemark.mjs --help
 | --- | --- |
 | `forgemark list <file> [--unresolved] [--orphaned] [--json]` | Every comment, one per entry: id, kind, open/resolved, attached/orphaned/floating, author, anchor, first line, reply count. |
 | `forgemark show <file> <id> [--json]` | One thread in full: anchor and its context, the body, every reply in order, any suggested edit. |
-| `forgemark comment <file> --author NAME --anchor "passage" --body "…"` | Comment on a passage. Quote it as a reader sees it; line breaks and inline formatting are ignored when matching. |
+| `forgemark comment <file> --author NAME --anchor "passage" --body "…"` | Comment on a passage. Quote it as a reader sees it; line breaks, inline formatting (`**`, backticks) and link syntax are ignored when matching. A passage in a Markdown file's front matter gets a comment without markers. |
 | `forgemark comment <file> --author NAME --anchor "passage" --suggest "replacement" [--body "…"]` | Suggest an edit: the reviewer can accept it in one click. `--body` is optional here. |
 | `forgemark comment <file> --author NAME --selector "#fig-3" --body "…"` | HTML only: comment on a whole figure, chart, or table by its `id`. |
 | `forgemark comment <file> --author NAME --floating --body "…"` | A note on the document as a whole, with no anchor. |
@@ -50,7 +50,7 @@ Exit codes: 0 done; 1 refused (the file has problems, the passage is ambiguous, 
 
 **Address a comment.** `show` it, edit the document's prose with your usual editing tools, then `forgemark reply <file> <id> --author NAME --body "…"` saying what you changed, then `forgemark lint <file>`. Don't `resolve` unless the user asked; the reviewer decides when a thread is done.
 
-**Leave a comment.** `forgemark comment <file> --author NAME --anchor "…" --body "…"`. Pick the exact passage the comment is about; a shorter, distinctive phrase beats a whole paragraph. To comment on something already commented on, reply to that thread instead — anchors may not overlap, and the tool will tell you which comment is in the way. To comment on a code block, quote a line inside it; the tool anchors the whole block.
+**Leave a comment.** `forgemark comment <file> --author NAME --anchor "…" --body "…"`. Pick the exact passage the comment is about; a shorter, distinctive phrase beats a whole paragraph. To comment on something already commented on, reply to that thread instead — anchors may not overlap, and the tool will tell you which comment is in the way. To comment on a code block, quote a line inside it; the tool anchors the whole block. To comment on the front matter (the YAML between `---` lines at the top), quote a passage in it: the comment is kept without markers, since markers there would change the YAML other programs read; it can't be a suggestion.
 
 **Suggest an edit.** `forgemark comment <file> --author NAME --anchor "old words" --suggest "new words"`. Accepting replaces exactly the anchored text, so anchor precisely what should change, within one paragraph, list item, or table cell: a suggestion across two is refused, since accepting it would merge them. Suggest an edit to each part, or comment on the whole.
 
@@ -123,6 +123,7 @@ Some prose with <!-- fmc:1 -->an anchored passage<!-- /fmc:1 --> and more prose.
 | `replies` | optional | List of `{author, timestamp, body, edited_at?}` in chronological order. One `replies:` key per record — append to the list, never add a second key. |
 | `suggested_edit` | optional | `{from, to}`. `from` is the exact source between the markers; accepting replaces it with `to` and removes the comment and its markers. |
 | `floating` | optional | `true` means no markers and no anchor. |
+| `anchor_frontmatter` | optional | With `floating: true`: a comment on the Markdown front matter, on the passage `anchor_text` quotes. Never put markers inside front matter. |
 
 Unknown fields are preserved on round-trip.
 

@@ -241,7 +241,11 @@ function printList(doc: Doc, entries: Listed[], flags: Flags): void {
   }
   for (const e of shown) {
     const c = e.comment;
-    const kind = c.suggested_edit ? "suggestion" : c.floating ? "note" : "comment";
+    const kind = c.suggested_edit
+      ? "suggestion"
+      : c.floating && !c.anchor_frontmatter
+        ? "note"
+        : "comment";
     const state = c.resolved ? "resolved" : "open";
     const head = [`#${c.id}`, kind, state, e.status, c.author, c.timestamp.slice(0, 10)].join("  ");
     console.log(head);
@@ -268,7 +272,13 @@ function printShow(doc: Doc, entry: Listed, flags: Flags): void {
     return;
   }
   const c = entry.comment;
-  const kind = c.suggested_edit ? "Suggestion" : c.floating ? "Floating note" : "Comment";
+  const kind = c.suggested_edit
+    ? "Suggestion"
+    : c.anchor_frontmatter
+      ? "Comment on the front matter"
+      : c.floating
+        ? "Floating note"
+        : "Comment";
   console.log(
     `${kind} #${c.id} by ${c.author} at ${c.timestamp} — ${c.resolved ? "resolved" : "open"}, ${entry.status}`,
   );

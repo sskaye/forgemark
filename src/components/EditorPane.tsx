@@ -14,6 +14,8 @@ import { HtmlView, type HtmlCapturedSelection, type HtmlViewHandle } from "./Htm
 import { SourceView, type SourceViewHandle } from "./SourceView";
 import { NewCommentComposer } from "./NewCommentComposer";
 import { SelectionToolbar } from "./SelectionToolbar";
+import { FrontmatterBlock } from "./FrontmatterBlock";
+import { frontmatterFields, frontmatterPlacementAt } from "../format/frontmatterAnchor";
 import { OverlapPrompt } from "./OverlapPrompt";
 import { FindReplaceBar } from "./FindReplaceBar";
 import { LostAnchorBanner } from "./LostAnchorBanner";
@@ -212,6 +214,7 @@ export function EditorPane({ docId }: Props) {
             : {}),
           ...(captured.kind === "floating" ? { floating: true } : {}),
           ...(captured.crossesBlocks ? { crossesBlocks: true } : {}),
+          ...(captured.frontmatter ? { frontmatter: true } : {}),
           ...(captured.anchorSelector ? { anchorSelector: captured.anchorSelector } : {}),
           x: captured.rect.left,
           y: captured.rect.bottom + 6,
@@ -231,11 +234,16 @@ export function EditorPane({ docId }: Props) {
         openComposerFor(captured, initialMode);
         return;
       }
+      // A selection in the front matter block is outside the editor.
+      if (selectionAffordance?.frontmatter) {
+        openComposerFor(selectionAffordance, "comment");
+        return;
+      }
       const captured = handleRef.current?.captureSelection();
       if (!captured) return; // empty / collapsed selection
       openComposerFor(fromMarkdownCapture(captured), initialMode);
     },
-    [isHtml, openComposerFor, state.viewMode],
+    [isHtml, openComposerFor, selectionAffordance, state.viewMode],
   );
 
   const openFindReplace = useCallback(
@@ -490,6 +498,24 @@ export function EditorPane({ docId }: Props) {
       const c = state.composer;
       if (!c || c.mode !== "new") return;
       const id = nextCommentId(state.comments);
+      if (c.frontmatter) {
+        // On the front matter: no markers, which would change its YAML.
+        const at = frontmatterPlacementAt(state.body, c.from, c.to);
+        if (!at) return;
+        dispatch({
+          type: "addComment",
+          body: state.body,
+          comment: {
+            id,
+            ...frontmatterFields(at),
+            author,
+            timestamp: new Date().toISOString(),
+            resolved: false,
+            body: commentBody,
+          },
+        });
+        return;
+      }
       if (c.floating) {
         // Nothing in the source to anchor to: a script produced the
         // passage and no element with an id holds it. The note keeps
@@ -742,6 +768,7 @@ export function EditorPane({ docId }: Props) {
   const suggestion = useMemo((): { allowed: boolean; reason?: string } => {
     const c = state.composer;
     if (!c || c.mode !== "new") return { allowed: true };
+    if (c.frontmatter) return { allowed: false, reason: "Comment only — front matter" };
     if (c.crossesBlocks) {
       return { allowed: false, reason: "Comment only — this spans more than one block" };
     }
@@ -915,26 +942,37 @@ export function EditorPane({ docId }: Props) {
             handleRef={htmlRef}
           />
         ) : state.viewMode === "source" ? null : (
-          <RenderedView
-            // Remount on every content-replacing load so the Tiptap undo
-            // stack can't outlive the document it belongs to.
-            key={state.loadGeneration}
-            body={state.body}
-            onEdit={(body) => dispatch({ type: "edit", body })}
-            readOnly={editorReadOnly}
-            focusedCommentId={state.focusedCommentId}
-            hoveredCommentId={state.hoveredCommentId}
-            onAnchorClick={(id) => dispatch({ type: "setFocusedComment", id, reveal: false })}
-            onAnchorHover={(id) => dispatch({ type: "setHoveredComment", id })}
-            onExternalLinkError={(message) => dispatch({ type: "error", message })}
-            baseDir={dirOf(state.filePath)}
-            handleRef={handleRef}
-            onSelectionChange={
-              isActive
-                ? (captured) => showAffordance(captured && fromMarkdownCapture(captured))
-                : undefined
-            }
-          />
+          <>
+            <FrontmatterBlock
+              body={state.body}
+              comments={state.comments}
+              focusedCommentId={state.focusedCommentId}
+              hoveredCommentId={state.hoveredCommentId}
+              onAnchorClick={(id) => dispatch({ type: "setFocusedComment", id, reveal: false })}
+              onAnchorHover={(id) => dispatch({ type: "setHoveredComment", id })}
+              onSelectionChange={isActive ? showAffordance : undefined}
+            />
+            <RenderedView
+              // Remount on every content-replacing load so the Tiptap undo
+              // stack can't outlive the document it belongs to.
+              key={state.loadGeneration}
+              body={state.body}
+              onEdit={(body) => dispatch({ type: "edit", body })}
+              readOnly={editorReadOnly}
+              focusedCommentId={state.focusedCommentId}
+              hoveredCommentId={state.hoveredCommentId}
+              onAnchorClick={(id) => dispatch({ type: "setFocusedComment", id, reveal: false })}
+              onAnchorHover={(id) => dispatch({ type: "setHoveredComment", id })}
+              onExternalLinkError={(message) => dispatch({ type: "error", message })}
+              baseDir={dirOf(state.filePath)}
+              handleRef={handleRef}
+              onSelectionChange={
+                isActive
+                  ? (captured) => showAffordance(captured && fromMarkdownCapture(captured))
+                  : undefined
+              }
+            />
+          </>
         )}
       </div>
       {isActive &&
@@ -950,6 +988,7 @@ export function EditorPane({ docId }: Props) {
             y={selectionAffordance.rect.top}
             allowSuggest={
               !selectionAffordance.crossesBlocks &&
+              !selectionAffordance.frontmatter &&
               canSuggest(
                 selectionAffordance.kind === "inline" ? undefined : selectionAffordance.kind,
                 selectionAffordance.from,

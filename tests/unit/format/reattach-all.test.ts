@@ -411,3 +411,87 @@ describe("a passage whose text turns up somewhere else", () => {
     expect(outcomes[0].outcome).toBe("orphaned");
   });
 });
+
+// ForgeGraph's report against 1.11.0: in a table, the cell next to a
+// passage is often the same on many rows, so "the words next to it
+// match" picked whichever row shared that cell. The surroundings must
+// match across the passage's own row.
+describe("a passage repeated down a table", () => {
+  const header =
+    "| param | default | range | status | description |\n| --- | --- | --- | --- | --- |\n";
+  // ForgeGraph's table, as reported.
+  const row = (name: string, value: string, range: string, status: string, desc: string) =>
+    `| ${name} | ${value} | ${range} | ${status} | ${desc} |\n`;
+  const shape = row(
+    "series.marker.shape",
+    "circle",
+    "circle, square",
+    "fixed",
+    "Marker shapes for groups, in order.",
+  );
+  const size = (status: string) =>
+    row("series.marker.size", "0.5", "float > 0", status, "Marker size, × base size.");
+  const edge = row(
+    "series.marker.edge_width",
+    "0.05",
+    "float > 0",
+    "fixed",
+    "Marker outline width, × base size.",
+  );
+  const fill = row(
+    "series.marker.fill",
+    "filled",
+    "filled, open",
+    "fixed",
+    "Marker fills for groups, in order.",
+  );
+
+  // As `comment --anchor "fixed" --occurrence 2` records it.
+  function made(): Comment {
+    const original = header + shape + size("fixed") + edge + fill;
+    const p = locateAnchor(original, "fixed", "markdown", { occurrence: 2 });
+    expect(p.context_before).toBe("series.marker.size 0.5 float > 0");
+    return comment(1, {
+      anchor_text: "fixed",
+      context_before: p.context_before,
+      context_after: p.context_after,
+    });
+  }
+
+  it("stays orphaned when its row's text changed and other rows still have it", () => {
+    const rebuilt = header + shape + edge + fill + size("variable");
+    const { file, outcomes } = reattachOrphans({ body: rebuilt, comments: [made()] }, "markdown");
+    expect(outcomes[0]).toMatchObject({ outcome: "orphaned", reason: "surroundings-differ" });
+    expect(file.body).toBe(rebuilt);
+  });
+
+  it("follows its row when the row moves unchanged", () => {
+    const rebuilt = header + shape + edge + fill + size("fixed");
+    const { file, outcomes } = reattachOrphans({ body: rebuilt, comments: [made()] }, "markdown");
+    expect(outcomes[0]).toMatchObject({ outcome: "attached", how: "context", line: 6 });
+    expect(file.body).toContain("| series.marker.size | 0.5 | float > 0 | <!-- fmc:1 -->fixed");
+  });
+
+  it("does the same in an HTML table without row ids", () => {
+    const tr = (name: string, value: string, status: string) =>
+      `<tr><td>${name}</td><td>${value}</td><td>float &gt; 0</td><td>${status}</td></tr>\n`;
+    const table = (rows: string) =>
+      `<!doctype html><html><body>\n<table>\n${rows}</table>\n</body></html>\n`;
+    const original = table(tr("size", "0.5", "fixed") + tr("edge", "0.05", "fixed"));
+    const p = locateAnchor(original, "fixed", "html", { occurrence: 1 });
+    const c = comment(1, {
+      anchor_text: "fixed",
+      context_before: p.context_before,
+      context_after: p.context_after,
+    });
+    const changed = table(tr("edge", "0.05", "fixed") + tr("size", "0.5", "variable"));
+    expect(reattachOrphans({ body: changed, comments: [c] }, "html").outcomes[0]).toMatchObject({
+      outcome: "orphaned",
+    });
+    const moved = table(tr("edge", "0.05", "fixed") + tr("size", "0.5", "fixed"));
+    expect(reattachOrphans({ body: moved, comments: [c] }, "html").outcomes[0]).toMatchObject({
+      outcome: "attached",
+      line: 4,
+    });
+  });
+});
