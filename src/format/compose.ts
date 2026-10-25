@@ -94,12 +94,20 @@ export function stripAnchoredMarkers(
 export function contextSnippet(text: string, side: "before" | "after", maxChars = 80): string {
   if (text.length === 0) return "";
   if (side === "before") {
-    const slice = text.slice(-maxChars);
+    let slice = text.slice(-maxChars);
+    // Start at a whole word: a fragment of one ("ers" of "parameters")
+    // isn't what the reader sees there.
+    if (slice.length < text.length && /\S/.test(text[text.length - slice.length - 1])) {
+      slice = slice.replace(/^\S*/, "");
+    }
     // Trim to start at a sentence boundary if one is in range.
     const m = slice.match(/[.!?]\s+(.+)$/);
     return (m ? m[1] : slice).trim();
   } else {
-    const slice = text.slice(0, maxChars);
+    let slice = text.slice(0, maxChars);
+    if (slice.length < text.length && /\S/.test(text[slice.length])) {
+      slice = slice.replace(/\S*$/, "");
+    }
     const m = slice.match(/^(.+?)[.!?](\s|$)/);
     return (m ? m[1] + "." : slice).trim();
   }
