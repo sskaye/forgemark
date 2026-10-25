@@ -393,6 +393,9 @@ function markdownTolerant(needle: string): RegExp {
     let out = MARKUP;
     chars.forEach((ch, i) => {
       if (i > 0 && isWordChar(chars[i - 1]) !== isWordChar(ch)) out += MARKUP;
+      // Punctuation may be escaped in the source: "<name>" finds
+      // `\<name>`, "[x, y]" finds `\[x, y\]`.
+      if (/[!-/:-@[-`{-~]/.test(ch)) out += "\\\\?";
       out += escapeRegex(ch);
     });
     return out + MARKUP;

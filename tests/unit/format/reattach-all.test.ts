@@ -540,7 +540,7 @@ describe("surroundings cut mid-word", () => {
       `before it "…layers entry sets after…", there "…layer's entry sets after…"`,
     );
     expect(detail).toContain(
-      `after it "…\\[float, column\\]; Distance below…", there "…\\[float, column\\]; Distance under…"`,
+      `after it "…\\[float, column\\]; Distance below…", there "…[float, column]; Distance under…"`,
     );
   });
 
