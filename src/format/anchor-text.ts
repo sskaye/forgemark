@@ -25,6 +25,9 @@ export type NormalizeOptions = {
   // cells and reads as a space (`inMarkdownTable`). In prose a pipe is
   // text.
   inTable?: boolean;
+  // Markdown: read backslash escapes as 1.12.0 and earlier did, keeping
+  // the backslash, so a record they wrote still compares equal.
+  legacyEscapes?: boolean;
 };
 
 // The rendered text of a run of source. Whitespace is collapsed, so a
@@ -41,7 +44,7 @@ export function normalizeAnchorText(
   const text =
     format === "html"
       ? renderedHtml(withoutMarkers)
-      : renderedMarkdown(withoutMarkers, opts.inTable === true);
+      : renderedMarkdown(withoutMarkers, opts.inTable === true, opts.legacyEscapes === true);
   return collapse(text);
 }
 
@@ -56,8 +59,15 @@ export function anchorTextMatches(
   opts: NormalizeOptions = {},
 ): boolean {
   const rendered = normalizeAnchorText(source, format, opts);
+  if (collapse(recorded) === rendered || normalizeAnchorText(recorded, format, opts) === rendered) {
+    return true;
+  }
+  // Recorded by 1.12.0 or earlier, which kept a Markdown escape's
+  // backslash (and lost an escaped `<name>`).
   return (
-    collapse(recorded) === rendered || normalizeAnchorText(recorded, format, opts) === rendered
+    format === "markdown" &&
+    source.includes("\\") &&
+    collapse(recorded) === normalizeAnchorText(source, format, { ...opts, legacyEscapes: true })
   );
 }
 
@@ -203,7 +213,7 @@ function blockMarkupAsSpace(s: string, inTable: boolean): string {
     .replace(/(?<!\\)\|/g, " ");
 }
 
-function renderedMarkdown(s: string, inTable = false): string {
+function renderedMarkdown(s: string, inTable = false, legacyEscapes = false): string {
   // A whole-code-block anchor: the markers sit on their own lines around
   // the fence, and the app records the code itself.
   const fence = s.match(/^\s*(`{3,}|~{3,})[^\n]*\n([\s\S]*?)\n\s*\1\s*$/);
@@ -220,7 +230,7 @@ function renderedMarkdown(s: string, inTable = false): string {
   const parts = s.split(/(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/);
   let out = "";
   for (let i = 0; i < parts.length; i += 3) {
-    out += stripProse(parts[i] ?? "");
+    out += stripProse(parts[i] ?? "", legacyEscapes);
     if (i + 2 < parts.length) out += parts[i + 2];
   }
   return decodeHTML(out);
@@ -228,12 +238,24 @@ function renderedMarkdown(s: string, inTable = false): string {
 
 // An inline equation is kept as written, dollars and all, as the app
 // records it: its `_` and `*` are TeX, not emphasis.
-function stripProse(s: string): string {
+function stripProse(s: string, legacyEscapes = false): string {
   const parts = s.split(/(\$[^\s$](?:[^$]*[^\s$])?\$)/);
-  return parts.map((p, i) => (i % 2 === 1 ? p : stripInlineMarkup(p))).join("");
+  return parts.map((p, i) => (i % 2 === 1 ? p : stripInlineMarkup(p, legacyEscapes))).join("");
 }
 
-function stripInlineMarkup(s: string): string {
+// A backslash before ASCII punctuation makes it a literal character —
+// `\<name>` is the text "<name>", not a tag; `\*` is an asterisk, not
+// emphasis — and a backslash at the end of a line is a line break. The
+// escaped character is set aside while markup is stripped, as a private
+// use character, and put back after.
+const ESCAPE_RE = /\\([!-/:-@[-`{-~]|\n)/g;
+const ESCAPED_RE = /[\uE000-\uE07F]/g;
+const setAside = (ch: string) =>
+  ch === "\n" ? "\n" : String.fromCharCode(0xe000 + ch.charCodeAt(0));
+const putBack = (ch: string) => String.fromCharCode(ch.charCodeAt(0) - 0xe000);
+
+function stripInlineMarkup(s: string, legacyEscapes = false): string {
+  if (!legacyEscapes) s = s.replace(ESCAPE_RE, (_m, ch: string) => setAside(ch));
   return (
     s
       // HTML tags and comments.
@@ -256,6 +278,7 @@ function stripInlineMarkup(s: string): string {
       .replace(/\*\*|__|~~/g, "")
       .replace(/(^|[\s(["'])[*_](?=\S)/g, "$1")
       .replace(/(?<=\S)[*_](?=$|[\s)\].,;:!?"'])/g, "")
+      .replace(ESCAPED_RE, putBack)
   );
 }
 

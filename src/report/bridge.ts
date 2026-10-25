@@ -49,6 +49,84 @@ function scrollInto(el: Element | null, block: ScrollLogicalPosition): void {
   }
 }
 
+// Whether a link goes to a place in this page: its address, resolved as
+// the browser resolves it, is the page's own but for the fragment.
+function inPage(link: Element & { href: string }, win: Window): boolean {
+  const href = link.getAttribute("href") ?? "";
+  if (!href.includes("#") || href === "#") return false;
+  const page = (u: string) => u.split("#")[0];
+  try {
+    return page(link.href) === page(win.location.href);
+  } catch {
+    return false;
+  }
+}
+
+// Go to a place in the page the way following a link to it does.
+function goToFragment(win: Window, id: string): void {
+  const doc = win.document;
+  const el =
+    doc.getElementById(id) ??
+    Array.from(doc.querySelectorAll("a[name]")).find((a) => a.getAttribute("name") === id) ??
+    null;
+  if (!el) return;
+  if (decodeURIComponent(win.location.hash.slice(1)) !== id) {
+    try {
+      win.location.hash = id;
+    } catch {
+      // A page with no address to put a fragment on.
+    }
+  }
+  scrollInto(el, "start");
+}
+
+// Show an element the page has hidden in a part the reader opens: a
+// closed <details>, or a section the page shows by the address's
+// fragment (tabs written as links to ids), by opening it as the reader
+// would. Whether anything was opened.
+function reveal(el: Element, win: Window): boolean {
+  // Whatever is inside a closed <details> is hidden.
+  let opened = false;
+  for (let a = el.parentElement; a; a = a.parentElement) {
+    const details = a as Element & { open?: boolean };
+    if (a.tagName === "DETAILS" && !details.open) {
+      details.open = true;
+      opened = true;
+    }
+  }
+  if (!hidden(el)) return opened;
+  const doc = win.document;
+  const linked = new Set(
+    Array.from(doc.querySelectorAll("a[href^='#']")).map((a) => {
+      try {
+        return decodeURIComponent((a.getAttribute("href") ?? "").slice(1));
+      } catch {
+        return "";
+      }
+    }),
+  );
+  for (let a = el.parentElement; a && a !== doc.body; a = a.parentElement) {
+    if (a.id && linked.has(a.id)) {
+      if (decodeURIComponent(win.location.hash.slice(1)) === a.id) return opened;
+      try {
+        win.location.hash = a.id;
+      } catch {
+        return opened;
+      }
+      return true;
+    }
+  }
+  return opened;
+}
+
+// Whether the page draws nothing of an element: it, or something
+// around it, isn't displayed.
+function hidden(el: Element): boolean {
+  const check = (el as Element & { checkVisibility?: () => boolean }).checkVisibility;
+  if (typeof check === "function") return !check.call(el);
+  return typeof el.getClientRects === "function" && el.getClientRects().length === 0;
+}
+
 // Whether an element is already where the reader can see it: its top on
 // screen, and its bottom too unless it is taller than the screen.
 function inView(el: Element, win: Window): boolean {
@@ -428,17 +506,18 @@ export function installBridge(win: Window, channel: BridgeChannel): () => void {
     if (target?.closest?.("[data-forgemark]")) return;
     const link = target?.closest?.("a[href]");
     if (link) {
-      // A link must never navigate the frame away from the report. A
-      // fragment is followed here; everything else is the app's call.
+      // A link must never navigate the frame away from the report. A link
+      // to a place in the page is the browser's to follow, as it would
+      // anywhere: the fragment changes, `:target` and the page's own
+      // `hashchange` handlers see it, so tabs written as links to ids
+      // switch, and a handler that cancelled the click is obeyed.
+      // Everything else is the app's call.
+      if (inPage(link as Element & { href: string }, win)) return;
       e.preventDefault();
       const href = link.getAttribute("href") ?? "";
       if (href.startsWith("#")) {
-        const id = decodeURIComponent(href.slice(1));
-        const el =
-          doc.getElementById(id) ??
-          Array.from(doc.querySelectorAll("a[name]")).find((a) => a.getAttribute("name") === id) ??
-          null;
-        scrollInto(el, "start");
+        // In the page, but a <base> resolves it elsewhere.
+        goToFragment(win, decodeURIComponent(href.slice(1)));
       } else {
         channel.send({ type: "link", href });
       }
@@ -621,11 +700,18 @@ export function installBridge(win: Window, channel: BridgeChannel): () => void {
         const el =
           anchorElement(doc, message.id) ??
           doc.querySelector(`[data-fm-passage-host~="${message.id}"]`);
-        if (el && !inView(el, win)) scrollInto(el, "center");
+        if (!el) break;
+        if (reveal(el, win)) {
+          // The page shows the section when its `hashchange` handler
+          // runs, which is after this.
+          win.setTimeout(() => scrollInto(el, "center"), 50);
+        } else if (!inView(el, win)) {
+          scrollInto(el, "center");
+        }
         break;
       }
       case "scrollToFragment":
-        scrollInto(doc.getElementById(message.id), "start");
+        goToFragment(win, message.id);
         break;
     }
   };

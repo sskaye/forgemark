@@ -368,6 +368,66 @@
       el.scrollIntoView({ block, behavior: "smooth" });
     }
   }
+  function inPage(link, win) {
+    const href = link.getAttribute("href") ?? "";
+    if (!href.includes("#") || href === "#") return false;
+    const page = (u) => u.split("#")[0];
+    try {
+      return page(link.href) === page(win.location.href);
+    } catch {
+      return false;
+    }
+  }
+  function goToFragment(win, id) {
+    const doc = win.document;
+    const el = doc.getElementById(id) ?? Array.from(doc.querySelectorAll("a[name]")).find((a) => a.getAttribute("name") === id) ?? null;
+    if (!el) return;
+    if (decodeURIComponent(win.location.hash.slice(1)) !== id) {
+      try {
+        win.location.hash = id;
+      } catch {
+      }
+    }
+    scrollInto(el, "start");
+  }
+  function reveal(el, win) {
+    let opened = false;
+    for (let a = el.parentElement; a; a = a.parentElement) {
+      const details = a;
+      if (a.tagName === "DETAILS" && !details.open) {
+        details.open = true;
+        opened = true;
+      }
+    }
+    if (!hidden(el)) return opened;
+    const doc = win.document;
+    const linked = new Set(
+      Array.from(doc.querySelectorAll("a[href^='#']")).map((a) => {
+        try {
+          return decodeURIComponent((a.getAttribute("href") ?? "").slice(1));
+        } catch {
+          return "";
+        }
+      })
+    );
+    for (let a = el.parentElement; a && a !== doc.body; a = a.parentElement) {
+      if (a.id && linked.has(a.id)) {
+        if (decodeURIComponent(win.location.hash.slice(1)) === a.id) return opened;
+        try {
+          win.location.hash = a.id;
+        } catch {
+          return opened;
+        }
+        return true;
+      }
+    }
+    return opened;
+  }
+  function hidden(el) {
+    const check = el.checkVisibility;
+    if (typeof check === "function") return !check.call(el);
+    return typeof el.getClientRects === "function" && el.getClientRects().length === 0;
+  }
   function inView(el, win) {
     if (typeof el.getBoundingClientRect !== "function") return false;
     const r = el.getBoundingClientRect();
@@ -672,12 +732,11 @@
       if (target?.closest?.("[data-forgemark]")) return;
       const link = target?.closest?.("a[href]");
       if (link) {
+        if (inPage(link, win)) return;
         e.preventDefault();
         const href = link.getAttribute("href") ?? "";
         if (href.startsWith("#")) {
-          const id = decodeURIComponent(href.slice(1));
-          const el = doc.getElementById(id) ?? Array.from(doc.querySelectorAll("a[name]")).find((a) => a.getAttribute("name") === id) ?? null;
-          scrollInto(el, "start");
+          goToFragment(win, decodeURIComponent(href.slice(1)));
         } else {
           channel.send({ type: "link", href });
         }
@@ -821,11 +880,16 @@
           break;
         case "scrollTo": {
           const el = anchorElement(doc, message.id) ?? doc.querySelector(`[data-fm-passage-host~="${message.id}"]`);
-          if (el && !inView(el, win)) scrollInto(el, "center");
+          if (!el) break;
+          if (reveal(el, win)) {
+            win.setTimeout(() => scrollInto(el, "center"), 50);
+          } else if (!inView(el, win)) {
+            scrollInto(el, "center");
+          }
           break;
         }
         case "scrollToFragment":
-          scrollInto(doc.getElementById(message.id), "start");
+          goToFragment(win, message.id);
           break;
       }
     };

@@ -495,3 +495,63 @@ describe("a passage repeated down a table", () => {
     });
   });
 });
+
+// ForgeGraph's report against 1.12.0: a recording cut at 80 characters
+// ends in a piece of a word ("ers" of "parameters"), which the whole-row
+// comparison then found different, and the message quoted the words next
+// to the passage, which agreed, rather than where they parted.
+describe("surroundings cut mid-word", () => {
+  // ForgeGraph's spec mirror, as it was.
+  const spec =
+    "parameters:          *# The layer's parameters, which a GraphSpec's layers entry sets after its type.*\\\n" +
+    "    axis: y          *# \\[x, y\\]; Axis the bars extend along.*\\\n" +
+    "    value:\\\n" +
+    "        lower: None          *# \\[float, column\\]; Distance below each value: a number or a column. A GraphSpec must set it.*\n";
+  // Comment 5 there, recorded by 1.12.0.
+  const five = comment(5, {
+    anchor_text: "Axis the bars extend along.",
+    context_before:
+      "ers, which a GraphSpec's layers entry sets after its type.*\\ axis: y # \\[x, y\\];",
+    context_after:
+      "\\ value:\\ lower: None # \\[float, column\\]; Distance below each value: a number o",
+  });
+
+  it("re-attaches a comment whose recording ends in a piece of a word", () => {
+    const { outcomes } = reattachOrphans({ body: spec, comments: [five] }, "markdown");
+    expect(outcomes[0]).toMatchObject({ outcome: "attached", line: 2 });
+  });
+
+  it("records whole words", () => {
+    const p = locateAnchor(spec, "Axis the bars extend along.", "markdown");
+    expect(p.context_before.startsWith("ers")).toBe(false);
+    expect(p.context_before).toMatch(/^\S+ /);
+    expect(spec.replace(/\s+/g, " ")).toContain(p.context_before.split(" ")[0]);
+    expect(p.context_after).not.toMatch(/ o$/);
+  });
+
+  it("quotes each side where it parts from the recording", () => {
+    const changed = spec
+      .replace("which a GraphSpec's layers", "which a layer's")
+      .replace("Distance below each value", "Distance under each value");
+    const { outcomes } = reattachOrphans({ body: changed, comments: [five] }, "markdown");
+    expect(outcomes[0]).toMatchObject({ outcome: "orphaned", reason: "surroundings-differ" });
+    const detail = outcomes[0].outcome === "orphaned" ? outcomes[0].detail : "";
+    expect(detail).toContain(
+      `before it "…layers entry sets after…", there "…layer's entry sets after…"`,
+    );
+    expect(detail).toContain(
+      `after it "…\\[float, column\\]; Distance below…", there "…[float, column]; Distance under…"`,
+    );
+  });
+
+  it("quotes only a side that differs", () => {
+    // Nothing recorded before it: only the after side tells, and only it
+    // is quoted, not the words before the passage.
+    const changed = spec.replace("Distance below each value", "Distance under each value");
+    const c = comment(5, { ...five, context_before: undefined });
+    const o = reattachOrphans({ body: changed, comments: [c] }, "markdown").outcomes[0];
+    const detail = o.outcome === "orphaned" ? o.detail : "";
+    expect(detail).not.toContain("before it");
+    expect(detail).toMatch(/: after it ".*Distance below…", there ".*Distance under…"\.$/);
+  });
+});

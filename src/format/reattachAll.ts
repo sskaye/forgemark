@@ -224,20 +224,38 @@ function surroundings(
   comment: Comment,
   placement: Placement,
 ): "agree" | "differ" | "unknown" {
-  const around = inBlock(body, format, placement);
-  const sides =
-    around.before.length === 0 && around.after.length === 0
-      ? [
-          side(comment.context_before, placement.context_before, "before", 2),
-          side(comment.context_after, placement.context_after, "after", 2),
-        ]
-      : [
-          side(comment.context_before, around.before, "before"),
-          side(comment.context_after, around.after, "after"),
-        ];
-  if (sides.includes("agrees")) return "agree";
-  if (sides.includes("differs")) return "differ";
+  const verdicts = compareSides(body, format, comment, placement).map((s) => s.verdict);
+  if (verdicts.includes("agrees")) return "agree";
+  if (verdicts.includes("differs")) return "differ";
   return "unknown";
+}
+
+type SideComparison = {
+  which: "before" | "after";
+  verdict: "agrees" | "differs" | "unknown";
+  // Where they part, counted outward from the passage.
+  at?: number;
+  recorded: string;
+  there: string;
+};
+
+function compareSides(
+  body: string,
+  format: DocFormat,
+  comment: Comment,
+  placement: Placement,
+): SideComparison[] {
+  const around = inBlock(body, format, placement);
+  // The passage fills its block: the nearest two words outside decide.
+  const outside = around.before.length === 0 && around.after.length === 0;
+  const there = outside
+    ? { before: placement.context_before, after: placement.context_after }
+    : around;
+  const limit = outside ? 2 : Infinity;
+  return (["before", "after"] as const).map((which) => {
+    const recorded = (which === "before" ? comment.context_before : comment.context_after) ?? "";
+    return { which, recorded, there: there[which], ...side(recorded, there[which], which, limit) };
+  });
 }
 
 // The text either side of a placement, within its block.
@@ -265,30 +283,49 @@ function inBlock(
 
 // `limit`: how many words outward must match; by default, all the words
 // there are on the copy's side, up to what was recorded.
+//
+// The recording was cut at a length, not at a word, before 1.12.1, so its
+// outermost word may be the end ("ers") or the start ("o") of the word
+// that is there.
 function side(
-  recorded: string | undefined,
+  recorded: string,
   there: string,
   which: "before" | "after",
   limit = Infinity,
-): "agrees" | "differs" | "unknown" {
-  const want = words(recorded ?? "");
-  const have = words(there);
-  if (want.length === 0 || have.length === 0) return "unknown";
+): { verdict: "agrees" | "differs" | "unknown"; at?: number } {
+  const want = words(recorded).map((w) => w.key);
+  const have = words(there).map((w) => w.key);
+  if (want.length === 0 || have.length === 0) return { verdict: "unknown" };
   if (which === "before") {
     want.reverse();
     have.reverse();
   }
   const need = Math.min(limit, want.length, have.length);
-  for (let i = 0; i < need; i++) if (want[i] !== have[i]) return "differs";
-  return "agrees";
+  for (let i = 0; i < need; i++) {
+    if (want[i] === have[i]) continue;
+    const cut = i === want.length - 1;
+    if (cut && (which === "before" ? have[i].endsWith(want[i]) : have[i].startsWith(want[i]))) {
+      continue;
+    }
+    return { verdict: "differs", at: i };
+  }
+  return { verdict: "agrees" };
 }
 
-function words(s: string): string[] {
+// The words of a stretch of text, as written and as compared: case,
+// surrounding punctuation, and a backslash before punctuation (a
+// Markdown escape, recorded as written before 1.12.1) don't count.
+function words(s: string): { text: string; key: string }[] {
   return s
-    .toLowerCase()
     .split(/\s+/)
-    .map((w) => w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ""))
-    .filter((w) => w.length > 0);
+    .map((text) => ({
+      text,
+      key: text
+        .toLowerCase()
+        .replace(/\\(?=[!-/:-@[-`{-~])/g, "")
+        .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ""),
+    }))
+    .filter((w) => w.key.length > 0);
 }
 
 function notInScope(
@@ -321,27 +358,32 @@ function surroundingsDiffer(
   several: boolean,
 ): Refused["refused"] {
   const line = lineOf(body, placement.start);
-  // Quote what was compared: the copy's own block, unless the passage
-  // fills it and the words outside decided.
-  const block = inBlock(body, format, placement);
-  const there =
-    block.before.length === 0 && block.after.length === 0
-      ? { before: placement.context_before, after: placement.context_after }
-      : block;
   const where = several
     ? `${quote(text)} appears ${placement.occurrences} times; the closest copy, at line ${line},`
     : `${quote(text)} is in the page once, at line ${line}, but it`;
-  const recorded = comment.context_before?.trim()
-    ? `before it "…${tail(comment.context_before)}", there "…${tail(there.before)}"`
-    : `after it "${head(comment.context_after ?? "")}…", there "${head(there.after)}…"`;
+  // Quote each side that differs, from the passage out to the first
+  // word that isn't the recorded one.
+  const differing = compareSides(body, format, comment, placement)
+    .filter((s) => s.verdict === "differs")
+    .map(
+      (s) =>
+        `${s.which} it "${upTo(s.recorded, s.which, s.at!)}", there "${upTo(s.there, s.which, s.at!)}"`,
+    );
   return {
     reason: "surroundings-differ",
-    detail: `${where} doesn't have the words recorded around it: ${recorded}.`,
+    detail: `${where} doesn't have the words recorded around it: ${differing.join("; ")}.`,
   };
 }
 
-const tail = (s: string) => s.trim().split(/\s+/).slice(-4).join(" ");
-const head = (s: string) => s.trim().split(/\s+/).slice(0, 4).join(" ");
+// The `at`th word of one side outward from the passage, with up to
+// three words between it and the passage, and "…" where words are left out.
+function upTo(s: string, which: "before" | "after", at: number): string {
+  const all = words(s).map((w) => w.text);
+  const k = which === "before" ? Math.max(0, all.length - 1 - at) : Math.min(at, all.length - 1);
+  const from = which === "before" ? k : Math.max(0, k - 3);
+  const to = which === "before" ? Math.min(all.length, k + 4) : k + 1;
+  return `${from > 0 ? "…" : ""}${all.slice(from, to).join(" ")}${to < all.length ? "…" : ""}`;
+}
 
 // The record as it should read once attached: its anchor fields describe
 // what the markers now enclose. Stale context and scope are dropped

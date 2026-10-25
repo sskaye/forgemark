@@ -23,7 +23,7 @@ node <skill directory>/scripts/forgemark.mjs --help
 | --- | --- |
 | `forgemark list <file> [--unresolved] [--orphaned] [--json]` | Every comment, one per entry: id, kind, open/resolved, attached/orphaned/floating, author, anchor, first line, reply count. |
 | `forgemark show <file> <id> [--json]` | One thread in full: anchor and its context, the body, every reply in order, any suggested edit. |
-| `forgemark comment <file> --author NAME --anchor "passage" --body "…"` | Comment on a passage. Quote it as a reader sees it; line breaks, inline formatting (`**`, backticks) and link syntax are ignored when matching. A passage in a Markdown file's front matter gets a comment without markers. |
+| `forgemark comment <file> --author NAME --anchor "passage" --body "…"` | Comment on a passage. Quote it as a reader sees it; line breaks, inline formatting (`**`, backticks), link syntax and backslash escapes (`\<`, `\[`, `\_`) are ignored when matching. A passage in a Markdown file's front matter gets a comment without markers. |
 | `forgemark comment <file> --author NAME --anchor "passage" --suggest "replacement" [--body "…"]` | Suggest an edit: the reviewer can accept it in one click. `--body` is optional here. |
 | `forgemark comment <file> --author NAME --selector "#fig-3" --body "…"` | HTML only: comment on a whole figure, chart, or table by its `id`. |
 | `forgemark comment <file> --author NAME --floating --body "…"` | A note on the document as a whole, with no anchor. |
