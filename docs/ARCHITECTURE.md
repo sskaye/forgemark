@@ -236,7 +236,12 @@ runs inside it. `src/report/bridge.ts` is spliced into the report as a script
 before it is served (built by `scripts/build-bridge.mjs` into a committed file a
 test keeps fresh). It turns marker comments into highlights (`report/decorate.ts`),
 watches the reader's selection, puts a Comment button beside each chart and
-table, and forwards clicks on anchors and links. It speaks to `HtmlView` only
+table, and forwards clicks on anchors and links. A link to a place in the page
+is left to the browser, so the fragment changes and a page's own tabs (links to
+ids, shown on `hashchange` or by `:target`) switch; any other link is cancelled
+and handed to the app, so the frame never leaves the report. Asked to scroll to
+a comment the page hides, the bridge opens the closed `<details>` around it, or
+goes to the enclosing section a link in the page points at. It speaks to `HtmlView` only
 through the messages in `src/report/protocol.ts`, over `postMessage`; tests
 install a loader (`tests/utils/reportFrame.ts`) that writes the report into a
 jsdom frame and wires the same bridge to the host through an in-memory channel.

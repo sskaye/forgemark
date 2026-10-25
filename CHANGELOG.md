@@ -2,6 +2,15 @@
 
 All notable changes to Forgemark are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `reattach --all` and Reattach all left a comment orphaned with surroundings that matched, when the words recorded around it had been cut in the middle of a word ("ers" of "parameters"), which a recording longer than 80 characters often was. That word now matches the word it was cut from, and new recordings stop at whole words. The message quoted the words before the passage whichever side had differed, and nearest the passage, so it could show two identical snippets; it now quotes each side that differs, out to the first word that isn't the one recorded.
+- A Markdown backslash escape is read as a reader sees it: `\<name>.status.json` is "<name>.status.json", `\[x, y\]` is "[x, y]", `a\_b` is "a_b". A passage quoted that way was "not found", and quoting the backslashes recorded `\<name>` as a lone backslash; a comment made in the app on such text was then reported by lint as no longer matching. A backslash ending a line is read as a line break. Anchor text recorded the old way still matches.
+- A report's own tabs written as links to ids (`<a href="#by-instrument">`, shown by the page's script on `hashchange`, or by `:target`) didn't switch: Forgemark cancelled the click and scrolled to the target itself, so the address's fragment never changed. A link to a place in the page now changes the fragment as in a browser, and a click the page's own handler cancels is left alone.
+- Clicking a comment's card when the page hides its highlight now shows it: a closed `<details>` around it is opened, and a tab the page shows by the fragment is switched to. Tabs shown by CSS radio buttons aren't switched yet.
+
 ## [1.12.0] — 2026-10-21
 
 ### Added
