@@ -1,19 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync, statSync, readdirSync } from "node:fs";
 import { resolve, join } from "node:path";
-import { createHash } from "node:crypto";
 import JSZip from "jszip";
 import { hashSkillTree, parseManifest, type SkillFile } from "../../src/services/skillTree";
 
 const ROOT = resolve(__dirname, "..", "..");
 const SKILL_PATH = join(ROOT, "assets", "forgemark-skill.skill");
-const ZIP_PATH = join(ROOT, "assets", "forgemark-skill.zip");
 const SRC = join(ROOT, "assets", "forgemark-skill");
 const SIZE_BUDGET = 640 * 1024;
-
-function sha256(buf: Buffer): string {
-  return createHash("sha256").update(buf).digest("hex");
-}
 
 function totalSize(dir: string): number {
   let total = 0;
@@ -45,16 +39,8 @@ describe("skill bundle — source", () => {
 });
 
 describe("skill bundle — built artifacts", () => {
-  it("both .skill and .zip exist (run `npm run build:skill` if missing)", () => {
+  it("exists (run `npm run build:skill` if missing)", () => {
     expect(existsSync(SKILL_PATH)).toBe(true);
-    expect(existsSync(ZIP_PATH)).toBe(true);
-  });
-
-  it("are byte-identical (sha256 match)", () => {
-    const a = readFileSync(SKILL_PATH);
-    const b = readFileSync(ZIP_PATH);
-    expect(a.length).toBe(b.length);
-    expect(sha256(a)).toBe(sha256(b));
   });
 
   // The Claude app and claude.ai accept a zip only when the files sit

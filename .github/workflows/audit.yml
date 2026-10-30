@@ -1,0 +1,31 @@
+name: Audit
+
+# Known vulnerabilities in what the app ships (dependencies, not
+# devDependencies), at high severity or worse. Runs on every pull
+# request and push to main, and each Monday, since a new advisory can
+# arrive with no change here. It isn't a required check: an advisory
+# published today shouldn't block an unrelated pull request, but it
+# should be fixed before the next release.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  npm:
+    name: npm audit (shipped)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+      - run: npm audit --omit=dev --audit-level=high

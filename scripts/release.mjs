@@ -2,7 +2,7 @@
 // Release-build pipeline for the macOS universal binary.
 //
 // Captures the full sequence so the next release isn't a rediscovery:
-//   1. Pre-flight (lint / typecheck / test / build:skill)
+//   1. Pre-flight (lint / typecheck / Tauri versions / audit / test / build:skill)
 //   2. Universal Tauri build (Intel + Apple Silicon in one .app)
 //   3. Notarize the .dmg (Tauri only notarizes the inner .app)
 //   4. Staple the .dmg ticket
@@ -117,6 +117,9 @@ if (updaterPassword === undefined) {
 step("Pre-flight checks");
 run("npm run lint");
 run("npm run typecheck");
+run("npm run check:tauri");
+// No known high or critical vulnerability in what the app ships.
+run("npm audit --omit=dev --audit-level=high");
 run("npm test");
 run("npm run build:skill");
 

@@ -37,6 +37,9 @@ jobs:
       # skill-bundle.test.ts, which compares contents rather than bytes —
       # zip metadata isn't stable enough to diff.)
       - run: npm run version:check
+      # Tauri's JS packages and Rust crates must share a minor version;
+      # Dependabot updates them in separate pull requests.
+      - run: npm run check:tauri
       - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck

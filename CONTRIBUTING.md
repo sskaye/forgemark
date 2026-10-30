@@ -58,6 +58,12 @@ cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings &
 
 CI runs all of these on macOS, Windows and Linux, plus the macOS app build. `npm run format` fixes formatting.
 
+## Dependencies
+
+Dependabot opens update pull requests each Monday, grouped so that packages released together (Tiptap, CodeMirror, Tauri) come as one, and a security fix as soon as GitHub knows of one. The [Audit](.github/workflows/audit.yml) workflow fails when anything the app ships has a known high or critical vulnerability; it isn't a required check, but a release won't build until it passes.
+
+Tauri's JavaScript packages and its Rust crates must be on the same minor version, and Dependabot updates them in separate pull requests. `npm run check:tauri` fails CI until they match: update the other side in the same pull request (`cd src-tauri && cargo update -p tauri -p tauri-plugin-…`, or `npm install @tauri-apps/…@x.y`).
+
 ## Code
 
 - TypeScript strict mode is on and stays on.
