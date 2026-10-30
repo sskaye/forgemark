@@ -63,7 +63,7 @@ jobs:
       # beside the installer, made with the updater key, which the app
       # checks every update against; `npm run release:publish` reads it
       # into latest.json and takes it off the release. The secrets are the
-      # key and its password (RELEASING.md, "Updater signing key").
+      # key and its password (docs/releasing.md, "Updater signing key").
       - name: Build Windows bundles
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

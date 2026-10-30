@@ -4,7 +4,7 @@ Files in this folder exercise what cannot be tested under jsdom: the rendered Ma
 
 ## Part 1 — Markdown: `gfm-showcase.md`
 
-Open `docs/example_file/testing/gfm-showcase.md`.
+Open `tests/fixtures/showcase/gfm-showcase.md`.
 
 1. **Inline HTML.** The `Ctrl` and `C` keys look like keycaps, "highlighted" has a mark, "inserted" is underlined, the red span is red, the comment and word break are invisible. The small swatch and the linked badge sit inline in their sentences.
 2. **Edit survives.** Click at the end of the "Press Ctrl+C…" paragraph, type ` Done.`, then open Source view (⌘⇧S or the view switch). The `<kbd>`, `<mark>`, `<abbr title>`, `<span style>`, `<!-- an inline comment -->`, and `<wbr>` are all still there, and only that paragraph changed.
@@ -19,7 +19,7 @@ Open `docs/example_file/testing/gfm-showcase.md`.
 
 ## Part 2 — HTML report: `dashboard/dashboard.html`
 
-Open `docs/example_file/testing/dashboard/dashboard.html`. Everything below the header is drawn by the report's script from `data.json`, and the stylesheet and logo are files beside it.
+Open `tests/fixtures/showcase/dashboard/dashboard.html`. Everything below the header is drawn by the report's script from `data.json`, and the stylesheet and logo are files beside it.
 
 1. **It runs.** The logo shows top left, the page is styled (cards, tiles), three tiles and a line chart appear, and the footer shows today's date. The header stays stuck to the top when you scroll.
 2. **It is interactive.** Click the Sleep tab: tiles and chart change. Change Range to Week: the chart redraws with 7 points.
@@ -50,7 +50,7 @@ With `gfm-showcase.md` open:
 
 ## Part 4 — Round trip
 
-After Part 2, open the saved `dashboard.html` in a browser directly. It should render and work exactly as before; the markers are invisible comments. Run `npm run cli -- lint docs/example_file/testing/dashboard/dashboard.html`: no problems.
+After Part 2, open the saved `dashboard.html` in a browser directly. It should render and work exactly as before; the markers are invisible comments. Run `npm run cli -- lint tests/fixtures/showcase/dashboard/dashboard.html`: no problems.
 
 ## Part 5 — Installing the agent skill
 

@@ -302,13 +302,13 @@ immutable: publish a fixed version, which installed copies then find.
 
 - Cross-platform validation pass on Windows: open every fixture under
   `tests/ai/fixtures/`, then exercise the core flows from
-  `docs/ARCHITECTURE.md`: add a comment, suggest/accept/reject an edit,
+  `docs/architecture.md`: add a comment, suggest/accept/reject an edit,
   recover a lost anchor, use Settings skill download, run Clean Export, and
   verify external-change conflict handling where practical.
 - The same pass on Ubuntu 24.04 (a Wayland session, the default), from the
   AppImage. Also: open a `.md` file with it (`./Forgemark…AppImage file.md`)
   with the app closed and again with it open; print; open an HTML report from
-  `docs/example_file/testing/` and comment on it; edit the open file in
+  `tests/fixtures/showcase/` and comment on it; edit the open file in
   another editor and check the conflict banner appears.
 - Manual end-to-end with **Claude Code**: install the `.skill`, open the production sample, run every prompt from `tests/ai/cases/*.md`. Expected: all PASS.
 - Manual end-to-end with **Codex CLI**: extract the `.zip` to `~/.agents/skills/forgemark/`, same exercise.

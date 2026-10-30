@@ -37,7 +37,7 @@ npm run dev        # the app, with hot reload
 npm test           # unit and integration tests; no Tauri runtime needed
 ```
 
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) is the map of the code: read the part for the area you're changing before you change it.
+[`docs/architecture.md`](docs/architecture.md) is the map of the code: read the part for the area you're changing before you change it.
 
 ## Making a change
 
@@ -94,7 +94,7 @@ Using an AI tool is fine. You're responsible for what you submit: read it, under
 
 ## Releases
 
-Releases are made by the maintainer; see [`RELEASING.md`](RELEASING.md). A contributor doesn't change the version number.
+Releases are made by the maintainer; see [`docs/releasing.md`](docs/releasing.md). A contributor doesn't change the version number.
 
 ## Layout
 
@@ -105,7 +105,7 @@ cli/                the forgemark command-line tool, built from src/format
 src-tauri/          the Tauri shell (Rust)
 tests/              unit, integration, browser, perf and agent tests
 assets/             the agent skill, sample documents, the app icon
-docs/               architecture and example files
+docs/               architecture, the file format, releasing, examples
 scripts/            build helpers: CLI bundle, skill packaging, icons, release
 .github/            CI, release builds, issue forms
 ```

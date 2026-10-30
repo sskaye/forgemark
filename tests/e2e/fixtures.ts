@@ -7,7 +7,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const SOURCE = resolve(ROOT, "docs", "example_file", "testing", "dashboard");
+const SOURCE = resolve(ROOT, "tests", "fixtures", "showcase", "dashboard");
 const TMP = resolve(ROOT, "tests", "e2e", ".tmp");
 
 // The dashboard as committed, whatever a test run in the app may have
@@ -34,5 +34,5 @@ export function writeInlineDashboard(): string {
 }
 
 export function showcasePath(): string {
-  return resolve(ROOT, "docs", "example_file", "testing", "gfm-showcase.md");
+  return resolve(ROOT, "tests", "fixtures", "showcase", "gfm-showcase.md");
 }

@@ -1,7 +1,7 @@
 import { INITIAL_STATE, reduceDocument, type DocumentAction, type DocumentState } from "./document";
 
 // The open documents. See "Multiple open documents" in
-// docs/ARCHITECTURE.md for the reasoning.
+// docs/architecture.md for the reasoning.
 //
 // This wraps `reduceDocument` without touching it: every open document is
 // still exactly a `DocumentState`, and document-level actions are routed

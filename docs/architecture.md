@@ -691,8 +691,7 @@ WebKit's quirks still need the app.
 
 ## Design tokens
 
-The current production tokens live in `src/theme/tokens.ts`.
-`docs/design-tokens.js` is retained only as a compact source snapshot for the
-token contract test. The old design handoff, phase plan, proposal, and feedback
-documents were removed because they described pre-release decisions rather than
-the current code.
+The design tokens live in `src/theme/tokens.ts`, their only source. The old
+design handoff, the snapshot it was translated from, and the phase plans and
+reviews were removed because they described decisions made before release
+rather than the current code; git history keeps them.

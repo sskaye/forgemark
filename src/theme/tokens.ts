@@ -1,11 +1,8 @@
-// Forgemark design tokens — TypeScript translation of the retained
-// `docs/design-tokens.js` source snapshot. Values must match the source
-// byte-for-byte; the contract test in `tests/unit/tokens.test.ts` enforces
-// this.
+// Forgemark design tokens: the colours, type and spacing every component
+// reads. This file is their only source.
 //
-// In the prototype the design ships a Native and an Editorial type pairing.
-// The Editorial pairing is commented out in the source as "considered, not
-// shipped"; we keep only Native in the v1 build.
+// The type is the platform's own (the "Native" pairing); an "Editorial"
+// pairing was considered during design and not shipped.
 
 export const SYSTEM_SANS =
   '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro", system-ui, "Segoe UI", "Ubuntu Sans", Ubuntu, Cantarell, "Helvetica Neue", Arial, sans-serif';

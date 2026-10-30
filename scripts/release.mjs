@@ -15,7 +15,7 @@
 // from TAURI_SIGNING_PRIVATE_KEY (a path or the key itself), else
 // ~/.tauri/forgemark-updater.key; its password from
 // TAURI_SIGNING_PRIVATE_KEY_PASSWORD, else the Keychain item
-// "forgemark-updater-key-password" (RELEASING.md, one-time setup).
+// "forgemark-updater-key-password" (docs/releasing.md, one-time setup).
 //
 // Usage:
 //
@@ -95,7 +95,7 @@ if (!process.env.APPLE_SIGNING_IDENTITY) {
 const updaterKey =
   process.env.TAURI_SIGNING_PRIVATE_KEY ?? join(homedir(), ".tauri", "forgemark-updater.key");
 if (!process.env.TAURI_SIGNING_PRIVATE_KEY && !existsSync(updaterKey)) {
-  bail(`No updater signing key at ${updaterKey}. See RELEASING.md, "Updater signing key".`, 5);
+  bail(`No updater signing key at ${updaterKey}. See docs/releasing.md, "Updater signing key".`, 5);
 }
 let updaterPassword = process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD;
 if (updaterPassword === undefined) {
@@ -108,7 +108,7 @@ if (updaterPassword === undefined) {
   } catch {
     bail(
       "No password for the updater key: set TAURI_SIGNING_PRIVATE_KEY_PASSWORD, or store it in the\n" +
-        'Keychain as "forgemark-updater-key-password" (RELEASING.md, "Updater signing key").',
+        'Keychain as "forgemark-updater-key-password" (docs/releasing.md, "Updater signing key").',
       5,
     );
   }

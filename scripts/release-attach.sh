@@ -8,7 +8,7 @@
 # `npm run release:publish`. A draft holds no tag, so two jobs that each
 # created one would leave two drafts for the same version: this script
 # never creates a release. It finds the draft the maintainer created
-# (RELEASING.md, "Tag and publish") and adds to it. It never replaces an
+# (docs/releasing.md, "Tag and publish") and adds to it. It never replaces an
 # asset either: an upload under a name already there fails.
 #
 # The one published release it will add to is an old one that predates
@@ -31,7 +31,7 @@ releases="$(gh api --paginate "repos/${repo}/releases" \
 count="$(printf '%s' "$releases" | grep -c . || true)"
 
 if [ "$count" -eq 0 ]; then
-  echo "::error::No release for ${tag}. Create the draft before pushing the tag (RELEASING.md, \"Tag and publish\"), then re-run this job."
+  echo "::error::No release for ${tag}. Create the draft before pushing the tag (docs/releasing.md, \"Tag and publish\"), then re-run this job."
   exit 1
 fi
 if [ "$count" -gt 1 ]; then
