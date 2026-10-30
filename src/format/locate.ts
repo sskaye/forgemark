@@ -392,7 +392,9 @@ function markdownTolerant(needle: string): RegExp {
     const chars = Array.from(word);
     let out = MARKUP;
     chars.forEach((ch, i) => {
-      if (i > 0 && isWordChar(chars[i - 1]) !== isWordChar(ch)) out += MARKUP;
+      // Markup can't split a word, but it can sit anywhere else: "a:,"
+      // finds "`a:`,", the code span closing between two punctuation marks.
+      if (i > 0 && !(isWordChar(chars[i - 1]) && isWordChar(ch))) out += MARKUP;
       // Punctuation may be escaped in the source: "<name>" finds
       // `\<name>`, "[x, y]" finds `\[x, y\]`.
       if (/[!-/:-@[-`{-~]/.test(ch)) out += "\\\\?";

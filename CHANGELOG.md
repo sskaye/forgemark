@@ -2,6 +2,16 @@
 
 All notable changes to Forgemark are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- Updated the libraries that show a document, clearing every known advisory against what the app ships (`npm audit` had 42). The serious ones: DOMPurify, which cleans the HTML Mermaid draws (a critical XSS bypass); ProseMirror, the editor's view (an XSS when pasting); Tiptap (an attribute that could turn a document's content into script); and markdown-it and linkify-it (inputs that stall the parser). Tiptap moves to 3.32, Tauri to 2.12, Mermaid to 12, and KaTeX to 0.19.
+
+### Fixed
+
+- A passage couldn't be anchored when it ran out of an inline code span ending in punctuation into punctuation: "a:, and more" in ``Use `a:`, and more.`` was "not found", so no suggestion could cover a sentence like ``any spec named in `extends:`, and finally``. (#37)
+
 ## [1.12.1] — 2026-10-30
 
 ### Changed
