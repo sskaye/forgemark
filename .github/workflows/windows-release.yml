@@ -3,8 +3,8 @@ name: Windows release
 # Builds the unsigned Windows installer (-setup.exe, via NSIS) on a
 # windows-latest runner and attaches it, with its updater signature, to
 # the matching GitHub
-# draft release. The macOS .dmg is still built + signed + notarized locally
-# (`npm run release`); this only fills in the Windows artifacts.
+# draft release (created by `npm run release:start`). macos-release.yml,
+# linux-release.yml and cli-release.yml fill in the rest.
 #
 # Triggers:
 #   - automatically on any `v*` tag push (builds that tag);

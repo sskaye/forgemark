@@ -1,0 +1,111 @@
+name: macOS release
+
+# Builds the universal macOS app (Intel and Apple Silicon in one), signs
+# it with the Developer ID certificate, notarizes and staples it, packs
+# and signs the in-app update, and attaches the .dmg, the update and its
+# signature to the matching draft release. The same steps as
+# `npm run release` on a Mac (scripts/release.mjs), which stays as the
+# fallback.
+#
+# The commit was checked by CI before it reached main, so the tests
+# aren't run again here; the Tauri version check and the audit are.
+#
+# Needs the Apple secrets (docs/releasing.md, "macOS in CI"). Without
+# them the job says so and stops, and the macOS files come from
+# `npm run release` instead.
+#
+# Triggers:
+#   - automatically on any `v*` tag push (builds that tag);
+#   - manually via "Run workflow", passing an existing release tag.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build and attach the macOS files to (e.g. v1.13.0)"
+        required: true
+        type: string
+
+# Required for `gh release upload` with the default GITHUB_TOKEN.
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build, sign and notarize for macOS
+    runs-on: macos-latest
+    timeout-minutes: 90
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - name: Check the signing secrets are set
+        id: secrets
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATE" ] && [ -n "$APPLE_ID" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::The Apple signing secrets aren't set, so this job builds nothing. Build the macOS files with npm run release (docs/releasing.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v5
+        if: steps.secrets.outputs.ready == 'true'
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v5
+        if: steps.secrets.outputs.ready == 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: "npm"
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.secrets.outputs.ready == 'true'
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        if: steps.secrets.outputs.ready == 'true'
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+        if: steps.secrets.outputs.ready == 'true'
+
+      # `tauri build` imports APPLE_CERTIFICATE into a keychain of its own
+      # and signs with it, and notarizes the .app with the Apple ID; the
+      # script then notarizes and staples the .dmg, checks both, and
+      # signs the update with the updater key.
+      - name: Build, sign, notarize
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          FORGEMARK_RELEASE_CI: "1"
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npm run release
+
+      - name: Attach the .dmg and the update to the release
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Adds to the draft release; never creates one or replaces an
+        # asset. See scripts/release-attach.sh.
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          bundle=src-tauri/target/universal-apple-darwin/release/bundle
+          update="${bundle}/macos/Forgemark_${version}_universal.app.tar.gz"
+          bash scripts/release-attach.sh "$TAG" \
+            "${bundle}/dmg/Forgemark_${version}_universal.dmg#Forgemark ${version} — universal macOS" \
+            "$update" "${update}.sig"
