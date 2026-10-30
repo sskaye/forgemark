@@ -1,6 +1,6 @@
 # Releasing Forgemark
 
-Cuts a signed, notarized macOS `.dmg`, the Windows installer, the Linux AppImages, and the command-line tool. Everything outside the bullet labelled **Manual** is reproducible from a clean checkout.
+Cuts a signed, notarized macOS `.dmg`, the Windows installer, the Linux AppImages, and the command-line tool, each built by a GitHub workflow when the version's tag is pushed. Everything outside the bullet labelled **Manual** is reproducible from a clean checkout.
 
 ## One-time setup
 
@@ -22,6 +22,40 @@ Cuts a signed, notarized macOS `.dmg`, the Windows installer, the Linux AppImage
      --team-id "XXXXXXXXXX" \
      --password "xxxx-xxxx-xxxx-xxxx"
    ```
+
+### macOS in CI
+
+`macos-release.yml` signs and notarizes on a GitHub runner, with the same
+certificate and Apple ID, given as repository secrets. Set them once, from
+the Mac that holds the certificate:
+
+1. In Keychain Access, under **My Certificates**, export **Developer ID
+   Application: …** (the certificate with its private key) as a `.p12`,
+   choosing a password for it.
+2. Make an app-specific password for the notary service
+   (https://appleid.apple.com → Sign-In and Security → App-Specific
+   Passwords). The one in the `forgemark-notary` profile can't be read back.
+3. Set the secrets. Each `gh secret set` without `--body` asks for the value
+   without echoing it:
+
+   ```sh
+   base64 -i ~/Desktop/developer-id.p12 | gh secret set APPLE_CERTIFICATE --repo sskaye/forgemark
+   gh secret set APPLE_CERTIFICATE_PASSWORD --repo sskaye/forgemark   # the .p12's password
+   gh secret set APPLE_SIGNING_IDENTITY --repo sskaye/forgemark --body "Developer ID Application: Your Name (XXXXXXXXXX)"
+   gh secret set APPLE_ID --repo sskaye/forgemark                     # the Apple account's email
+   gh secret set APPLE_PASSWORD --repo sskaye/forgemark               # the app-specific password
+   gh secret set APPLE_TEAM_ID --repo sskaye/forgemark --body "XXXXXXXXXX"
+   ```
+
+4. Delete the `.p12`: `rm ~/Desktop/developer-id.p12`.
+
+The workflow also uses the updater key's secrets (below), which the Windows
+and Linux workflows already have. Until `APPLE_CERTIFICATE` and `APPLE_ID`
+are set, it builds nothing and says so, and the macOS files come from
+`npm run release` on a Mac (below, "Building macOS by hand").
+
+When the certificate is renewed, export and set `APPLE_CERTIFICATE` and
+its password again.
 
 ### Cross-arch toolchain
 
@@ -63,7 +97,7 @@ with a new key.
    ```sh
    security add-generic-password -a forgemark -s forgemark-updater-key-password -w
    ```
-4. Give the Windows and Linux release workflows the key and password:
+4. Give the macOS, Windows and Linux release workflows the key and password:
    ```sh
    gh secret set TAURI_SIGNING_PRIVATE_KEY --repo sskaye/forgemark < ~/.tauri/forgemark-updater.key
    gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --repo sskaye/forgemark
@@ -76,50 +110,122 @@ password. `TAURI_SIGNING_PRIVATE_KEY` (a path or the key itself) and
 
 ## Each release
 
-The `npm run release` script captures every step of the macOS build/sign/notarize flow. Run it from a clean working tree.
+A published release can't be changed or added to, so each one is assembled
+as a draft and published only when every file is on it. A release carries
+seven files and nothing else: the macOS `.dmg` and its update
+(`.app.tar.gz`), the Windows `-setup.exe`, the two Linux `.AppImage`s, the
+CLI, and `latest.json`.
+
+1. **Bump the version** in a pull request:
+
+   ```sh
+   npm run version:set 1.13.0   # the four files that record it
+   # In CHANGELOG.md, rename "## [Unreleased]" to "## [1.13.0] — <date>".
+   npm run build:skill           # the CLI and the skill manifest embed the version
+   ```
+
+   Commit, open the pull request, and let it merge.
+
+2. **Start the release**, from `main`, up to date:
+
+   ```sh
+   git checkout main && git pull
+   npm run release:start
+   ```
+
+   It checks that the tree is clean, `HEAD` is `origin/main`, the tag and
+   release don't exist yet and the changelog has the version's section. Then
+   it creates the draft, with that section as its notes, tags `HEAD` and
+   pushes the tag. The tag starts four workflows, each adding its files to
+   the draft:
+
+   | Workflow              | Adds                                             |
+   | --------------------- | ------------------------------------------------ |
+   | `macos-release.yml`   | the `.dmg`, the `.app.tar.gz` update, its `.sig` |
+   | `windows-release.yml` | the `-setup.exe` and its `.sig`                  |
+   | `linux-release.yml`   | the two `.AppImage`s and their `.sig`s           |
+   | `cli-release.yml`     | `forgemark-cli-<ver>.mjs`                        |
+
+3. **Wait for them**: `gh run list --branch v1.13.0`.
+
+4. **Smoke-test the `.dmg`** (below), downloaded from the draft:
+
+   ```sh
+   gh release download v1.13.0 --pattern '*.dmg' --dir /tmp
+   ```
+
+5. **Publish**:
+
+   ```sh
+   npm run release:publish
+   ```
+
+   It writes `latest.json`, the updater's manifest, from the update files'
+   signatures and attaches it. Then it refuses unless the tag is on GitHub,
+   the seven files are on the draft and nothing else is, `latest.json`
+   points only at files the release has, and the CLI file is the bundle
+   committed at the tag. It takes the `.sig` files off (`latest.json`
+   carries the signatures) and publishes. If a check fails, nothing is
+   published and the draft stays as it is. Once published, a mistake can't
+   be patched in place: cut a new version.
+
+6. **Prune the older releases**, once whatever pins a version has moved to
+   this one (ForgeGraph downloads its CLI from its version's release), so
+   the Releases page lists only the latest. Their tags stay. Without
+   `--yes` it lists what it would delete.
+
+   ```sh
+   npm run release:prune -- --yes
+   ```
+
+**The workflows never create a release.** A draft holds no tag, so two jobs
+that each created one would leave two drafts for one version; that's why
+`release:start` creates the draft before pushing the tag. A workflow that
+finds no draft fails and says so: create the draft and re-run the failed
+jobs. The upload step is `scripts/release-attach.sh`, shared by all four. It
+never replaces a file, so re-running a job that already uploaded fails on
+the name: delete that file from the draft first.
+
+## Building macOS by hand
+
+`macos-release.yml` runs `npm run release` (`scripts/release.mjs`) on a
+macOS runner. Run on a Mac, the same script is the fallback, for when the
+workflow can't run or its secrets aren't set (the job then says so and
+builds nothing). From a clean checkout of the tag:
 
 ```sh
-# Bump the version everywhere it's recorded (four files, all must agree):
-#   npm run version:set 1.5.0
-# Then update CHANGELOG.md with the new release line, and rebuild the
-# skill, which embeds the version in the CLI and the manifest:
-#   npm run build:skill
-# Commit all of that; the release pre-flight's tests check both.
-
 export APPLE_KEYCHAIN_PROFILE=forgemark-notary
 export APPLE_SIGNING_IDENTITY="Developer ID Application: Your Name (XXXXXXXXXX)"
-
 npm run release
 ```
 
 The script:
 
-1. Runs lint, typecheck, full test suite.
-2. Rebuilds `assets/forgemark-skill.{skill,zip}` from source.
-3. Builds the universal Tauri bundle (Intel + Apple Silicon in one `.app`).
-4. Submits the resulting `.dmg` to Apple's notary service via `notarytool` and waits.
-5. Staples the notarization ticket onto the `.dmg`.
-6. Verifies signatures, Gatekeeper assessment, and staple validity for both the `.app` and the `.dmg`.
-7. Packs the stapled `.app` as the in-app update, `Forgemark_<ver>_universal.app.tar.gz`, and signs it with the updater key (`.sig` beside it).
+1. Checks the Tauri versions and audits what the app ships. By hand, it also
+   runs lint, typecheck and the tests, and rebuilds the skill bundle; in CI,
+   the commit was checked before it reached `main`.
+2. Builds the universal Tauri bundle (Intel + Apple Silicon in one `.app`).
+3. Submits the `.dmg` to Apple's notary service via `notarytool` and waits.
+4. Staples the notarization ticket onto the `.app` and the `.dmg`.
+5. Verifies signatures, Gatekeeper assessment, and staple validity for both.
+6. Packs the stapled `.app` as the in-app update,
+   `Forgemark_<ver>_universal.app.tar.gz`, and signs it with the updater key
+   (`.sig` beside it).
 
-Final artifact lands at:
+It prints the command that attaches the three files to the draft
+(`scripts/release-attach.sh`). Without a Keychain profile, it uses
+`APPLE_ID` / `APPLE_PASSWORD` / `APPLE_TEAM_ID` instead.
 
-```
-src-tauri/target/universal-apple-darwin/release/bundle/dmg/Forgemark_<ver>_universal.dmg
-```
-
-If you don't have a Keychain profile set up, the script falls back to `APPLE_ID` / `APPLE_PASSWORD` / `APPLE_TEAM_ID` env vars.
-
-**A note on `assets/forgemark-skill.{skill,zip}`.** Step 2 rebuilds them, and
-zip metadata means the bytes can differ even when nothing in the source
-changed — so the working tree may look dirty after a release build. Check
-whether the _contents_ actually changed before committing:
+**A note on `assets/forgemark-skill.skill`.** By hand, step 1 rebuilds it,
+and zip metadata means the bytes can differ even when nothing in the source
+changed, so the working tree may look dirty afterwards. Check whether the
+_contents_ changed:
 
 ```sh
 npm test -- skill-bundle    # asserts every bundled file matches its source
 ```
 
-If that passes, the diff is metadata noise and you can `git checkout -- assets/`.
+If that passes, the diff is metadata noise: `git checkout -- assets/`.
 
 ## Smoke test
 
@@ -130,58 +236,8 @@ On a fresh macOS user account (no Xcode, no Forgemark installed):
 3. First-run welcome appears → click **Open sample →**.
 4. Add a comment, ⌘S, quit, relaunch — comment persists.
 
-A Gatekeeper prompt on a fresh account means the staple didn't apply; rerun `xcrun stapler validate` on both artifacts and investigate before tagging.
-
-## Tag and publish
-
-A published release can't be added to, so the release is assembled as a
-draft and published only when every asset is on it. A release carries seven
-files and nothing else: the macOS `.dmg` and its update (`.app.tar.gz`),
-the Windows `-setup.exe`, the two Linux `.AppImage`s, the CLI, and
-`latest.json`. Five steps, in this order:
-
-```sh
-# 1. The draft, carrying the .dmg and the macOS update. A draft holds no
-#    tag yet. (`npm run release` prints this with the paths filled in.)
-gh release create v<ver> --draft \
-  --title "Forgemark v<ver>" \
-  --notes-file CHANGELOG.md \
-  "src-tauri/target/universal-apple-darwin/release/bundle/dmg/Forgemark_<ver>_universal.dmg#Forgemark <ver> — universal macOS" \
-  src-tauri/target/universal-apple-darwin/release/bundle/macos/Forgemark_<ver>_universal.app.tar.gz \
-  src-tauri/target/universal-apple-darwin/release/bundle/macos/Forgemark_<ver>_universal.app.tar.gz.sig
-
-# 2. Tag the commit you built (it should be origin/main) and push the tag.
-#    That starts windows-release.yml, linux-release.yml and cli-release.yml.
-git tag v<ver> && git push origin v<ver>
-
-# 3. Wait for the three workflows to finish.
-gh run list --branch v<ver>
-
-# 4. Publish. Writes latest.json, the updater's manifest, from the update
-#    files' signatures and attaches it; then refuses unless the tag is on
-#    GitHub, the seven assets are on the draft and nothing else is,
-#    latest.json points only at files the release has, and the CLI asset
-#    is the bundle committed at the tag. It takes the .sig files off the
-#    draft (latest.json carries the signatures) and publishes.
-npm run release:publish
-
-# 5. Once whatever pins a version has moved to this one (ForgeGraph
-#    downloads its CLI from its version's release), delete the older
-#    releases, keeping their tags, so the Releases page lists only this
-#    one. Without --yes it lists what it would delete.
-npm run release:prune -- --yes
-```
-
-**Create the draft before pushing the tag.** The workflows add to the draft
-and never create a release: a draft holds no tag, so two jobs that each
-created one would leave two drafts for one version. A workflow that finds no
-draft fails and says so; create the draft and re-run the failed jobs. The
-upload step lives in `scripts/release-attach.sh`, shared by all three
-workflows. It never replaces an asset, so re-running a job that already
-uploaded fails on the name: delete that asset from the draft first.
-
-If a check in step 4 fails, nothing is published and the draft stays as it
-is. Once published, a mistake can't be patched in place: cut a new version.
+A Gatekeeper prompt on a fresh account means the staple didn't apply; run
+`xcrun stapler validate` on both files and investigate before publishing.
 
 ## Windows
 
@@ -286,7 +342,7 @@ offers it to installed copies.
 
 | Platform | Update file                                                 | Signed by             |
 | -------- | ----------------------------------------------------------- | --------------------- |
-| macOS    | `Forgemark_<ver>_universal.app.tar.gz` (both architectures) | `npm run release`     |
+| macOS    | `Forgemark_<ver>_universal.app.tar.gz` (both architectures) | `macos-release.yml`   |
 | Windows  | the NSIS `-setup.exe`                                       | `windows-release.yml` |
 | Linux    | each architecture's `.AppImage`                             | `linux-release.yml`   |
 
