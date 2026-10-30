@@ -194,8 +194,12 @@ describe("a write that would overwrite someone else's change", () => {
     readTextFileMock.mockResolvedValue(ORIGINAL);
     fireEvent.click(screen.getByTestId("probe-add-floating"));
     fireEvent.keyDown(window, { key: "s", metaKey: true });
-    await waitFor(() => expect(writeTextFileMock).toHaveBeenCalled());
-    await waitFor(() => expect(screen.getByTestId("probe-dirty").textContent).toBe("clean"));
+    // The save reads the disk and hashes it first; under a loaded run
+    // (the release's pre-flight) that took longer than waitFor's 1 s.
+    await waitFor(() => expect(writeTextFileMock).toHaveBeenCalled(), { timeout: 3000 });
+    await waitFor(() => expect(screen.getByTestId("probe-dirty").textContent).toBe("clean"), {
+      timeout: 3000,
+    });
   });
 });
 
