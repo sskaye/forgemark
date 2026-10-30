@@ -111,7 +111,7 @@
     "jsdom": "^25.0.1",
     "jszip": "^3.10.1",
     "prettier": "^3.4.2",
-    "typescript": "~5.6.3",
+    "typescript": "~5.9.3",
     "vite": "^6.0.3",
     "vite-node": "^6.0.0",
     "vitest": "^5.0.5",
