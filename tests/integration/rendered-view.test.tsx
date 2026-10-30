@@ -5,6 +5,10 @@ import { resolve } from "node:path";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { RenderedView } from "../../src/components/RenderedView";
 
+// ProseMirror puts an empty <img> beside an inline image at a line's
+// edge so the cursor can sit there; only the document's images count.
+const IMG = "img:not(.ProseMirror-separator)";
+
 const fixture = readFileSync(resolve(__dirname, "..", "fixtures", "gfm-sample.md"), "utf-8");
 
 function renderFixture(body: string = fixture) {
@@ -52,7 +56,7 @@ describe("RenderedView GFM rendering", () => {
     expect(anchor?.getAttribute("href")).toBe("https://example.com/");
 
     // Image
-    const img = container.querySelector("img");
+    const img = container.querySelector(IMG);
     expect(img).toBeTruthy();
     expect(img?.getAttribute("alt")).toBe("placeholder");
 
@@ -288,10 +292,8 @@ describe("RenderedView links and relative references", () => {
     const { container } = renderWith(
       '![a](images/x.png) and <img src="images/y.png" width="20"> here.\n\n<p align="center"><img src="../z.png"></p>\n',
     );
-    await waitFor(() => expect(container.querySelectorAll("img").length).toBe(3));
-    const srcs = Array.from(container.querySelectorAll("img")).map((img) =>
-      img.getAttribute("src"),
-    );
+    await waitFor(() => expect(container.querySelectorAll(IMG).length).toBe(3));
+    const srcs = Array.from(container.querySelectorAll(IMG)).map((img) => img.getAttribute("src"));
     expect(srcs).toEqual([
       "asset://localhost/" + encodeURIComponent("/docs/notes/images/x.png"),
       "asset://localhost/" + encodeURIComponent("/docs/notes/images/y.png"),
@@ -301,7 +303,7 @@ describe("RenderedView links and relative references", () => {
 
   it("leaves an image alone when the document has no folder yet", async () => {
     const { container } = renderWith("![a](images/x.png)\n", null);
-    await waitFor(() => expect(container.querySelector("img")).toBeTruthy());
-    expect(container.querySelector("img")?.getAttribute("src")).toBe("images/x.png");
+    await waitFor(() => expect(container.querySelector(IMG)).toBeTruthy());
+    expect(container.querySelector(IMG)?.getAttribute("src")).toBe("images/x.png");
   });
 });
