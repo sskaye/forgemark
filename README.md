@@ -13,19 +13,19 @@ It is a review tool, not a shared editor: no accounts, no server, no real-time c
 
 ## Install
 
-Download from the [Releases page](https://github.com/sskaye/forgemark/releases): a signed and notarized `.dmg` for macOS 11 and later, an `.msi` or `.exe` for Windows 10 and later, and a `.deb` or `.AppImage` for Ubuntu 24.04 and later (x86_64 and arm64). On first launch, pick a name and click Open sample to see a reviewed document.
+Download from the [Releases page](https://github.com/sskaye/forgemark/releases): a signed and notarized `.dmg` for macOS 11 and later, a `-setup.exe` for Windows 10 and later, and an `.AppImage` for Ubuntu 24.04 and later (x86_64 and arm64). On first launch, pick a name and click Open sample to see a reviewed document.
 
-**Updates.** Forgemark checks for a newer release at launch and once a day, and shows a banner when there is one: Update downloads it and Restart installs it, after asking about any unsaved work. On a `.deb` install, or if an update can't install itself, the banner's Download button fetches the right file for your system. This check is the app's only request to the internet; Settings → Updates turns it off, and Check now works either way. Versions before 1.11.0 don't update themselves: download 1.11.0 once by hand.
+**Updates.** Forgemark checks for a newer release at launch and once a day, and shows a banner when there is one: Update downloads it and Restart installs it, after asking about any unsaved work. If an update can't install itself, the banner's Download button fetches the right file for your system; an install from a `.deb`, which releases no longer carry, is offered the AppImage, which updates itself from then on. This check is the app's only request to the internet; Settings → Updates turns it off, and Check now works either way. Versions before 1.11.0 don't update themselves: download 1.11.0 once by hand.
 
 **Windows installers are not code-signed.** SmartScreen warns before running one. To install: keep the download if the browser flags it, run the installer, click More info on the "Windows protected your PC" screen, then Run anyway. The UAC prompt shows Publisher: Unknown. macOS builds are signed and open without a prompt.
 
-**On Linux**, install the `.deb` with apt, which also fetches the WebKitGTK it needs and registers Forgemark for Markdown and HTML files:
+**On Linux**, the AppImage runs without installing: mark it executable and open it. Ubuntu 24.04 does not ship the FUSE 2 library AppImages mount with; install it first:
 
 ```bash
-sudo apt install ./Forgemark_<version>_amd64.deb
+sudo apt install libfuse2t64
 ```
 
-The AppImage runs without installing: mark it executable and open it. Ubuntu 24.04 does not ship the FUSE 2 library AppImages mount with; install `libfuse2t64`, or run the file with `--appimage-extract-and-run`. Each release carries a `SHA256SUMS-linux-<arch>.txt` to check the downloads against. The Window menu's Move & Resize commands are macOS and Windows only; on Linux, Super+arrow does the same.
+Or run the file with `--appimage-extract-and-run`. GitHub shows each download's SHA-256 beside it on the release page. The Window menu's Move & Resize commands are macOS and Windows only; on Linux, Super+arrow does the same.
 
 To build from source, see [Build](#build).
 
@@ -95,17 +95,17 @@ forgemark lint report.md
 
 Every write is parsed back before the file is replaced, and the replacement is atomic, so the tool cannot leave a file the app cannot read. `lint` reports what the app would refuse and what a reviewer would want to know about, such as an orphaned comment or a drifted anchor description. The tool works for people too: `npm run cli -- lint file.md` from a checkout, or `node forgemark.mjs` from an installed skill.
 
-To use the tool without the skill, in CI or another project's build, download it from a release at a pinned version and check its checksum:
+To use the tool without the skill, in CI or another project's build, download it from a release at a pinned version and check it against the SHA-256 GitHub shows beside it on the release page:
 
 ```bash
-v=1.10.0
-base=https://github.com/sskaye/forgemark/releases/download/v$v
-curl -fsSLO "$base/forgemark-cli-$v.mjs" -O "$base/SHA256SUMS-cli.txt"
-sha256sum -c SHA256SUMS-cli.txt   # macOS: shasum -a 256 -c SHA256SUMS-cli.txt
+v=1.12.1
+sha=<the SHA-256 shown beside forgemark-cli-$v.mjs>
+curl -fsSLO "https://github.com/sskaye/forgemark/releases/download/v$v/forgemark-cli-$v.mjs"
+echo "$sha  forgemark-cli-$v.mjs" | sha256sum -c -   # macOS: shasum -a 256 -c -
 node "forgemark-cli-$v.mjs" lint report.html
 ```
 
-Releases are immutable, so a version's file never changes. The tool is MIT-licensed, like the app; the licences of the packages it bundles are at the end of the file.
+Releases are immutable, so a version's file never changes. Only the latest release is kept, though: when a new one comes out, the one before it is removed, so move a pin to each new version. The tool is MIT-licensed, like the app; the licences of the packages it bundles are at the end of the file.
 
 ### Installing by hand
 

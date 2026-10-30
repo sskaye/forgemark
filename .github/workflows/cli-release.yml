@@ -2,13 +2,10 @@ name: CLI release
 
 # Attaches the forgemark command-line tool to the matching GitHub release,
 # so it can be installed at a pinned version without the app or the
-# skill: the committed bundle, renamed for its version, a checksum file
-# in `sha256sum -c` form, and the licence. The bundle needs only Node 18
-# and carries the notices of the packages it bundles at its end.
-#
-#   forgemark-cli-<ver>.mjs
-#   SHA256SUMS-cli.txt
-#   forgemark-cli-LICENSE.txt
+# skill: the committed bundle, renamed for its version
+# (`forgemark-cli-<ver>.mjs`). The bundle needs only Node 18, and carries
+# Forgemark's licence at its start and the notices of the packages it
+# bundles at its end. GitHub shows its SHA-256 on the release.
 #
 # Triggers:
 #   - automatically on any `v*` tag push (attaches that tag's bundle);
@@ -55,16 +52,13 @@ jobs:
             exit 1
           fi
 
-      - name: Collect the CLI, its checksum, and the licence
+      - name: Collect the CLI
         run: |
           set -euo pipefail
           version="${TAG#v}"
           mkdir -p out
           cp assets/forgemark-skill/scripts/forgemark.mjs "out/forgemark-cli-${version}.mjs"
-          cp LICENSE out/forgemark-cli-LICENSE.txt
-          cd out
-          sha256sum "forgemark-cli-${version}.mjs" > SHA256SUMS-cli.txt
-          cat SHA256SUMS-cli.txt
+          sha256sum out/*.mjs
 
       - name: Attach to the release
         env:

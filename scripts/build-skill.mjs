@@ -18,12 +18,7 @@
 //     the rest of the budget is the CLI bundle (scripts/forgemark.mjs,
 //     built by build-cli.mjs), which carries the whole format layer.
 
-import {
-  readdirSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve, join, relative, sep, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
@@ -110,9 +105,7 @@ async function main() {
   // Size budget gate.
   const totalSrcBytes = files.reduce((s, f) => s + statSync(f).size, 0);
   if (totalSrcBytes > SIZE_BUDGET) {
-    console.error(
-      `Skill source exceeds size budget: ${totalSrcBytes} > ${SIZE_BUDGET} bytes`,
-    );
+    console.error(`Skill source exceeds size budget: ${totalSrcBytes} > ${SIZE_BUDGET} bytes`);
     process.exit(2);
   }
 
@@ -127,9 +120,7 @@ async function main() {
   const skillHash = createHash("sha256").update(skillBytes).digest("hex");
   const zipHash = createHash("sha256").update(zipBytes).digest("hex");
   if (skillHash !== zipHash) {
-    console.error(
-      `Artifacts are not byte-identical: skill=${skillHash} zip=${zipHash}`,
-    );
+    console.error(`Artifacts are not byte-identical: skill=${skillHash} zip=${zipHash}`);
     process.exit(3);
   }
 
