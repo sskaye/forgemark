@@ -1,8 +1,11 @@
 #!/usr/bin/env node
-// Release-build pipeline for the macOS universal binary.
+// Release-build pipeline for the macOS universal binary. macos-release.yml
+// runs it on each tag push (with FORGEMARK_RELEASE_CI=1, and the Apple
+// credentials as secrets); run by hand on a Mac, it's the fallback.
 //
 // Captures the full sequence so the next release isn't a rediscovery:
-//   1. Pre-flight (lint / typecheck / Tauri versions / audit / test / build:skill)
+//   1. Pre-flight (Tauri versions / audit; by hand, also lint / typecheck /
+//      test / build:skill)
 //   2. Universal Tauri build (Intel + Apple Silicon in one .app)
 //   3. Notarize the .dmg (Tauri only notarizes the inner .app)
 //   4. Staple the .dmg ticket
@@ -47,6 +50,8 @@ process.chdir(ROOT);
 
 const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
 const VERSION = pkg.version;
+// Set by macos-release.yml.
+const CI = process.env.FORGEMARK_RELEASE_CI === "1";
 
 const APP = join(
   ROOT,
@@ -115,13 +120,20 @@ if (updaterPassword === undefined) {
 }
 
 step("Pre-flight checks");
-run("npm run lint");
-run("npm run typecheck");
 run("npm run check:tauri");
 // No known high or critical vulnerability in what the app ships.
 run("npm audit --omit=dev --audit-level=high");
-run("npm test");
-run("npm run build:skill");
+if (CI) {
+  // macos-release.yml builds a tag on main, which CI checked before it
+  // got there, and builds what's committed.
+  const tag = process.env.TAG;
+  if (tag && tag !== `v${VERSION}`) bail(`The tag is ${tag}, but package.json says ${VERSION}.`, 6);
+} else {
+  run("npm run lint");
+  run("npm run typecheck");
+  run("npm test");
+  run("npm run build:skill");
+}
 
 step(`Universal Tauri build for v${VERSION}`);
 run("rustup target add x86_64-apple-darwin"); // idempotent
@@ -203,22 +215,20 @@ step("Done");
 console.log(`  App: ${APP}`);
 console.log(`  DMG: ${DMG}`);
 console.log(`  Update: ${UPDATE} (+ .sig)`);
-// Releases are immutable once published, so the release starts as a
-// draft carrying the .dmg; pushing the tag then starts windows-release.yml,
-// linux-release.yml and cli-release.yml, which add to that draft (and
-// never create one), and `npm run release:publish` publishes it once
-// every asset is there. The draft must exist before the tag is pushed.
-console.log("\nNext steps (manual):");
-console.log(`  1. Smoke-test the .dmg on a fresh macOS user account.`);
-console.log(`  2. Create the draft release with the .dmg and the update:`);
-console.log(
-  `       gh release create v${VERSION} --draft \\\n` +
-    `         --title "Forgemark v${VERSION}" \\\n` +
-    `         --notes-file CHANGELOG.md \\\n` +
-    `         "${DMG}#Forgemark ${VERSION} — universal macOS" \\\n` +
-    `         "${UPDATE}" "${UPDATE}.sig"`,
-);
-console.log(`  3. Tag the commit you built and push the tag (starts the CI builds):`);
-console.log(`       git tag v${VERSION} && git push origin v${VERSION}`);
-console.log(`  4. When the Windows, Linux and CLI workflows have finished, publish:`);
-console.log(`       npm run release:publish`);
+if (!CI) {
+  // By hand, the fallback for macos-release.yml: the draft and the tag
+  // come from `npm run release:start` as usual, and these files are
+  // attached to the draft from here.
+  console.log("\nNext steps:");
+  console.log(`  1. Smoke-test the .dmg on a fresh macOS user account.`);
+  console.log(`  2. If the draft and tag don't exist yet: npm run release:start`);
+  console.log(`  3. Attach these files to the draft:`);
+  console.log(
+    `       bash scripts/release-attach.sh v${VERSION} \\\n` +
+      `         "${DMG}#Forgemark ${VERSION} — universal macOS" \\\n` +
+      `         "${UPDATE}" "${UPDATE}.sig"`,
+  );
+  console.log(
+    `  4. When the Windows, Linux and CLI workflows have finished: npm run release:publish`,
+  );
+}

@@ -39,8 +39,8 @@ const CLI_PATH = "assets/forgemark-skill/scripts/forgemark.mjs";
 // that puts it there, for the message when one is missing: one install
 // file per platform, the macOS update, the CLI, and the manifest.
 const EXPECTED = {
-  [`Forgemark_${VERSION}_universal.dmg`]: "npm run release, then the draft's create step",
-  [`Forgemark_${VERSION}_universal.app.tar.gz`]: "npm run release, then the draft's create step",
+  [`Forgemark_${VERSION}_universal.dmg`]: "macos-release.yml (or npm run release)",
+  [`Forgemark_${VERSION}_universal.app.tar.gz`]: "macos-release.yml (or npm run release)",
   [`Forgemark_${VERSION}_x64-setup.exe`]: "windows-release.yml",
   [`Forgemark_${VERSION}_amd64.AppImage`]: "linux-release.yml (x86_64)",
   [`Forgemark_${VERSION}_aarch64.AppImage`]: "linux-release.yml (arm64)",
@@ -51,7 +51,7 @@ const EXPECTED = {
 // The update files' signatures, on the draft only until latest.json is
 // written from them.
 const SIGNED_BY = {
-  [`Forgemark_${VERSION}_universal.app.tar.gz`]: "npm run release, then the draft's create step",
+  [`Forgemark_${VERSION}_universal.app.tar.gz`]: "macos-release.yml (or npm run release)",
   [`Forgemark_${VERSION}_x64-setup.exe`]: "windows-release.yml",
   [`Forgemark_${VERSION}_amd64.AppImage`]: "linux-release.yml (x86_64)",
   [`Forgemark_${VERSION}_aarch64.AppImage`]: "linux-release.yml (arm64)",
@@ -70,7 +70,7 @@ function fail(message) {
 const releases = JSON.parse(gh("api", "--paginate", "--slurp", "repos/{owner}/{repo}/releases"))
   .flat()
   .filter((r) => r.tag_name === TAG);
-if (releases.length === 0) fail(`No release for ${TAG}. See docs/releasing.md, "Tag and publish".`);
+if (releases.length === 0) fail(`No release for ${TAG}. Start it with npm run release:start.`);
 if (releases.length > 1)
   fail(`${releases.length} releases share the tag ${TAG}; delete the extras.`);
 const [release] = releases;
