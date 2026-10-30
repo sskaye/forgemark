@@ -26,8 +26,8 @@ jobs:
     name: Format, lint, typecheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: "npm"
@@ -53,8 +53,8 @@ jobs:
         os: [macos-latest, windows-latest, ubuntu-24.04]
         shard: [1, 2]
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: "npm"
@@ -74,7 +74,7 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest, ubuntu-24.04]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       # Tauri links against WebKitGTK and GTK on Linux; the headers have
       # to be there before anything compiles.
       - name: Linux system libraries
@@ -111,8 +111,8 @@ jobs:
     name: E2E (macOS)
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: "npm"
@@ -138,8 +138,8 @@ jobs:
     runs-on: macos-latest
     if: github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: "npm"
