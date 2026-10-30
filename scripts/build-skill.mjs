@@ -4,17 +4,15 @@
 // Walks `assets/forgemark-skill/`, produces a deterministic ZIP whose
 // entries sit inside one `forgemark/` folder (the shape the Claude app
 // and claude.ai accept on upload, and what `unzip -d ~/.claude/skills`
-// expects: the folder name is the skill's name), and
-// emits both `assets/forgemark-skill.skill` and
-// `assets/forgemark-skill.zip` from the same buffer (so they're
-// byte-identical by construction). Determinism is kept by:
+// expects: the folder name is the skill's name), as
+// `assets/forgemark-skill.skill`. The app offers the same bytes saved
+// as `forgemark-skill.zip` too, for tools that want a .zip name.
+// Determinism is kept by:
 //   - Walking entries in lexicographic order.
 //   - Pinning every file's date to the Unix epoch.
 //   - Disabling compression timestamps.
 //
-// Two contracts the build keeps:
-//   - Both artifacts are byte-identical (sha256 equal).
-//   - Total bundle size is < 640 KB. The prose and examples are ~30 KB;
+// The build keeps total bundle size is < 640 KB. The prose and examples are ~30 KB;
 //     the rest of the budget is the CLI bundle (scripts/forgemark.mjs,
 //     built by build-cli.mjs), which carries the whole format layer.
 
@@ -28,7 +26,6 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SRC = join(ROOT, "assets", "forgemark-skill");
 const OUT_DIR = join(ROOT, "assets");
 const SKILL_OUT = join(OUT_DIR, "forgemark-skill.skill");
-const ZIP_OUT = join(OUT_DIR, "forgemark-skill.zip");
 const SIZE_BUDGET = 640 * 1024;
 // The manifest the app reads to tell one build of the skill from
 // another: the app's version and a hash of every other file. Written
@@ -109,27 +106,14 @@ async function main() {
     process.exit(2);
   }
 
-  // Write both artifacts from the same buffer — byte-identical by
-  // construction.
   writeFileSync(SKILL_OUT, buffer);
-  writeFileSync(ZIP_OUT, buffer);
-
-  // Sanity: confirm the on-disk files are identical.
-  const skillBytes = readFileSync(SKILL_OUT);
-  const zipBytes = readFileSync(ZIP_OUT);
-  const skillHash = createHash("sha256").update(skillBytes).digest("hex");
-  const zipHash = createHash("sha256").update(zipBytes).digest("hex");
-  if (skillHash !== zipHash) {
-    console.error(`Artifacts are not byte-identical: skill=${skillHash} zip=${zipHash}`);
-    process.exit(3);
-  }
+  const skillHash = createHash("sha256").update(buffer).digest("hex");
 
   const fmt = (n) => n.toLocaleString();
   console.log(
     `Built skill bundle (${files.length} files, src=${fmt(totalSrcBytes)} B, zip=${fmt(buffer.length)} B)`,
   );
   console.log(`  skill: ${SKILL_OUT}`);
-  console.log(`  zip:   ${ZIP_OUT}`);
   console.log(`  sha256: ${skillHash}`);
   console.log(`  manifest: ${MANIFEST} version ${manifest.version} tree ${manifest.tree}`);
 }

@@ -67,11 +67,11 @@ test("renders what GitHub renders", async ({ page }) => {
   await expect(prose.locator("fm-html")).toHaveCount(2);
   // Images resolve against the file's folder.
   const src = await prose.locator("img").first().getAttribute("src");
-  expect(src).toMatch(/\/@fs\/.*\/testing\/images\/swatch\.png$/);
+  expect(src).toMatch(/\/@fs\/.*\/showcase\/images\/swatch\.png$/);
   await expect(prose.locator("a img")).toHaveCount(1);
   const embed = prose.locator("img[data-wikilink='true']");
   await expect(embed).toHaveAttribute("alt", "Swatch");
-  expect(await embed.getAttribute("src")).toMatch(/\/@fs\/.*\/testing\/images\/swatch\.png$/);
+  expect(await embed.getAttribute("src")).toMatch(/\/@fs\/.*\/showcase\/images\/swatch\.png$/);
   // Raw HTML blocks render; the block comment keeps a placeholder.
   await expect(prose.locator(".fm-html-block p[align='center'] img")).toBeVisible();
   await expect(prose.locator(".fm-html-block table td")).toHaveCount(2);

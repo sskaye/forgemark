@@ -28,8 +28,7 @@ docs/user_feedback/
 # bytes, and that anchoring splices only the two markers. Reformatting it
 # would rewrite the very thing under test.
 tests/fixtures/report.html
-docs/example_file/
+docs/examples/
+tests/fixtures/showcase/
 
-# Review documents are opened in Forgemark; reformatting would move its markers.
-docs/reviews/
 src/report/report-bridge.built.js

@@ -2,7 +2,7 @@
 // Release-build pipeline for the macOS universal binary.
 //
 // Captures the full sequence so the next release isn't a rediscovery:
-//   1. Pre-flight (lint / typecheck / test / build:skill)
+//   1. Pre-flight (lint / typecheck / Tauri versions / audit / test / build:skill)
 //   2. Universal Tauri build (Intel + Apple Silicon in one .app)
 //   3. Notarize the .dmg (Tauri only notarizes the inner .app)
 //   4. Staple the .dmg ticket
@@ -15,7 +15,7 @@
 // from TAURI_SIGNING_PRIVATE_KEY (a path or the key itself), else
 // ~/.tauri/forgemark-updater.key; its password from
 // TAURI_SIGNING_PRIVATE_KEY_PASSWORD, else the Keychain item
-// "forgemark-updater-key-password" (RELEASING.md, one-time setup).
+// "forgemark-updater-key-password" (docs/releasing.md, one-time setup).
 //
 // Usage:
 //
@@ -95,7 +95,7 @@ if (!process.env.APPLE_SIGNING_IDENTITY) {
 const updaterKey =
   process.env.TAURI_SIGNING_PRIVATE_KEY ?? join(homedir(), ".tauri", "forgemark-updater.key");
 if (!process.env.TAURI_SIGNING_PRIVATE_KEY && !existsSync(updaterKey)) {
-  bail(`No updater signing key at ${updaterKey}. See RELEASING.md, "Updater signing key".`, 5);
+  bail(`No updater signing key at ${updaterKey}. See docs/releasing.md, "Updater signing key".`, 5);
 }
 let updaterPassword = process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD;
 if (updaterPassword === undefined) {
@@ -108,7 +108,7 @@ if (updaterPassword === undefined) {
   } catch {
     bail(
       "No password for the updater key: set TAURI_SIGNING_PRIVATE_KEY_PASSWORD, or store it in the\n" +
-        'Keychain as "forgemark-updater-key-password" (RELEASING.md, "Updater signing key").',
+        'Keychain as "forgemark-updater-key-password" (docs/releasing.md, "Updater signing key").',
       5,
     );
   }
@@ -117,6 +117,9 @@ if (updaterPassword === undefined) {
 step("Pre-flight checks");
 run("npm run lint");
 run("npm run typecheck");
+run("npm run check:tauri");
+// No known high or critical vulnerability in what the app ships.
+run("npm audit --omit=dev --audit-level=high");
 run("npm test");
 run("npm run build:skill");
 

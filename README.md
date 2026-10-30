@@ -1,5 +1,9 @@
 # Forgemark
 
+[![CI](https://github.com/sskaye/forgemark/actions/workflows/ci.yml/badge.svg)](https://github.com/sskaye/forgemark/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/sskaye/forgemark)](https://github.com/sskaye/forgemark/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 A desktop app for reviewing Markdown documents and generated HTML reports, where the reviewers are people and AI agents. Comments, replies, and suggested edits live inside the file as plain text, so an agent reading the file sees the whole review and can answer it.
 
 ## What it does
@@ -10,6 +14,8 @@ A desktop app for reviewing Markdown documents and generated HTML reports, where
 - **Keep the file yours.** The comments are HTML comments and a YAML block at the end of the file. Everything else is left as it was, byte for byte. `git diff` shows the review as text.
 
 It is a review tool, not a shared editor: no accounts, no server, no real-time collaboration.
+
+![A reviewed document in Forgemark: highlighted passages in the text, and their comment threads, a reply and a suggested edit in the sidebar](docs/images/screenshot.png)
 
 ## Install
 
@@ -50,7 +56,7 @@ the strongest predictor of week-two retention was completing a real piece of wor
 -->
 ```
 
-Records carry the id, the anchored text, the author, the body, replies, suggested edits, and floating notes. A Markdown file's front matter is shown above the document and takes comments too; those are kept without markers, so the YAML other programs read stays as it was. The parser reads a file back to the same bytes it wrote. The full reference is in [`assets/forgemark-skill/SKILL.md`](assets/forgemark-skill/SKILL.md).
+Records carry the id, the anchored text, the author, the body, replies, suggested edits, and floating notes. A Markdown file's front matter is shown above the document and takes comments too; those are kept without markers, so the YAML other programs read stays as it was. The parser reads a file back to the same bytes it wrote. The full specification is [`docs/format.md`](docs/format.md).
 
 Beyond CommonMark, the rendered view shows what GitHub shows: tables, task lists, footnotes, alerts, math, Mermaid diagrams, syntax-highlighted code, and inline HTML. It also shows Obsidian callouts, wikilinks, and image embeds. Editing a paragraph rewrites only that paragraph in the file, and keeps the syntax it was written in.
 
@@ -126,19 +132,14 @@ New Claude Code sessions pick the skill up on start; `/forgemark` appears in the
 
 ## Build
 
-Requirements:
-
-- Node.js 20 or later and npm 11 or later
-- Rust, stable, via [rustup](https://rustup.rs/)
-- macOS: Xcode Command Line Tools
-- Windows: Visual Studio C++ Build Tools
-- Linux (Ubuntu 24.04 or later): `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev`
+You need Node.js 24 and Rust; [Setting up](CONTRIBUTING.md#setting-up) in CONTRIBUTING lists the rest for each platform. Then:
 
 ```bash
 git clone https://github.com/sskaye/forgemark.git
 cd forgemark
 npm install
-npm run dev
+npm run dev        # the app, with hot reload
+npm run build      # a production bundle for this platform
 ```
 
 Scripts:
@@ -150,32 +151,21 @@ npm run test:perf         # timing assertions, skipped by the default run
 npm run lint              # ESLint
 npm run typecheck         # tsc
 npm run format            # Prettier
-npm run build             # production Tauri bundle
 npm run build:skill       # rebuild the CLI and the .skill and .zip bundles
 npm run build:icons       # regenerate the icon set from assets/forgemark-icon.svg
 npm run cli -- <args>     # run the CLI from source
 ```
 
-Agent tests under `tests/ai/` call a live model and are run by hand, never in CI: give a sub-agent a fixture, the skill, and a case file, and record the outcome on the case's "Last run" line.
+## Getting help
 
-Releases are built with `npm run release`; see [`RELEASING.md`](RELEASING.md).
-
-## Repository layout
-
-```
-src/                React and TypeScript app
-cli/                the forgemark command-line tool, built from src/format
-src-tauri/          Tauri shell (Rust)
-tests/              unit, integration, browser, perf, and agent tests
-assets/             the skill package, sample documents, the app icon
-docs/               architecture notes, example files, design reviews and plans
-scripts/            build helpers: CLI bundle, skill packaging, icons, release
-.github/workflows/  CI and the Windows and Linux release builds
-```
+- **A question**, or something you've made with it: [Discussions](https://github.com/sskaye/forgemark/discussions).
+- **A bug**: [open a bug report](https://github.com/sskaye/forgemark/issues/new?template=bug_report.yml). A small file that shows it helps most.
+- **An idea**: [open a feature request](https://github.com/sskaye/forgemark/issues/new?template=feature_request.yml).
+- **A security problem**: report it privately, as [`SECURITY.md`](SECURITY.md) says.
 
 ## Contributing
 
-Contributions are welcome through pull requests; see [`CONTRIBUTING.md`](CONTRIBUTING.md). Every change to `main` is reviewed by the maintainer. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) is the code map, and [`CONVENTIONS.md`](CONVENTIONS.md) covers style and testing.
+Pull requests are welcome; [`CONTRIBUTING.md`](CONTRIBUTING.md) covers setting up, the checks, and how changes are reviewed, and lays out the repository. [`docs/architecture.md`](docs/architecture.md) is the map of the code, [`docs/format.md`](docs/format.md) the file format, and [`docs/releasing.md`](docs/releasing.md) how a release is made. Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md).
 
 ## License
 

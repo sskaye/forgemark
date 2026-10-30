@@ -1,0 +1,74 @@
+name: Bug report
+description: Something Forgemark does wrong, in the app, the command-line tool or the agent skill.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting it. A security problem goes to the [Security tab](https://github.com/sskaye/forgemark/security/advisories/new) instead, not here.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you got, and any error message, word for word.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the file below.
+        2. Select "…" and add a comment.
+        3. …
+  - type: textarea
+    id: file
+    attributes:
+      label: A file that shows it
+      description: The smallest Markdown or HTML file that shows the problem, with its `forgemark-comments` block if it has one. Leave out anything that isn't yours to share. You can also drag the file in here.
+      render: markdown
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      options:
+        - The app
+        - The command-line tool (forgemark)
+        - The agent skill (an AI agent using it)
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Forgemark version
+      description: In the app, Settings shows it (⌘, or Ctrl+,), as does Forgemark → About. For the command-line tool, `forgemark --version`.
+      placeholder: "1.12.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Windows
+        - Linux
+    validations:
+      required: true
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version, and how you installed Forgemark
+      placeholder: "macOS 26.1, .dmg; or Ubuntu 24.04, AppImage"
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: Screenshots, what you've tried, whether it used to work.

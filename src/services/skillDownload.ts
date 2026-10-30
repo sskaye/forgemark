@@ -1,11 +1,11 @@
 // Skill bundle downloads (Phase 12).
 //
-// The Forgemark app ships two byte-identical skill artifacts: a
-// `.skill` for Claude Code and a `.zip` for Codex CLI. The Settings →
-// AI Participation panel exposes both as filled-blue download
-// buttons.
+// The app ships one skill bundle, a zip with the skill in a
+// `forgemark/` folder. It's offered saved as `forgemark-skill.skill`,
+// the name the Claude app installs, or as `forgemark-skill.zip` for
+// Codex and other tools: the bytes are the same.
 //
-// We import the artifacts via Vite's `?url` mechanism so they ship in
+// We import the bundle via Vite's `?url` mechanism so they ship in
 // the bundle (production) / dev server (development) and resolve to
 // runtime URLs the renderer can fetch. On click, the user picks a
 // destination via Tauri's save dialog and we write the bytes via the
@@ -17,7 +17,6 @@
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import skillUrl from "../../assets/forgemark-skill.skill?url";
-import zipUrl from "../../assets/forgemark-skill.zip?url";
 
 // "any" offers the .skill name with both extensions in the dialog's
 // filter; the bytes are the same whichever the user picks.
@@ -27,12 +26,6 @@ const DEFAULT_NAMES: Record<SkillTarget, string> = {
   claude: "forgemark-skill.skill",
   codex: "forgemark-skill.zip",
   any: "forgemark-skill.skill",
-};
-
-const URLS: Record<SkillTarget, string> = {
-  claude: skillUrl,
-  codex: zipUrl,
-  any: skillUrl,
 };
 
 // Trigger the download dialog and write the bundle to the chosen
@@ -55,7 +48,7 @@ export async function downloadSkill(target: SkillTarget): Promise<string | null>
   });
   if (!chosen) return null;
 
-  const bytes = await fetchSkillBytes(URLS[target]);
+  const bytes = await fetchSkillBytes(skillUrl);
   await writeFile(chosen, bytes);
   return chosen;
 }

@@ -70,7 +70,7 @@ function fail(message) {
 const releases = JSON.parse(gh("api", "--paginate", "--slurp", "repos/{owner}/{repo}/releases"))
   .flat()
   .filter((r) => r.tag_name === TAG);
-if (releases.length === 0) fail(`No release for ${TAG}. See RELEASING.md, "Tag and publish".`);
+if (releases.length === 0) fail(`No release for ${TAG}. See docs/releasing.md, "Tag and publish".`);
 if (releases.length > 1)
   fail(`${releases.length} releases share the tag ${TAG}; delete the extras.`);
 const [release] = releases;

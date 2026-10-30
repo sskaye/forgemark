@@ -1,0 +1,64 @@
+# Weekly dependency updates, grouped so that packages released together
+# arrive in one pull request. Security fixes come as soon as GitHub
+# knows of them, whatever this schedule says.
+#
+# Tauri's JS packages (npm) and its Rust crates (Cargo) arrive in
+# separate pull requests, but must be on the same minor version:
+# `npm run check:tauri` fails CI until both sides are updated. Update
+# the other side in the same pull request, or close both and update by
+# hand (CONTRIBUTING, "Dependencies").
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    labels: [dependencies]
+    commit-message:
+      prefix: "deps"
+    groups:
+      tiptap:
+        patterns: ["@tiptap/*"]
+      codemirror:
+        patterns: ["@codemirror/*", "@lezer/*"]
+      tauri:
+        patterns: ["@tauri-apps/*"]
+      testing:
+        patterns:
+          ["vitest", "@vitest/*", "@testing-library/*", "@playwright/test", "jsdom", "fast-check"]
+      lint-and-format:
+        patterns:
+          ["eslint", "eslint-*", "@eslint/*", "@typescript-eslint/*", "prettier", "typescript"]
+        update-types: [minor, patch]
+      types:
+        patterns: ["@types/*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies]
+    commit-message:
+      prefix: "deps"
+    groups:
+      tauri:
+        patterns: ["tauri", "tauri-*"]
+      other:
+        patterns: ["*"]
+        exclude-patterns: ["tauri", "tauri-*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels: [dependencies]
+    commit-message:
+      prefix: "deps"
+    groups:
+      actions:
+        patterns: ["*"]

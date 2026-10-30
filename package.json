@@ -3,7 +3,20 @@
   "private": true,
   "version": "1.12.1",
   "type": "module",
-  "description": "Collaborative review of markdown documents by humans and AI agents.",
+  "description": "Review Markdown documents and HTML reports with comments that live in the file, for people and AI agents.",
+  "license": "MIT",
+  "author": "Forgemark contributors",
+  "homepage": "https://github.com/sskaye/forgemark#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sskaye/forgemark.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sskaye/forgemark/issues"
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
   "bin": {
     "forgemark": "assets/forgemark-skill/scripts/forgemark.mjs"
   },
@@ -24,6 +37,7 @@
     "cli": "vite-node cli/main.ts --",
     "version:set": "node scripts/set-version.mjs",
     "version:check": "node scripts/set-version.mjs --check",
+    "check:tauri": "node scripts/check-tauri-versions.mjs",
     "build:icons": "tauri icon assets/forgemark-icon.svg --output src-tauri/icons",
     "release": "node scripts/release.mjs",
     "release:publish": "node scripts/publish-release.mjs",

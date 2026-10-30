@@ -1,0 +1,4 @@
+# Stable Rust, with the formatter and linter CI runs.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
