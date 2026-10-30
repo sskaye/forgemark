@@ -11,8 +11,9 @@ name: CLI release
 #   - automatically on any `v*` tag push (attaches that tag's bundle);
 #   - manually via "Run workflow", passing an existing release tag.
 #
-# Like the Windows and Linux workflows, it adds to the draft release the
-# maintainer created and never creates one (see scripts/release-attach.sh).
+# Like the other release workflows, it adds to the draft release that
+# `npm run release:start` created, and never creates one (see
+# scripts/release-attach.sh).
 
 on:
   push:
