@@ -112,8 +112,8 @@
     "prettier": "^3.4.2",
     "typescript": "~5.6.3",
     "vite": "^6.0.3",
-    "vite-node": "^2.1.8",
-    "vitest": "^2.1.8",
+    "vite-node": "^6.0.0",
+    "vitest": "^5.0.5",
     "wait-on": "^9.1.0"
   }
 }
