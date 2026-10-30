@@ -2,6 +2,12 @@
 # arrive in one pull request. Security fixes come as soon as GitHub
 # knows of them, whatever this schedule says.
 #
+# npm and Cargo get minor and patch updates only. A new major version
+# (React 19, ESLint 10, Vite 8) usually needs code or config changes,
+# so it's taken on deliberately, as its own piece of work, not merged
+# from a weekly pull request. A security fix that needs a major version
+# still comes.
+#
 # Tauri's JS packages (npm) and its Rust crates (Cargo) arrive in
 # separate pull requests, but must be on the same minor version:
 # `npm run check:tauri` fails CI until both sides are updated. Update
@@ -15,6 +21,9 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 10
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     labels: [dependencies]
     commit-message:
       prefix: "deps"
@@ -41,6 +50,9 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     labels: [dependencies]
     commit-message:
       prefix: "deps"
