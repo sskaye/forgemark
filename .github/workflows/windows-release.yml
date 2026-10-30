@@ -1,7 +1,8 @@
 name: Windows release
 
-# Builds the unsigned Windows installers (.msi via WiX, -setup.exe via NSIS)
-# on a windows-latest runner and attaches them to the matching GitHub
+# Builds the unsigned Windows installer (-setup.exe, via NSIS) on a
+# windows-latest runner and attaches it, with its updater signature, to
+# the matching GitHub
 # draft release. The macOS .dmg is still built + signed + notarized locally
 # (`npm run release`); this only fills in the Windows artifacts.
 #
@@ -55,19 +56,21 @@ jobs:
       - run: npm ci
 
       # `tauri build` runs `npm run vite:build` (beforeBuildCommand) first,
-      # then bundles the .msi and the NSIS -setup.exe. They carry no
+      # then bundles the NSIS -setup.exe, the one Windows installer a
+      # release carries (an .msi did the same job). It carries no
       # Authenticode signature (no Windows code-signing certificate is set).
       # tauri.release.conf.json turns on the update artifacts: a `.sig`
-      # beside each installer, made with the updater key, which the app
-      # checks every update against. The secrets are the key and its
-      # password (RELEASING.md, "Updater signing key").
+      # beside the installer, made with the updater key, which the app
+      # checks every update against; `npm run release:publish` reads it
+      # into latest.json and takes it off the release. The secrets are the
+      # key and its password (RELEASING.md, "Updater signing key").
       - name: Build Windows bundles
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: npm run tauri -- build --config src-tauri/tauri.release.conf.json
+        run: npm run tauri -- build --bundles nsis --config src-tauri/tauri.release.conf.json
 
-      - name: Attach installers to the release
+      - name: Attach the installer to the release
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -76,7 +79,5 @@ jobs:
         # asset. See scripts/release-attach.sh.
         run: |
           bash scripts/release-attach.sh "$TAG" \
-            src-tauri/target/release/bundle/msi/*.msi \
-            src-tauri/target/release/bundle/msi/*.msi.sig \
             src-tauri/target/release/bundle/nsis/*-setup.exe \
             src-tauri/target/release/bundle/nsis/*-setup.exe.sig

@@ -6,10 +6,10 @@
 // it was built with.
 //
 // The updater looks a platform up as `{os}-{arch}-{installer}` first and
-// `{os}-{arch}` second, so both are listed: Windows has two installers
-// (the NSIS -setup.exe is the default), the universal macOS update serves
-// both architectures, and Linux updates the AppImage only — a .deb is a
-// system package the updater can't replace.
+// `{os}-{arch}` second, so both are listed: Windows updates the NSIS
+// -setup.exe (an install from an .msi, which releases no longer carry,
+// falls back to it), the universal macOS update serves both
+// architectures, and Linux updates the AppImage.
 
 const RELEASES = "https://github.com/sskaye/forgemark/releases/download";
 
@@ -18,13 +18,11 @@ export function updateAssets(version) {
   const v = version;
   const mac = `Forgemark_${v}_universal.app.tar.gz`;
   const nsis = `Forgemark_${v}_x64-setup.exe`;
-  const msi = `Forgemark_${v}_x64_en-US.msi`;
   const appX64 = `Forgemark_${v}_amd64.AppImage`;
   const appArm = `Forgemark_${v}_aarch64.AppImage`;
   return {
     [mac]: ["darwin-aarch64", "darwin-x86_64", "darwin-aarch64-app", "darwin-x86_64-app"],
     [nsis]: ["windows-x86_64", "windows-x86_64-nsis"],
-    [msi]: ["windows-x86_64-msi"],
     [appX64]: ["linux-x86_64", "linux-x86_64-appimage"],
     [appArm]: ["linux-aarch64", "linux-aarch64-appimage"],
   };

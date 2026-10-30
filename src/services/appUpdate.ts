@@ -11,7 +11,9 @@
 // Where the updater can't replace the app — a Linux .deb is a system
 // package — or an automatic update fails, the banner offers the
 // release's file for this platform instead, opened straight from the
-// release so the reader never has to find it on GitHub.
+// release so the reader never has to find it on GitHub. Releases carry
+// no .deb since 1.12.1, so a .deb install is offered the AppImage, which
+// updates itself from then on.
 //
 // The state lives here, outside React, so the banner and Settings show
 // the same thing; `useAppUpdate` reads it.
@@ -76,9 +78,7 @@ export function downloadUrl(version: string, t: UpdateTarget): string {
   let file: string;
   if (t.os === "macos") file = `Forgemark_${v}_universal.dmg`;
   else if (t.os === "windows") file = `Forgemark_${v}_x64-setup.exe`;
-  else if (t.os === "linux" && t.appimage)
-    file = `Forgemark_${v}_${arm ? "aarch64" : "amd64"}.AppImage`;
-  else if (t.os === "linux") file = `Forgemark_${v}_${arm ? "arm64" : "amd64"}.deb`;
+  else if (t.os === "linux") file = `Forgemark_${v}_${arm ? "aarch64" : "amd64"}.AppImage`;
   else return `${RELEASES}/tag/v${v}`;
   return `${RELEASES}/download/v${v}/${file}`;
 }

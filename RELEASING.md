@@ -1,6 +1,6 @@
 # Releasing Forgemark
 
-Cuts a signed, notarized macOS `.dmg`, the Windows installers, the Linux packages, and the command-line tool. Everything outside the bullet labelled **Manual** is reproducible from a clean checkout.
+Cuts a signed, notarized macOS `.dmg`, the Windows installer, the Linux AppImages, and the command-line tool. Everything outside the bullet labelled **Manual** is reproducible from a clean checkout.
 
 ## One-time setup
 
@@ -135,8 +135,10 @@ A Gatekeeper prompt on a fresh account means the staple didn't apply; rerun `xcr
 ## Tag and publish
 
 A published release can't be added to, so the release is assembled as a
-draft and published only when every asset is on it. Four steps, in this
-order:
+draft and published only when every asset is on it. A release carries seven
+files and nothing else: the macOS `.dmg` and its update (`.app.tar.gz`),
+the Windows `-setup.exe`, the two Linux `.AppImage`s, the CLI, and
+`latest.json`. Five steps, in this order:
 
 ```sh
 # 1. The draft, carrying the .dmg and the macOS update. A draft holds no
@@ -157,10 +159,17 @@ gh run list --branch v<ver>
 
 # 4. Publish. Writes latest.json, the updater's manifest, from the update
 #    files' signatures and attaches it; then refuses unless the tag is on
-#    GitHub and all nineteen assets are on the draft, latest.json points
-#    only at files the release has, and the CLI asset is the bundle
-#    committed at the tag.
+#    GitHub, the seven assets are on the draft and nothing else is,
+#    latest.json points only at files the release has, and the CLI asset
+#    is the bundle committed at the tag. It takes the .sig files off the
+#    draft (latest.json carries the signatures) and publishes.
 npm run release:publish
+
+# 5. Once whatever pins a version has moved to this one (ForgeGraph
+#    downloads its CLI from its version's release), delete the older
+#    releases, keeping their tags, so the Releases page lists only this
+#    one. Without --yes it lists what it would delete.
+npm run release:prune -- --yes
 ```
 
 **Create the draft before pushing the tag.** The workflows add to the draft
@@ -178,7 +187,7 @@ is. Once published, a mistake can't be patched in place: cut a new version.
 
 Automated via GitHub Actions (`.github/workflows/windows-release.yml`) on a
 `windows-latest` runner. It runs on every `v*` tag push and attaches the
-**unsigned** `.msi` (WiX) and `-setup.exe` (NSIS) to that tag's draft release.
+**unsigned** NSIS `-setup.exe`, and its updater signature, to that tag's draft release.
 No Windows machine required.
 
 To backfill a release tagged before the workflow existed (and published
@@ -188,7 +197,9 @@ before releases became immutable), run it manually:
 gh workflow run windows-release.yml -f tag=v<ver>
 ```
 
-Output assets: `Forgemark_<ver>_x64_en-US.msi` and `Forgemark_<ver>_x64-setup.exe`.
+Output asset: `Forgemark_<ver>_x64-setup.exe`. Releases before 1.12.1 also
+carried an `.msi`, which did the same job; an MSI install updates through
+the `-setup.exe`.
 
 ### Code signing (not enabled)
 
@@ -208,23 +219,21 @@ but don't fit headless CI. The legacy `WINDOWS_SIGNING_PFX_PATH` /
 
 Automated via GitHub Actions (`.github/workflows/linux-release.yml`) on
 `ubuntu-24.04` and `ubuntu-24.04-arm` runners. Like the Windows workflow, it
-runs on every `v*` tag push and attaches its packages to that tag's draft
-release. No Linux machine required.
+runs on every `v*` tag push and attaches each architecture's AppImage, and
+its updater signature, to that tag's draft release. No Linux machine
+required.
 
-Output assets, per architecture (`amd64`/`x86_64` and `arm64`/`aarch64`):
+Output assets: `Forgemark_<ver>_amd64.AppImage` and
+`Forgemark_<ver>_aarch64.AppImage`. The AppImage runs on any distribution
+and the in-app updater can replace it. Releases before 1.12.1 also carried
+a `.deb` per architecture, which the updater can't replace; the app offers
+a `.deb` install the AppImage instead.
 
-- `Forgemark_<ver>_amd64.deb` — the package for Ubuntu and Debian. Its
-  dependencies (WebKitGTK 4.1, GTK 3) are added by the Tauri CLI, and its
-  desktop entry comes from `src-tauri/linux/forgemark.desktop`, which passes
-  opened files to the app and registers it for Markdown and HTML.
-- `Forgemark_<ver>_amd64.AppImage` — portable, no install.
-- `SHA256SUMS-linux-<arch>.txt` — checksums for the two above.
-
-Building on Ubuntu 24.04 sets the floor: the packages need its glibc and
+Building on Ubuntu 24.04 sets the floor: the AppImage needs its glibc and
 WebKitGTK 4.1. Linux packages need no code signing.
 
 A pull request that touches the Linux packaging (the workflow, the bundle
-config, `src-tauri/linux/`, or `src-tauri/src/main.rs`) builds the packages
+config, `src-tauri/linux/`, or `src-tauri/src/main.rs`) builds the AppImages
 too, and keeps them on the run as artifacts for testing by hand, without
 touching any release.
 
@@ -245,19 +254,19 @@ version the bundle reports isn't the tag's.
 Output assets:
 
 - `forgemark-cli-<ver>.mjs` — `assets/forgemark-skill/scripts/forgemark.mjs`
-  at the tag, byte for byte. One file, no dependencies, Node 18 or later. The
-  notices of the packages it bundles are at its end (`scripts/build-cli.mjs`
-  writes them).
-- `SHA256SUMS-cli.txt` — its checksum, for `sha256sum -c`.
-- `forgemark-cli-LICENSE.txt` — Forgemark's MIT licence.
+  at the tag, byte for byte. One file, no dependencies, Node 18 or later.
+  Forgemark's MIT licence is at its start and the notices of the packages it
+  bundles at its end (`scripts/build-cli.mjs` writes them). GitHub shows its
+  SHA-256 on the release.
 
-A consumer pins a version like this:
+A consumer pins a version and its SHA-256, as ForgeGraph does, and moves the
+pin when a new release comes out, since only the latest release is kept:
 
 ```sh
-v=1.10.0
-base=https://github.com/sskaye/forgemark/releases/download/v$v
-curl -fsSLO "$base/forgemark-cli-$v.mjs" -O "$base/SHA256SUMS-cli.txt"
-sha256sum -c SHA256SUMS-cli.txt
+v=1.12.1
+sha=<the SHA-256 shown beside forgemark-cli-$v.mjs>
+curl -fsSLO "https://github.com/sskaye/forgemark/releases/download/v$v/forgemark-cli-$v.mjs"
+echo "$sha  forgemark-cli-$v.mjs" | sha256sum -c -
 node "forgemark-cli-$v.mjs" --version
 ```
 
@@ -268,7 +277,9 @@ after `reattach --all`.
 ## In-app updates
 
 Every release carries what the app's updater needs: each platform's update
-file, its signature, and `latest.json`, which lists them by platform. The app
+file, and `latest.json`, which lists them by platform with each one's
+signature. The `.sig` files the builds make are read into it at publish
+time and don't stay on the release. The app
 reads `latest.json` from the latest published release
 (`releases/latest/download/latest.json`), so publishing a release is what
 offers it to installed copies.
@@ -276,11 +287,11 @@ offers it to installed copies.
 | Platform | Update file                                                 | Signed by             |
 | -------- | ----------------------------------------------------------- | --------------------- |
 | macOS    | `Forgemark_<ver>_universal.app.tar.gz` (both architectures) | `npm run release`     |
-| Windows  | the NSIS `-setup.exe`, or the `.msi` for an MSI install     | `windows-release.yml` |
+| Windows  | the NSIS `-setup.exe`                                       | `windows-release.yml` |
 | Linux    | each architecture's `.AppImage`                             | `linux-release.yml`   |
 
-A `.deb` is a system package the updater can't replace; the app offers its
-download instead. Release builds turn the update files on through
+A `.deb` install (from a release before 1.12.1) is a system package the
+updater can't replace; the app offers it the AppImage's download instead. Release builds turn the update files on through
 `src-tauri/tauri.release.conf.json`; a pull request's Linux build doesn't use
 it and needs no secrets.
 
@@ -295,8 +306,8 @@ immutable: publish a fixed version, which installed copies then find.
   recover a lost anchor, use Settings skill download, run Clean Export, and
   verify external-change conflict handling where practical.
 - The same pass on Ubuntu 24.04 (a Wayland session, the default), from the
-  `.deb`. Also: double-click a `.md` file in Files with the app closed and
-  again with it open; print; open an HTML report from
+  AppImage. Also: open a `.md` file with it (`./Forgemark…AppImage file.md`)
+  with the app closed and again with it open; print; open an HTML report from
   `docs/example_file/testing/` and comment on it; edit the open file in
   another editor and check the conflict banner appears.
 - Manual end-to-end with **Claude Code**: install the `.skill`, open the production sample, run every prompt from `tests/ai/cases/*.md`. Expected: all PASS.

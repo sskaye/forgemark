@@ -14,7 +14,9 @@
 // It also writes the release's `latest.json`, the manifest the in-app
 // updater reads (`scripts/latest-json.mjs`), from the update files'
 // signatures on the draft, and attaches it before publishing: once
-// published, it couldn't be added.
+// published, it couldn't be added. The `.sig` files then come off the
+// draft: the manifest carries each signature, and the updater never
+// fetches them, so a release lists only the files someone downloads.
 //
 // Nothing is published if any check fails; the draft stays as it is.
 
@@ -33,30 +35,26 @@ const TAG = `v${VERSION}`;
 const CLI_ASSET = `forgemark-cli-${VERSION}.mjs`;
 const CLI_PATH = "assets/forgemark-skill/scripts/forgemark.mjs";
 
-// Every asset a release carries, and the workflow (or step) that puts it
-// there, for the message when one is missing.
+// Every asset a published release carries, and the workflow (or step)
+// that puts it there, for the message when one is missing: one install
+// file per platform, the macOS update, the CLI, and the manifest.
 const EXPECTED = {
   [`Forgemark_${VERSION}_universal.dmg`]: "npm run release, then the draft's create step",
-  [`Forgemark_${VERSION}_x64_en-US.msi`]: "windows-release.yml",
-  [`Forgemark_${VERSION}_x64-setup.exe`]: "windows-release.yml",
-  [`Forgemark_${VERSION}_amd64.deb`]: "linux-release.yml (x86_64)",
-  [`Forgemark_${VERSION}_amd64.AppImage`]: "linux-release.yml (x86_64)",
-  ["SHA256SUMS-linux-x86_64.txt"]: "linux-release.yml (x86_64)",
-  [`Forgemark_${VERSION}_arm64.deb`]: "linux-release.yml (arm64)",
-  [`Forgemark_${VERSION}_aarch64.AppImage`]: "linux-release.yml (arm64)",
-  ["SHA256SUMS-linux-arm64.txt"]: "linux-release.yml (arm64)",
-  [CLI_ASSET]: "cli-release.yml",
-  ["SHA256SUMS-cli.txt"]: "cli-release.yml",
-  ["forgemark-cli-LICENSE.txt"]: "cli-release.yml",
-  // The in-app update: each platform's file and its signature.
   [`Forgemark_${VERSION}_universal.app.tar.gz`]: "npm run release, then the draft's create step",
-  [`Forgemark_${VERSION}_universal.app.tar.gz.sig`]:
-    "npm run release, then the draft's create step",
-  [`Forgemark_${VERSION}_x64-setup.exe.sig`]: "windows-release.yml",
-  [`Forgemark_${VERSION}_x64_en-US.msi.sig`]: "windows-release.yml",
-  [`Forgemark_${VERSION}_amd64.AppImage.sig`]: "linux-release.yml (x86_64)",
-  [`Forgemark_${VERSION}_aarch64.AppImage.sig`]: "linux-release.yml (arm64)",
-  ["latest.json"]: "this script, from the signatures above",
+  [`Forgemark_${VERSION}_x64-setup.exe`]: "windows-release.yml",
+  [`Forgemark_${VERSION}_amd64.AppImage`]: "linux-release.yml (x86_64)",
+  [`Forgemark_${VERSION}_aarch64.AppImage`]: "linux-release.yml (arm64)",
+  [CLI_ASSET]: "cli-release.yml",
+  ["latest.json"]: "this script, from the update files' signatures",
+};
+
+// The update files' signatures, on the draft only until latest.json is
+// written from them.
+const SIGNED_BY = {
+  [`Forgemark_${VERSION}_universal.app.tar.gz`]: "npm run release, then the draft's create step",
+  [`Forgemark_${VERSION}_x64-setup.exe`]: "windows-release.yml",
+  [`Forgemark_${VERSION}_amd64.AppImage`]: "linux-release.yml (x86_64)",
+  [`Forgemark_${VERSION}_aarch64.AppImage`]: "linux-release.yml (arm64)",
 };
 
 function gh(...args) {
@@ -96,7 +94,14 @@ const uploaded = (name) => assets.get(name)?.state === "uploaded";
 if (!uploaded("latest.json")) {
   const sigs = Object.keys(updateAssets(VERSION)).map((file) => `${file}.sig`);
   const absent = sigs.filter((name) => !uploaded(name));
-  if (absent.length === 0) {
+  if (absent.length > 0) {
+    fail(
+      `${TAG} is missing ${absent.length} signature(s) to write latest.json from:\n` +
+        absent
+          .map((name) => `    ${name}  ← ${SIGNED_BY[name.replace(/\.sig$/, "")] ?? "?"}`)
+          .join("\n"),
+    );
+  } else {
     const signatures = {};
     for (const sig of sigs) {
       signatures[sig.replace(/\.sig$/, "")] = gh(
@@ -142,9 +147,14 @@ if (missing.length > 0) {
       missing.map((name) => `    ${name}  ← ${EXPECTED[name]}`).join("\n"),
   );
 }
-const extra = [...assets.keys()].filter((name) => !(name in EXPECTED));
+// Nothing else but the signatures, which come off below.
+const isSig = (name) => name.endsWith(".sig") && name.replace(/\.sig$/, "") in SIGNED_BY;
+const extra = [...assets.keys()].filter((name) => !(name in EXPECTED) && !isSig(name));
 if (extra.length > 0) {
-  console.warn(`! ${TAG} also carries assets this script doesn't expect: ${extra.join(", ")}`);
+  fail(
+    `${TAG} carries asset(s) a release shouldn't: ${extra.join(", ")}. ` +
+      `Delete them from the draft (gh release delete-asset ${TAG} <name>) and rerun.`,
+  );
 }
 
 // The manifest is this version's, and every file it points to is on the
@@ -184,8 +194,14 @@ if (got && got !== want) {
 }
 if (!got) console.warn(`! GitHub reported no digest for ${CLI_ASSET}; its bytes were not checked.`);
 
+// The signatures are in latest.json now; take them off.
+for (const [name, asset] of assets) {
+  if (!isSig(name)) continue;
+  gh("api", "-X", "DELETE", `repos/{owner}/{repo}/releases/assets/${asset.id}`);
+}
+
 console.log(
-  `✓ ${TAG} (${tagSha.slice(0, 7)}): all ${Object.keys(EXPECTED).length} assets present.`,
+  `✓ ${TAG} (${tagSha.slice(0, 7)}): all ${Object.keys(EXPECTED).length} assets present, and nothing else.`,
 );
 gh("release", "edit", TAG, "--draft=false");
 console.log(`✓ Published: https://github.com/sskaye/forgemark/releases/tag/${TAG}`);

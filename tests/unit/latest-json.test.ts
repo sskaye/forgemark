@@ -28,7 +28,8 @@ describe("latest.json", () => {
     expect(m.platforms["darwin-x86_64"]).toEqual(mac);
     expect(m.platforms["windows-x86_64"].url).toBe(`${base}/Forgemark_${V}_x64-setup.exe`);
     expect(m.platforms["windows-x86_64-nsis"].url).toBe(`${base}/Forgemark_${V}_x64-setup.exe`);
-    expect(m.platforms["windows-x86_64-msi"].url).toBe(`${base}/Forgemark_${V}_x64_en-US.msi`);
+    // No .msi: an MSI install falls back to the -setup.exe.
+    expect(m.platforms["windows-x86_64-msi"]).toBeUndefined();
     expect(m.platforms["linux-x86_64"].url).toBe(`${base}/Forgemark_${V}_amd64.AppImage`);
     expect(m.platforms["linux-aarch64"].url).toBe(`${base}/Forgemark_${V}_aarch64.AppImage`);
     // Signatures are stored without the trailing newline a .sig file has.

@@ -63,9 +63,10 @@ describe("where each platform's file is", () => {
     expect(downloadUrl("1.12.0", { os: "linux", arch: "aarch64", appimage: true })).toBe(
       `${base}/Forgemark_1.12.0_aarch64.AppImage`,
     );
-    expect(downloadUrl("1.12.0", DEB)).toBe(`${base}/Forgemark_1.12.0_amd64.deb`);
+    // Releases carry no .deb: a .deb install is offered the AppImage.
+    expect(downloadUrl("1.12.0", DEB)).toBe(`${base}/Forgemark_1.12.0_amd64.AppImage`);
     expect(downloadUrl("1.12.0", { os: "linux", arch: "aarch64", appimage: false })).toBe(
-      `${base}/Forgemark_1.12.0_arm64.deb`,
+      `${base}/Forgemark_1.12.0_aarch64.AppImage`,
     );
   });
 
@@ -83,7 +84,7 @@ describe("checking", () => {
     expect(getUpdateState()).toEqual({ kind: "available", version: "1.12.0", automatic: true });
   });
 
-  it("offers a .deb install the download rather than an update", async () => {
+  it("offers a .deb install the AppImage's download rather than an update", async () => {
     core.invoke.mockImplementation(async (cmd: string) =>
       cmd === "update_target" ? DEB : undefined,
     );
@@ -92,7 +93,7 @@ describe("checking", () => {
     expect(getUpdateState()).toMatchObject({ kind: "available", automatic: false });
     await openDownload("1.12.0");
     expect(opener.openUrl).toHaveBeenCalledWith(
-      "https://github.com/sskaye/forgemark/releases/download/v1.12.0/Forgemark_1.12.0_amd64.deb",
+      "https://github.com/sskaye/forgemark/releases/download/v1.12.0/Forgemark_1.12.0_amd64.AppImage",
     );
   });
 
