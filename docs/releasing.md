@@ -11,9 +11,8 @@ Cuts a signed, notarized macOS `.dmg`, the Windows installer, the Linux AppImage
 3. **Confirm the cert is recognised:**
    ```sh
    security find-identity -v -p codesigning | grep "Developer ID Application"
-   # 1) ABCDEF1234... "Developer ID Application: Your Name (XXXXXXXXXX)"
    ```
-   Copy the string in quotes — that's your `APPLE_SIGNING_IDENTITY`.
+   It prints a line like `1) ABCDEF1234... "Developer ID Application: Your Name (XXXXXXXXXX)"`. The string in quotes is your `APPLE_SIGNING_IDENTITY`.
 4. **App-specific password** — https://appleid.apple.com → Sign-In and Security → App-Specific Passwords. Format is `xxxx-xxxx-xxxx-xxxx`. **Do not** use your Apple account password.
 5. **Stash credentials in Keychain** so you don't have to paste the password ever again:
    ```sh
@@ -29,25 +28,64 @@ Cuts a signed, notarized macOS `.dmg`, the Windows installer, the Linux AppImage
 certificate and Apple ID, given as repository secrets. Set them once, from
 the Mac that holds the certificate:
 
-1. In Keychain Access, under **My Certificates**, export **Developer ID
-   Application: …** (the certificate with its private key) as a `.p12`,
-   choosing a password for it.
+1. In Keychain Access, choose the **login** keychain and the **My
+   Certificates** tab, right-click **Developer ID Application: …** (it has
+   its private key beneath it), and Export it as **Personal Information
+   Exchange (.p12)**, named `developer-id`, on the Desktop. Choose a
+   password for the file, and allow access to the key when asked.
 2. Make an app-specific password for the notary service
    (https://appleid.apple.com → Sign-In and Security → App-Specific
    Passwords). The one in the `forgemark-notary` profile can't be read back.
-3. Set the secrets. Each `gh secret set` without `--body` asks for the value
-   without echoing it:
+3. Encode the certificate, and check the result isn't empty (about 4,300
+   bytes):
 
    ```sh
-   base64 -i ~/Desktop/developer-id.p12 | gh secret set APPLE_CERTIFICATE --repo sskaye/forgemark
-   gh secret set APPLE_CERTIFICATE_PASSWORD --repo sskaye/forgemark   # the .p12's password
+   base64 -i ~/Desktop/developer-id.p12 -o ~/Desktop/developer-id.b64
+   ```
+
+   ```sh
+   wc -c ~/Desktop/developer-id.b64
+   ```
+
+4. Set the six secrets, one command at a time. Without `--body`, `gh`
+   asks for the value and doesn't echo it: for `APPLE_CERTIFICATE_PASSWORD`
+   the `.p12`'s password, for `APPLE_ID` the Apple account's email, for
+   `APPLE_PASSWORD` the app-specific password.
+
+   ```sh
+   gh secret set APPLE_CERTIFICATE --repo sskaye/forgemark < ~/Desktop/developer-id.b64
+   ```
+
+   ```sh
+   gh secret set APPLE_CERTIFICATE_PASSWORD --repo sskaye/forgemark
+   ```
+
+   ```sh
    gh secret set APPLE_SIGNING_IDENTITY --repo sskaye/forgemark --body "Developer ID Application: Your Name (XXXXXXXXXX)"
-   gh secret set APPLE_ID --repo sskaye/forgemark                     # the Apple account's email
-   gh secret set APPLE_PASSWORD --repo sskaye/forgemark               # the app-specific password
+   ```
+
+   ```sh
+   gh secret set APPLE_ID --repo sskaye/forgemark
+   ```
+
+   ```sh
+   gh secret set APPLE_PASSWORD --repo sskaye/forgemark
+   ```
+
+   ```sh
    gh secret set APPLE_TEAM_ID --repo sskaye/forgemark --body "XXXXXXXXXX"
    ```
 
-4. Delete the `.p12`: `rm ~/Desktop/developer-id.p12`.
+5. Delete both files:
+
+   ```sh
+   rm ~/Desktop/developer-id.p12 ~/Desktop/developer-id.b64
+   ```
+
+Piping `base64` straight into `gh secret set` once stored an empty
+certificate here; the file in between, and its size, show what's being
+sent. If the macOS job's log shows `APPLE_CERTIFICATE:` with nothing after
+it (a set secret shows `***`), the secret is empty: set it again.
 
 The workflow also uses the updater key's secrets (below), which the Windows
 and Linux workflows already have. Until `APPLE_CERTIFICATE` and `APPLE_ID`

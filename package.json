@@ -1,7 +1,7 @@
 {
   "name": "forgemark",
   "private": true,
-  "version": "1.12.1",
+  "version": "1.12.2",
   "type": "module",
   "description": "Review Markdown documents and HTML reports with comments that live in the file, for people and AI agents.",
   "license": "MIT",
