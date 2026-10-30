@@ -2,7 +2,12 @@
 
 All notable changes to Forgemark are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.12.1] — 2026-10-30
+
+### Changed
+
+- A release carries seven files: the macOS `.dmg` and its update, the Windows `-setup.exe`, the Linux AppImage for x86_64 and arm64, the command-line tool, and the updater's `latest.json`. Dropped: the Windows `.msi` and the Linux `.deb` (each did the same job as a file that stays), the update signatures (`latest.json` carries them), the checksum files (GitHub shows each file's SHA-256 on the release), and the CLI's licence file (its text is at the start of the CLI). Only the latest release is kept on the Releases page.
+- A Linux `.deb` install's update banner offers the AppImage, which updates itself from then on; an `.msi` install on Windows updates through the `-setup.exe`.
 
 ### Fixed
 
