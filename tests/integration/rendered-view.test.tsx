@@ -293,9 +293,7 @@ describe("RenderedView links and relative references", () => {
       '![a](images/x.png) and <img src="images/y.png" width="20"> here.\n\n<p align="center"><img src="../z.png"></p>\n',
     );
     await waitFor(() => expect(container.querySelectorAll(IMG).length).toBe(3));
-    const srcs = Array.from(container.querySelectorAll(IMG)).map((img) =>
-      img.getAttribute("src"),
-    );
+    const srcs = Array.from(container.querySelectorAll(IMG)).map((img) => img.getAttribute("src"));
     expect(srcs).toEqual([
       "asset://localhost/" + encodeURIComponent("/docs/notes/images/x.png"),
       "asset://localhost/" + encodeURIComponent("/docs/notes/images/y.png"),
