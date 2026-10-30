@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and ideas
+    url: https://github.com/sskaye/forgemark/discussions
+    about: Ask how to do something, or talk through an idea, in Discussions.
+  - name: A security problem
+    url: https://github.com/sskaye/forgemark/security/advisories/new
+    about: Report it privately, not in a public issue.

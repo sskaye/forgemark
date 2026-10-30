@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 # AI-agent cases (tests/ai) are run by hand with a sub-agent, never in CI;
-# timing assertions run only via `npm run test:perf`. See CONVENTIONS.md.
+# timing assertions run only via `npm run test:perf`. See CONTRIBUTING.md.
 #
 # Every job starts at once; none waits on another. The run takes as long
 # as its slowest job, not the sum of a chain. The static checks run once,
@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version-file: .nvmrc
           cache: "npm"
       - run: npm ci
       # The version lives in four files that must agree; drift is silent
@@ -53,7 +53,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version-file: .nvmrc
           cache: "npm"
       - run: npm ci
       - run: npm test -- --shard=${{ matrix.shard }}/2
@@ -111,7 +111,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version-file: .nvmrc
           cache: "npm"
       # No Rust here: this job drives the Vite surface in Chromium.
       - run: npm ci
@@ -138,7 +138,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version-file: .nvmrc
           cache: "npm"
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2

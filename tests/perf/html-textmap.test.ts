@@ -6,7 +6,7 @@ import { buildHtmlTextMap } from "../../src/format/html/textmap";
 // which puts a block break at every cell; a break check that reads the
 // end of the growing string makes V8 flatten it each time and the build
 // quadratic (2 s here, against 0.14 s). The bound is asserted only
-// under PERF=1 (`npm run test:perf`), as CONVENTIONS.md has it: a shared
+// under PERF=1 (`npm run test:perf`), as CONTRIBUTING.md has it: a shared
 // CI runner took 1.1 s once. The structural check runs every time.
 
 describe("HTML text model performance", () => {

@@ -128,7 +128,7 @@ New Claude Code sessions pick the skill up on start; `/forgemark` appears in the
 
 Requirements:
 
-- Node.js 20 or later and npm 11 or later
+- Node.js 24 (see `.nvmrc`) and npm 11 or later
 - Rust, stable, via [rustup](https://rustup.rs/)
 - macOS: Xcode Command Line Tools
 - Windows: Visual Studio C++ Build Tools
@@ -175,7 +175,7 @@ scripts/            build helpers: CLI bundle, skill packaging, icons, release
 
 ## Contributing
 
-Contributions are welcome through pull requests; see [`CONTRIBUTING.md`](CONTRIBUTING.md). Every change to `main` is reviewed by the maintainer. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) is the code map, and [`CONVENTIONS.md`](CONVENTIONS.md) covers style and testing.
+Bug reports, ideas and pull requests are welcome; [`CONTRIBUTING.md`](CONTRIBUTING.md) says how. Questions go in [Discussions](https://github.com/sskaye/forgemark/discussions), and security problems to the [Security tab](https://github.com/sskaye/forgemark/security/advisories/new) (see [`SECURITY.md`](SECURITY.md)). [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) is the code map.
 
 ## License
 
