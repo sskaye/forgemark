@@ -93,7 +93,7 @@ export function inMarkdownTable(body: string, offset: number): boolean {
     first = prev;
   }
   let prevText: string | null = null;
-  for (let l = first; ; ) {
+  for (let l = first; ;) {
     const text = body.slice(l.start, l.end);
     if (text.trim() === "") return false;
     if (prevText !== null && prevText.includes("|") && DELIMITER_ROW.test(text)) return true;
