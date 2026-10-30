@@ -55,7 +55,7 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           # Tag push → the pushed tag. Manual dispatch → the `ref` input if
           # given (e.g. main), else the tag input. Pull request → its head.
@@ -71,7 +71,7 @@ jobs:
             libayatana-appindicator3-dev libxdo-dev libssl-dev \
             build-essential file patchelf xdg-utils
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: "npm"
@@ -118,7 +118,7 @@ jobs:
       # Pull requests: keep the packages on the run for testing by hand.
       - name: Keep packages on the run
         if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: forgemark-linux-${{ matrix.arch }}
           path: out/
